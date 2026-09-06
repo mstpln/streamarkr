@@ -1,0 +1,16 @@
+{
+  "name": "streamarkr",
+  "private": true,
+  "version": "0.10.2",
+  "type": "module",
+  "description": "Streamarkr personal movie and TV tracking PWA.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node generate-sw-manifest.mjs",
+    "start": "npm run build && node server.mjs",
+    "serve": "node server.mjs",
+    "test": "rm -rf test-dist && tsc -p tsconfig.tests.json && node --test test-dist/tests/*.test.js",
+    "qa:browser": "node browser-qa.mjs"
+  },
+  "engines": {"node": ">=22"},
+  "devDependencies": {"playwright": "1.55.0", "typescript": "5.9.2"}
+}
