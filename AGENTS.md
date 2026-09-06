@@ -5,7 +5,7 @@ durable rules, not a status report — see `docs/STREAMARKR_STATE.md` for what's
 implemented and `docs/STREAMARKR_DECISIONS.md` for why things are the way they are.
 
 ## What this project is
-A local-only personal movie/series tracking PWA, built against `docs/STREAMARKR_BUILD_PLAN.md`.
+A personal movie/series tracking PWA, built against `docs/STREAMARKR_BUILD_PLAN.md`.
 The **authoritative target architecture** from that build plan is:
 - Vite + TypeScript for the PWA build
 - a Cloudflare Worker as the backend
@@ -13,34 +13,33 @@ The **authoritative target architecture** from that build plan is:
 - real provider adapters (Trakt, TMDB, a streaming-availability API)
 - GitHub for source control and CI/QA
 
-**What exists in this repository right now is a local-only stand-in for that architecture**,
-because the environment this was built in (a Cowork cloud sandbox, plus the connected local
-machine) had no npm registry access — every `npm install` attempt returned
-`403 host_not_allowed`. That blocked Vite, Vitest, and vite-plugin-pwa specifically, so the
-current build compiles plain TypeScript straight to ES modules with a global `tsc`, tests compile
-through `tsconfig.tests.json` and run as JavaScript on Node's built-in `node:test` runner, `sw.js`/`manifest.webmanifest` are
-hand-written instead of `vite-plugin-pwa`-generated, and IndexedDB stands in for D1 with fake
-provider adapters standing in for Trakt/TMDB/Streaming Availability.
+**What exists in this repository right now is a reviewed synthetic/local stand-in for that target architecture**,
+because the original Cowork build environment had no npm registry access — every `npm install`
+attempt there returned `403 host_not_allowed`. That originally blocked Vite, Vitest, and
+vite-plugin-pwa, so the current baseline compiles plain TypeScript straight to ES modules,
+tests compile through `tsconfig.tests.json` and run as JavaScript on Node's built-in `node:test`
+runner, `sw.js`/`manifest.webmanifest` are hand-written instead of `vite-plugin-pwa`-generated,
+and IndexedDB stands in for D1 with fake provider adapters standing in for
+Trakt/TMDB/Streaming Availability.
 
 **This is a temporary, environment-driven substitution, not a permanent architectural decision.**
 Migrating to the plan's real Vite + Cloudflare Worker + D1 + real-provider architecture is
-expected future work, not something to avoid or need special permission to propose — do it as
-soon as an environment with npm registry access and Cloudflare access is available. Nothing in
+expected future work, not something to avoid or need special permission to propose. Nothing in
 this file should be read as "keep it this way forever."
 
 ## Build / run / test commands (current baseline)
 ```
-npm run build     # tsc -p tsconfig.json  ->  dist/  (also regenerates sw-manifest.json)
+npm ci            # install exactly from committed package-lock.json
+npm run build     # tsc -p tsconfig.json -> dist/ (also regenerates sw-manifest.json)
 node server.mjs    # serve at http://localhost:8787
 npm test           # compile tests with tsc, then run Node's built-in node:test runner
-npm run qa:browser  # Playwright smoke + responsive QA (requires the server running)
+npm run qa:browser # Playwright smoke + responsive QA (requires the server running)
 ```
 The **app runtime** intentionally has no third-party runtime dependencies in this baseline. The
 build/test toolchain is repository-declared: `typescript` and `playwright` are pinned in
-`devDependencies`, and GitHub CI installs them before build/test/browser QA. A lockfile is still
-pending because the takeover runtime cannot reach the npm registry; CI therefore uses `npm install`
-for this first baseline PR. Add and commit `package-lock.json` as soon as a registry-enabled
-environment is available, then switch CI to `npm ci`.
+`devDependencies`, `package-lock.json` is committed, and GitHub CI uses Node 22 plus `npm ci`
+before build/test/browser QA. Keep the lockfile synchronized with any dependency change; do not
+switch CI back to `npm install` unless there is a specific, documented reason.
 
 ## Architecture boundaries — do not blur these
 - `src/lib/*` is pure domain logic (status engine, alerts, discover ranking, season selection,
@@ -128,14 +127,14 @@ when the provider supplies a genuinely new leaving date.
 ## Testing rules
 - Every new piece of domain logic needs a `node:test` test in `tests/`, using
   `tests/expect-shim.ts` (a tiny vitest-`expect`-compatible shim over `node:assert/strict` — see
-  the toolchain honesty note above: this exists because a real test framework isn't installable
-  here, not because it's a preferred approach going forward).
+  the toolchain honesty note above: this exists because the original build environment could not
+  install a real test framework, not because it's a preferred approach going forward).
 - `tests/fake-indexeddb.ts` is a minimal in-memory IndexedDB polyfill covering only the narrow
   usage pattern `src/lib/db.ts` actually needs (get/getAll/put/putAll/delete/clear per store, no
   cursors/indexes). `tests/repo-integration.test.ts` uses it to run real integration tests
-  against `repo.ts` + `db.ts`. Extend this polyfill rather than reaching for an external
-  `fake-indexeddb` package while registry access remains blocked; once it's available, prefer the
-  real package instead and retire this one.
+  against `repo.ts` + `db.ts`. Extend this polyfill rather than casually introducing a dependency
+  just for convenience; if the test architecture is deliberately modernized later, do it as a
+  focused change and retire the polyfill cleanly.
 - Never use live network calls, real API credentials, or personal/real data in any test or
   fixture — including after real provider adapters are introduced. Provider-integration tests
   must run against sandboxed/synthetic accounts or recorded fixtures, never production credentials
@@ -165,8 +164,8 @@ internet as a shortcut for this — get real assets through a proper, license-ch
 ## Security / secrets
 Never introduce a real API key, OAuth client secret, or credential of any kind into this
 repository, even as a placeholder default. Never add code that calls a live external API from
-this local build. When real provider integration begins, credentials belong in environment
-variables / a secrets manager, never committed, and any live-provider test must use
+this synthetic baseline. When real provider integration begins, credentials belong in
+environment variables / a secrets manager, never committed, and any live-provider test must use
 sandboxed/synthetic test accounts — never production credentials or real personal data.
 
 ## Accessibility / responsive targets
@@ -183,9 +182,8 @@ sandboxed/synthetic test accounts — never production credentials or real perso
   no absurdly over-stretched cards at the wide breakpoint. `browser-qa.mjs` asserts both.
 - Don't assume a control is compliant from its CSS alone — measure the actual rendered box (and
   its `::before`/`::after` pseudo-elements where the visible element is intentionally smaller)
-  with a real browser. A past pass over-trusted `min-height` rules that turned out not to be
-  applied to every control; re-verify with `getComputedStyle`/`getBoundingClientRect` rather than
-  re-reading the CSS.
+  with a real browser. Re-verify with `getComputedStyle`/`getBoundingClientRect` rather than
+  re-reading the CSS alone.
 
 ## Do not
 - Do not add a bundler, a UI framework, or a runtime npm dependency to the shipped app without an
@@ -194,6 +192,6 @@ sandboxed/synthetic test accounts — never production credentials or real perso
 - Do not replace synthetic fixtures with real personal data, even temporarily "for testing."
 - Do not update a test's expectation to match incorrect behavior — fix the behavior.
 - Do not reach into BANDMARKR or any other unrelated project folder from here.
-- Do not present a locally-adapted stopgap (no-bundler build, globally-available test tools,
-  colored-badge logos, IndexedDB-as-D1) as a permanent design choice in any documentation — always
-  say what it stands in for and why it's temporary, per the sections above.
+- Do not present a locally-adapted stopgap (no-bundler build, colored-badge logos,
+  IndexedDB-as-D1) as a permanent design choice in any documentation — always say what it stands
+  in for and why it's temporary, per the sections above.
