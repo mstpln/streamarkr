@@ -25,9 +25,7 @@ jobs:
           tar -tJf /tmp/streamarkr-baseline.tar.xz >/dev/null
           tar -xJf /tmp/streamarkr-baseline.tar.xz -C .
           rm -rf .bootstrap
-          rm -f .github/workflows/assemble-baseline.yml
-          rm -f .github/workflows/bootstrap-upload.yml
-          rm -f .github/workflows/bootstrap-baseline.yml
+          rm -f .github/workflows/ci.yml
       - name: Commit reviewed baseline source
         shell: bash
         run: |
