@@ -1,91 +1,77 @@
 {
-  "_readMeFirst": "This describes the CURRENT reviewed synthetic/local baseline, not the final target architecture. The Streamarkr build plan target remains Vite + Cloudflare Worker + D1 (+ optional R2) + real provider adapters. The current IndexedDB/fake-provider implementation is temporary and preserves validated product behavior while that migration is done in focused builds.",
+  "_readMeFirst": "Current reviewed synthetic/local baseline. Target architecture remains Vite + TypeScript + separate Cloudflare Worker + D1 (+ optional R2) + real provider adapters. IndexedDB/fake providers are temporary.",
   "appVersion": "0.10.2",
   "cacheVersion": "streamarkr-v0.10.2",
-  "generatedAt": "2026-09-06T22:20:00Z",
+  "generatedAt": "2026-09-06T22:35:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
     "primaryStorage": "Cloudflare D1",
     "optionalStorage": "Cloudflare R2",
     "providers": "real Trakt/TMDB/Streaming Availability adapters",
-    "ci": "GitHub CI/QA",
-    "status": "not yet started — current build is the reviewed synthetic/local baseline"
+    "status": "pending after baseline merge"
   },
   "currentToolchain": {
-    "note": "App runtime has no third-party runtime dependencies in this baseline. Repository devDependencies pin TypeScript and Playwright; package-lock.json is committed and CI uses npm ci.",
-    "typescriptCompiler": {
-      "tool": "tsc",
-      "installedAs": "devDependency: typescript 5.9.2",
-      "usedFor": "npm run build"
-    },
-    "testRunner": {
-      "tool": "Node built-in node:test after tsc compilation",
-      "installedAs": "Node built-in; TypeScript compiler supplied by devDependency",
-      "usedFor": "npm test"
-    },
-    "browserQa": {
-      "tool": "playwright",
-      "installedAs": "devDependency: playwright 1.55.0; Chromium installed in CI",
-      "usedFor": "npm run qa:browser"
-    },
-    "dependencyInstall": "npm ci --no-audit --no-fund"
-  },
-  "buildCommand": "npm run build",
-  "buildCommandExpandsTo": "tsc -p tsconfig.json && node generate-sw-manifest.mjs",
-  "serveCommand": "node server.mjs",
-  "testCommand": "npm test",
-  "testCommandExpandsTo": "rm -rf test-dist && tsc -p tsconfig.tests.json && node --test test-dist/tests/*.test.js",
-  "browserQaCommand": "npm run qa:browser",
-  "browserQaRequires": "server.mjs running at http://localhost:8787",
-  "sourceDirs": {
-    "domainLogic": "src/lib",
-    "ui": "src/ui",
-    "screens": "src/ui/screens",
-    "styles": "src/styles",
-    "tests": "tests",
-    "docs": "docs"
+    "node": 22,
+    "typescript": "5.9.2",
+    "playwright": "1.55.0",
+    "dependencyInstall": "npm ci --no-audit --no-fund",
+    "build": "npm run build",
+    "tests": "npm test",
+    "browserQa": "npm run qa:browser"
   },
   "compiledOutputDir": "dist",
   "serviceWorker": "sw.js",
   "serviceWorkerManifest": "sw-manifest.json",
+  "compiledModuleCount": 29,
   "providerMode": "fake-adapters-only",
-  "providers": {
-    "tmdb": {"adapter": "TmdbAdapter", "mode": "fake", "file": "src/lib/providers.ts"},
-    "trakt": {"adapter": "TraktAdapter", "mode": "fake", "file": "src/lib/providers.ts"},
-    "streamingAvailability": {"adapter": "AvailabilityAdapter", "mode": "fake", "file": "src/lib/providers.ts"}
-  },
   "database": {
     "kind": "IndexedDB",
-    "standsInFor": "Cloudflare D1",
     "temporary": true,
-    "file": "src/lib/db.ts",
-    "stores": ["titles", "title_metadata", "seasons", "episodes", "watch_events", "watch_overrides", "library_items", "ratings", "watched_service", "services", "availability", "alerts", "sync_state", "meta"]
+    "standsInFor": "Cloudflare D1",
+    "file": "src/lib/db.ts"
   },
   "implementedScreens": ["home", "library", "history", "search", "discover", "detail", "alerts", "settings"],
-  "implementedDomainModules": ["status.ts", "season-select.ts", "alerts.ts", "discover.ts", "resolve.ts", "history.ts", "repo.ts", "providers.ts", "fixtures.ts", "views.ts", "db.ts", "types.ts"],
-  "testFiles": ["tests/status.test.ts", "tests/resolve.test.ts", "tests/history.test.ts", "tests/alerts.test.ts", "tests/discover.test.ts", "tests/season-select.test.ts", "tests/repo-integration.test.ts", "tests/views.test.ts", "tests/fake-indexeddb.ts"],
-  "lastKnownTestCount": 92,
-  "lastKnownTestResult": "92/92 passing in GitHub CI on the reproducible npm ci baseline",
-  "lastKnownBrowserQaResult": "25/25 passing in GitHub CI, including folded/unfolded responsive checks and no smoke-journey browser console/page errors",
+  "implementedDomainModules": [
+    "alerts.ts", "db.ts", "discover.ts", "export.ts", "fixtures.ts", "history.ts", "providers.ts", "repo.ts", "resolve.ts", "season-select.ts", "service-options.ts", "status.ts", "streaming.ts", "types.ts", "views.ts"
+  ],
+  "validation": {
+    "build": "pass",
+    "tests": {"count": 101, "suites": 26, "pass": 101, "fail": 0, "skipped": 0, "todo": 0},
+    "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0},
+    "responsive": ["344x792 folded", "873x1000 unfolded"],
+    "physicalPixel9ProFold": "not yet run"
+  },
+  "hardenedBehaviors": [
+    "Caught Up requires no gaps through the engaged season while untouched newer seasons are ignored until started",
+    "On Hold and Watching Now use real watch timestamps, not manual correction changedAt",
+    "Finished series requires provider status Ended",
+    "season bulk overrides are bounded to currently known/released episodes",
+    "New Season supports future seasons before episode records exist",
+    "availability alerts are transition/cycle-aware",
+    "provider-owned availability reconciliation removes stale rows without touching user-owned stores",
+    "Search/Library membership rejects dangling title IDs",
+    "Rate Now stays visible when either media type has eligible titles",
+    "Settings re-entry resets to Preferences",
+    "Detail overview/history/episodes expose required progress, release, synopsis, and manual-correction context",
+    "Discover removes a title after it is added to Library",
+    "stable provider crosswalk IDs are included in user-data export",
+    "Detail primary streaming action prefers selected services but falls back to another actionable subscription service",
+    "History retains deselected historical watched-service values and filters",
+    "Library service filter reflects represented current availability regardless of preference selection",
+    "Alerts remain NEW during first visit and are marked seen on page exit"
+  ],
   "pendingIntegrations": [
     "Real Trakt OAuth + history sync",
     "Real TMDB metadata/search/trailer API",
     "Real Streaming Availability API",
-    "Cloudflare D1 (replacing IndexedDB)",
-    "Cloudflare Workers deploy (replacing server.mjs)",
-    "Real streaming-service logo licensing (replacing src/ui/logos.ts colored-badge approach) — explicitly pending, not final",
-    "Physical Pixel 9 Pro Fold validation before V1 release"
-  ],
-  "absoluteRules": [
-    "No live network calls to any provider from the synthetic baseline",
-    "No deploy or Cloudflare production action without explicit authorization",
-    "No real/personal data in automated QA or fixtures",
-    "Never overwrite user-owned data from a provider-refresh code path",
-    "Never commit a real API key, OAuth secret, token, or credential of any kind"
+    "Cloudflare D1",
+    "Cloudflare Worker",
+    "properly sourced/licensed streaming-service logos",
+    "physical Pixel 9 Pro Fold validation before V1 release"
   ],
   "knownSchemaMigrationNotes": [
-    "Current IndexedDB availability key [titleId, serviceKey] cannot represent multiple simultaneous option types for the same service; redesign this provider-owned table during D1 schema migration before live-provider integration."
+    "Current IndexedDB availability key [titleId, serviceKey] cannot represent multiple simultaneous option types for the same service; redesign during D1 migration."
   ],
   "repository": {
     "fullName": "mstpln/streamarkr",
@@ -93,14 +79,14 @@
     "defaultBranch": "main",
     "baselineBranch": "feat/establish-streamarkr-baseline-v0102",
     "baselinePr": 1,
-    "baselinePrStatus": "open, mergeable, final-review stage; do not merge without explicit user authorization",
+    "baselinePrStatus": "open; final review; never merge without explicit user authorization",
     "cloudflareConnected": false
   },
-  "ci": {
-    "workflow": ".github/workflows/ci.yml",
-    "nodeVersion": 22,
-    "install": "npm ci --no-audit --no-fund",
-    "requiredBeforeMerge": "verify and browser-qa must both be green on the current PR head",
-    "latestKnownOutcome": "green baseline validation; final PR head must be rechecked after any commit"
-  }
+  "absoluteRules": [
+    "No live provider calls from synthetic QA",
+    "No deploy or Cloudflare production action without explicit authorization",
+    "No real/personal data in fixtures or automated QA",
+    "Never overwrite user-owned data from provider refresh",
+    "Never commit API keys, OAuth secrets/tokens, Cloudflare credentials, or other secrets"
+  ]
 }

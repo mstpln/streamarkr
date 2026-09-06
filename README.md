@@ -11,49 +11,47 @@ All automated QA uses synthetic fixtures only. Real API keys, OAuth secrets, Clo
 ## Local development
 
 Requirements:
-
 - Node.js 22+
 - npm
 
-Install the repository-local development tools:
-
+Install the exact repository development toolchain:
 ```bash
-npm install
+npm ci
 ```
 
 Build and serve:
-
 ```bash
 npm run build
 npm run serve
 ```
-
 Then open `http://localhost:8787`.
 
 Run deterministic logic/integration tests:
-
 ```bash
 npm test
 ```
 
 Run browser QA after installing the Playwright Chromium browser once:
-
 ```bash
 npx playwright install chromium
 npm run build
 npm run serve
-# in another terminal
+# in another shell/process
 npm run qa:browser
 ```
 
+## Current automated baseline
+- Build: PASS
+- Logic/repository tests: **101/101 PASS**
+- Playwright browser/responsive QA: **27/27 PASS**
+- Physical Pixel 9 Pro Fold QA: pending before V1 release
+
 ## Engineering continuity
-
 Read these before making changes:
-
 - `AGENTS.md`
 - `docs/STREAMARKR_STATE.md`
 - `docs/STREAMARKR_DECISIONS.md`
 - `docs/STREAMARKR_BUILD_STATE.json`
 - `docs/STREAMARKR_BUILD_PLAN.md`
 
-The current IndexedDB/fake-provider setup is a temporary baseline. The target architecture is Vite + TypeScript, Cloudflare Worker + D1, and real provider adapters, as defined in the build plan and continuity files.
+The current IndexedDB/fake-provider setup is a temporary baseline. The target architecture remains Vite + TypeScript, Cloudflare Worker + D1, and real provider adapters, as defined in the build plan and continuity files.
