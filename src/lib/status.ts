@@ -38,7 +38,9 @@ export function computeSeriesStatus(input: SeriesStatusInput): SeriesStatus {
 
   const resolved = released.map((e) => resolveEpisode(input.titleId, e.seasonNumber, e.episodeNumber, input.events, input.overrides));
   const watchedCount = resolved.filter((r) => r.watched).length;
-  const ended = input.metadataStatus === 'Ended' || input.metadataStatus === 'Canceled';
+  // Product rule: Finished is reserved for provider status Ended. A Canceled series can still be
+  // fully watched, but it remains Caught Up rather than being silently equated with Ended.
+  const ended = input.metadataStatus === 'Ended';
 
   if (watchedCount === 0) return 'To Watch';
   if (watchedCount === released.length) return ended ? 'Finished' : 'Caught Up';
