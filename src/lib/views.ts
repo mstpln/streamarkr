@@ -5,6 +5,7 @@ import { computeSeriesStatus, computeNewSeasonEntry, isFullyWatchedForRating } f
 import { buildHistoryRow, sortRecentlyWatched, type HistoryRow } from './history.js';
 import { resolveMovie, lastRealWatchedAt } from './resolve.js';
 import { computeRelevantSeason, seasonProgress } from './season-select.js';
+import { choosePrimaryStreamingAction } from './streaming.js';
 import * as Discover from './discover.js';
 import type { AvailabilityEntry, LibraryItem, MediaType, Rating, SeriesStatus, Title, TitleMetadata, WatchEvent, WatchOverride } from './types.js';
 
@@ -50,8 +51,7 @@ export function currentAvailability(s: Snapshot, titleId: string): AvailabilityE
   return s.availability.filter((a) => a.titleId === titleId);
 }
 
-/** Selected-service subscription entries first (Correction 4/5/6: "prioritize the user's
- * selected services visually"), then everything else. */
+/** Selected-service subscription entries first, then everything else. */
 export function prioritizedAvailability(s: Snapshot, titleId: string): AvailabilityEntry[] {
   const selectedKeys = new Set(s.services.filter((sv) => sv.userSelected).map((sv) => sv.serviceKey));
   return [...currentAvailability(s, titleId)].sort((a, b) => {
@@ -61,16 +61,13 @@ export function prioritizedAvailability(s: Snapshot, titleId: string): Availabil
   });
 }
 
-/** The single best "Open in <Service>" action for the Detail page's primary streaming button
- * (Correction 9): a user-selected service with a subscription deep link, else any subscription
- * deep link, else null (no fake working button when nothing is actionable). */
+/** The single best actionable subscription destination. Selected services are preferred, but an
+ * unselected service remains a valid fallback when it is the only current subscription link. */
 export function primaryStreamingAction(s: Snapshot, titleId: string): AvailabilityEntry | null {
-  const entries = prioritizedAvailability(s, titleId).filter((a) => a.optionType === 'subscription' && a.deepLink);
-  return entries[0] ?? null;
+  return choosePrimaryStreamingAction(currentAvailability(s, titleId), s.services);
 }
 
 // --- Home --------------------------------------------------------------------------------
-
 export interface WatchingCard {
   title: Title;
   status: SeriesStatus;
@@ -80,9 +77,6 @@ export interface WatchingCard {
   lastWatchedAt: string | null;
 }
 
-/** Shared by watchingNow/onHold (Correction 3): the season shown on a card is always the
- * relevant one per section 4.5's priority order, and its progress always respects manual
- * overrides — never a hardcoded/placeholder season number. */
 function buildCard(s: Snapshot, title: Title, status: SeriesStatus): WatchingCard {
   const episodes = s.episodes.filter((e) => e.titleId === title.id);
   const seasons = s.seasons.filter((se) => se.titleId === title.id);
@@ -150,7 +144,6 @@ export function newSeason(s: Snapshot): NewSeasonCard[] {
 }
 
 // --- History -------------------------------------------------------------------------------
-
 export interface HistoryEntry extends HistoryRow {
   title: Title;
   watchedService?: string;
@@ -169,7 +162,6 @@ export function historyRows(s: Snapshot, mediaType: MediaType): HistoryEntry[] {
 export { sortRecentlyWatched };
 
 // --- Library ------------------------------------------------------------------------------
-
 export interface LibraryEntry {
   title: Title;
   status: SeriesStatus;
@@ -197,7 +189,6 @@ export function libraryRows(s: Snapshot, mediaType: MediaType): LibraryEntry[] {
 }
 
 // --- Discover -------------------------------------------------------------------------------
-
 export function discoverContext(s: Snapshot): Discover.DiscoverContext {
   const historyTitleIds = new Set(historyRows(s, 'series').map((r) => r.titleId).concat(historyRows(s, 'movie').map((r) => r.titleId)));
   return { titles: s.titles, metadata: s.metadata, libraryItems: s.library, historyTitleIds, availability: s.availability, services: s.services, ratings: s.ratings };

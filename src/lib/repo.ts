@@ -9,12 +9,12 @@ import { computeSeriesStatus, computeNewSeasonEntry, isFullyWatchedForRating } f
 import { buildHistoryRow, sortRecentlyWatched, type HistoryRow } from './history.js';
 import { generateAlerts, applyRetention, buildReleaseSnapshot, type ReleaseSnapshot } from './alerts.js';
 import { resolveMovie } from './resolve.js';
+import { exportTitleIdentity, type ExportTitleIdentity } from './export.js';
 import type {
   AlertRecord,
   AvailabilityEntry,
   Episode,
   LibraryItem,
-  MediaType,
   Rating,
   Season,
   ServiceDef,
@@ -125,21 +125,8 @@ export async function getTitleBundle(id: string): Promise<TitleBundle | undefine
 }
 
 // --- Library mutations (user-owned) -------------------------------------------------------
-//
-// Future-integration note (Correction 9 of the final pass): today every fake search result is
-// already a pre-seeded fixture title, so `addToLibrary` always finds a matching `titles` row.
-// That will NOT be true once Search calls a real TMDB endpoint — an arbitrary TMDB result has no
-// corresponding local `titles` row yet. The real flow this boundary is meant to support is:
-//   1. Search result selected
-//   2. persist a canonical title + provider-id crosswalk row in `titles`
-//   3. fetch/persist required metadata (`title_metadata`)
-//   4. for a series, fetch/persist its season structure (`seasons`/`episodes`)
-//   5. fetch/persist current availability (`availability`)
-//   6. only then add Library membership
-// `addToLibrary` enforces step 6's precondition directly: it refuses to create a Library row for
-// a titleId with no corresponding `titles` record, so a dangling membership can never be created
-// regardless of which caller (fake or real) invokes it.
-
+// Future real-search flow: persist canonical title/crosswalk + metadata/season/availability data
+// before adding membership. This precondition prevents dangling Library rows.
 export async function addToLibrary(titleId: string): Promise<void> {
   const existing = await db.get<LibraryItem>('library_items', titleId);
   if (existing) return;
@@ -147,7 +134,7 @@ export async function addToLibrary(titleId: string): Promise<void> {
   if (!title) {
     throw new Error(
       `Cannot add "${titleId}" to My Library: no title record exists yet. Persist the title (and its ` +
-      `metadata/seasons/availability) before adding library membership — see the comment above this function.`
+      `metadata/seasons/availability) before adding library membership.`
     );
   }
   await db.put('library_items', { titleId, addedAt: new Date().toISOString(), derivedStatus: 'To Watch', statusComputedAt: new Date().toISOString() } satisfies LibraryItem);
@@ -187,22 +174,15 @@ export async function setEpisodeOverride(titleId: string, seasonNumber: number, 
 }
 
 /** Apply a season bulk action only to episodes that are already released and known at the
- * moment of the action. This deliberately writes episode-level overrides instead of a persistent
- * season-level wildcard so episodes added/released later do not inherit an old decision. Legacy
- * season-level overrides are still understood by resolve.ts for existing/imported data, but UI
- * actions must not create new ones. */
+ * moment of the action. Future episodes must not inherit an old bulk decision. */
 export async function setSeasonOverride(titleId: string, seasonNumber: number, state: 'watched' | 'unwatched'): Promise<void> {
   const now = new Date();
   const [episodes, overrides] = await Promise.all([allEpisodes(), allOverrides()]);
-
-  // Remove any prior season-wide wildcard for this title/season before applying the bounded
-  // episode-level decisions. This prevents a legacy wildcard from leaking onto future episodes.
   for (const override of overrides) {
     if (override.scopeType === 'season' && override.titleId === titleId && override.seasonNumber === seasonNumber) {
       await db.del('watch_overrides', override.id);
     }
   }
-
   const releasedKnown = episodes.filter((episode) =>
     episode.titleId === titleId &&
     episode.seasonNumber === seasonNumber &&
@@ -236,7 +216,6 @@ export async function addCustomService(displayName: string): Promise<void> {
 }
 
 // --- Alerts ---------------------------------------------------------------------------------
-
 export async function markAlertsSeen(ids: string[]): Promise<void> {
   const now = new Date().toISOString();
   for (const id of ids) {
@@ -246,18 +225,12 @@ export async function markAlertsSeen(ids: string[]): Promise<void> {
 }
 
 // --- Sync now (fake) -------------------------------------------------------------------------
-// Correction 1: alerts come from real change detection. We persist the previous
-// availability/release snapshot and the previous check timestamp in `meta`, diff them against
-// the freshly-fetched provider state, then advance the baseline for next time.
-
 const PREV_AVAILABILITY_KEY = 'prev_availability_snapshot';
 const PREV_RELEASE_KEY = 'prev_release_snapshot';
 const PREV_CHECK_AT_KEY = 'prev_alert_check_at';
 
-/** Final-pass fix: availability is provider-owned data, so a fresh provider snapshot must fully
- * REPLACE what's stored, not merely upsert into it — `putAll` alone leaves stale rows behind
- * forever once a provider drops a title/service pairing (e.g. it's removed from Netflix), and the
- * UI would keep showing availability that no longer exists. This never touches user-owned stores. */
+/** Availability is provider-owned, so a fresh provider snapshot fully replaces the previous one.
+ * This never touches user-owned stores. */
 export async function reconcileAvailability(current: AvailabilityEntry[]): Promise<void> {
   const existing = await allAvailability();
   const currentKeys = new Set(current.map((a) => `${a.titleId}${a.serviceKey}`));
@@ -286,9 +259,9 @@ export async function syncNow(): Promise<{ historyEvents: number; alertsCreated:
   const prevReleaseMeta = await db.get<{ key: string; value: ReleaseSnapshot }>('meta', PREV_RELEASE_KEY);
   const prevCheckMeta = await db.get<{ key: string; value: string }>('meta', PREV_CHECK_AT_KEY);
 
-  const previousAvailability = prevAvailMeta?.value ?? currentAvailability; // first run: no diff
-  const previousRelease = prevReleaseMeta?.value ?? currentRelease; // first run: no diff
-  const previousCheckAt = prevCheckMeta?.value ? new Date(prevCheckMeta.value) : now; // first run: no diff
+  const previousAvailability = prevAvailMeta?.value ?? currentAvailability;
+  const previousRelease = prevReleaseMeta?.value ?? currentRelease;
+  const previousCheckAt = prevCheckMeta?.value ? new Date(prevCheckMeta.value) : now;
 
   const fresh = generateAlerts({
     now, titles, metadata, libraryItems, seasons, episodes, events, overrides, services, existingAlerts,
@@ -297,7 +270,6 @@ export async function syncNow(): Promise<{ historyEvents: number; alertsCreated:
   if (fresh.length > 0) {
     const merged = applyRetention([...fresh, ...existingAlerts]);
     for (const a of merged) await db.put('alerts', a);
-    // delete any existing alerts that fell out of the retained window
     const keep = new Set(merged.map((a) => a.id));
     for (const a of existingAlerts) if (!keep.has(a.id)) await db.del('alerts', a.id);
   }
@@ -309,15 +281,12 @@ export async function syncNow(): Promise<{ historyEvents: number; alertsCreated:
   return { historyEvents: events.length, alertsCreated: fresh.length };
 }
 
-// --- Data export (Correction 14) ------------------------------------------------------------
-// Everything the user owns: library membership, ratings, manual overrides, watch history/events,
-// "Where I watched it", preferences (selected services), and alert seen-state — keyed by stable
-// title/provider IDs. Deliberately excludes provider-cache data (metadata, availability
-// snapshots) since that's re-fetchable noise, not something the user authored.
-
+// --- Data export -----------------------------------------------------------------------------
+// Provider-cache metadata/availability are re-fetchable and excluded, but stable external
+// identity crosswalks are preserved so exported user-owned state can be reconnected safely.
 export interface ExportPayload {
   exportedAt: string;
-  titles: { id: string; tmdbId: number; mediaType: MediaType; title: string; year: number }[];
+  titles: ExportTitleIdentity[];
   library: LibraryItem[];
   ratings: Rating[];
   overrides: WatchOverride[];
@@ -333,7 +302,7 @@ export async function buildExportPayload(): Promise<ExportPayload> {
   ]);
   return {
     exportedAt: new Date().toISOString(),
-    titles: titles.map((t) => ({ id: t.id, tmdbId: t.tmdbId, mediaType: t.mediaType, title: t.title, year: t.year })),
+    titles: titles.map(exportTitleIdentity),
     library,
     ratings,
     overrides,

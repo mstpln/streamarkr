@@ -1,10 +1,11 @@
 import * as repo from '../../lib/repo.js';
 import { resolveEpisode, resolveMovie } from '../../lib/resolve.js';
 import { computeRelevantSeason } from '../../lib/season-select.js';
+import { choosePrimaryStreamingAction } from '../../lib/streaming.js';
 import { posterStyle, backdropStyle } from '../art.js';
 import { serviceLogoHtml } from '../logos.js';
 import { openTrailer } from '../trailer.js';
-import type { AvailabilityEntry, Episode, ServiceDef, WatchEvent, WatchOverride } from '../../lib/types.js';
+import type { Episode, ServiceDef, WatchEvent, WatchOverride } from '../../lib/types.js';
 
 type Tab = 'overview' | 'episodes' | 'streaming' | 'history';
 let tab: Tab = 'overview';
@@ -25,10 +26,7 @@ export async function render(el: HTMLElement, id: string) {
   }
 
   const tabs: Tab[] = title.mediaType === 'series' ? ['overview', 'episodes', 'streaming', 'history'] : ['overview', 'streaming', 'history'];
-  const selectedKeys = new Set(services.filter((service) => service.userSelected).map((service) => service.serviceKey));
-  const primary: AvailabilityEntry | null = [...availability]
-    .filter((entry) => entry.optionType === 'subscription' && entry.deepLink && selectedKeys.has(entry.serviceKey))
-    .sort((a, b) => a.serviceKey.localeCompare(b.serviceKey))[0] ?? null;
+  const primary = choosePrimaryStreamingAction(availability, services);
   const primaryService: ServiceDef | undefined = primary ? services.find((service) => service.serviceKey === primary.serviceKey) : undefined;
 
   el.innerHTML = `
