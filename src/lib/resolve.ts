@@ -42,8 +42,9 @@ export function resolveMovie(titleId: string, events: WatchEvent[], overrides: W
   return { watched: false, watchedAt: null, viaOverride: false };
 }
 
-/** Latest activity timestamp for a title — used only for the 14-day On Hold rule, never displayed
- * as a watched date. Includes override changedAt so a manual correction counts as activity. */
+/** Latest correction/activity timestamp across provider events and manual override provenance.
+ * This helper is intentionally NOT used for Watching Now recency or the 14-day On Hold timer,
+ * because override changedAt is not a genuine watched timestamp. */
 export function lastActivityAt(titleId: string, events: WatchEvent[], overrides: WatchOverride[]): string | null {
   const dates: string[] = [
     ...events.filter((e) => e.titleId === titleId).map((e) => e.watchedAt),
@@ -53,7 +54,7 @@ export function lastActivityAt(titleId: string, events: WatchEvent[], overrides:
   return dates.sort().at(-1)!;
 }
 
-/** Latest real provider watched timestamp only (for display: last watched date). */
+/** Latest real provider watched timestamp only (for display, Watching Now ordering, and On Hold). */
 export function lastRealWatchedAt(titleId: string, events: WatchEvent[]): string | null {
   const dates = events.filter((e) => e.titleId === titleId).map((e) => e.watchedAt);
   if (dates.length === 0) return null;
