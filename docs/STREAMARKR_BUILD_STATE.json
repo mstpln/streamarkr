@@ -51,79 +51,20 @@
   "serviceWorkerManifest": "sw-manifest.json",
   "providerMode": "fake-adapters-only",
   "providers": {
-    "tmdb": {
-      "adapter": "TmdbAdapter",
-      "mode": "fake",
-      "file": "src/lib/providers.ts"
-    },
-    "trakt": {
-      "adapter": "TraktAdapter",
-      "mode": "fake",
-      "file": "src/lib/providers.ts"
-    },
-    "streamingAvailability": {
-      "adapter": "AvailabilityAdapter",
-      "mode": "fake",
-      "file": "src/lib/providers.ts"
-    }
+    "tmdb": {"adapter": "TmdbAdapter", "mode": "fake", "file": "src/lib/providers.ts"},
+    "trakt": {"adapter": "TraktAdapter", "mode": "fake", "file": "src/lib/providers.ts"},
+    "streamingAvailability": {"adapter": "AvailabilityAdapter", "mode": "fake", "file": "src/lib/providers.ts"}
   },
   "database": {
     "kind": "IndexedDB",
     "standsInFor": "Cloudflare D1",
     "temporary": true,
     "file": "src/lib/db.ts",
-    "stores": [
-      "titles",
-      "title_metadata",
-      "seasons",
-      "episodes",
-      "watch_events",
-      "watch_overrides",
-      "library_items",
-      "ratings",
-      "watched_service",
-      "services",
-      "availability",
-      "alerts",
-      "sync_state",
-      "meta"
-    ]
+    "stores": ["titles", "title_metadata", "seasons", "episodes", "watch_events", "watch_overrides", "library_items", "ratings", "watched_service", "services", "availability", "alerts", "sync_state", "meta"]
   },
-  "implementedScreens": [
-    "home",
-    "library",
-    "history",
-    "search",
-    "discover",
-    "detail",
-    "alerts",
-    "settings"
-  ],
-  "implementedDomainModules": [
-    "status.ts",
-    "season-select.ts",
-    "alerts.ts",
-    "discover.ts",
-    "resolve.ts",
-    "history.ts",
-    "repo.ts",
-    "providers.ts",
-    "fixtures.ts",
-    "views.ts",
-    "db.ts",
-    "types.ts"
-  ],
-  "testFiles": [
-    "tests/status.test.ts",
-    "tests/resolve.test.ts",
-    "tests/history.test.ts",
-    "tests/alerts.test.ts",
-    "tests/discover.test.ts",
-    "tests/season-select.test.ts",
-    "tests/repo-integration.test.ts",
-    "tests/views.test.ts",
-    "tests/fake-indexeddb.ts"
-  ],
+  "implementedScreens": ["home", "library", "history", "search", "discover", "detail", "alerts", "settings"],
+  "implementedDomainModules": ["status.ts", "season-select.ts", "alerts.ts", "discover.ts", "resolve.ts", "history.ts", "repo.ts", "providers.ts", "fixtures.ts", "views.ts", "db.ts", "types.ts"],
+  "testFiles": ["tests/status.test.ts", "tests/resolve.test.ts", "tests/history.test.ts", "tests/alerts.test.ts", "tests/discover.test.ts", "tests/season-select.test.ts", "tests/repo-integration.test.ts", "tests/views.test.ts", "tests/fake-indexeddb.ts"],
   "lastKnownTestCount": 92,
   "lastKnownTestResult": "92/92 passing in GitHub CI on the reproducible npm ci baseline",
   "lastKnownBrowserQaResult": "25/25 passing in GitHub CI, including folded/unfolded responsive checks and no smoke-journey browser console/page errors",
@@ -159,9 +100,7 @@
     "workflow": ".github/workflows/ci.yml",
     "nodeVersion": 22,
     "install": "npm ci --no-audit --no-fund",
-    "latestValidatedHead": "f6d3cdc4e08d54270415a321f865aaf416254d9e",
-    "latestValidatedRun": 34063418104,
-    "verify": "success",
-    "browserQa": "success"
+    "requiredBeforeMerge": "verify and browser-qa must both be green on the current PR head",
+    "latestKnownOutcome": "green baseline validation; final PR head must be rechecked after any commit"
   }
 }
