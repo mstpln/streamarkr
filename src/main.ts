@@ -15,8 +15,17 @@ async function boot() {
   await ensureSeeded();
   const app = document.getElementById('app')!;
   renderShell(app);
+  let previousRoute: Route['name'] | null = null;
 
   onRouteChange(async (route: Route) => {
+    // Alerts remain visually NEW for the entire first visit and are persisted as seen only when
+    // leaving Alerts. Commit before the next header render so its unread badge is immediately
+    // accurate on the destination screen.
+    if (previousRoute === 'alerts' && route.name !== 'alerts') {
+      await Alerts.commitVisitSeen();
+    }
+    previousRoute = route.name;
+
     window.scrollTo(0, 0);
     await updateHeader(route);
     updateNav(route);

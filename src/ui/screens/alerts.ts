@@ -2,10 +2,12 @@ import * as repo from '../../lib/repo.js';
 import { posterStyle } from '../art.js';
 import { navigate } from '../router.js';
 
+let currentVisitUnseenIds: string[] = [];
+
 export async function render(el: HTMLElement) {
   el.innerHTML = `<div class="skeleton" style="height:300px;border-radius:16px;"></div>`;
-  const alerts = (await repo.allAlerts()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const unseenIds = alerts.filter((a) => !a.seenAt).map((a) => a.id);
+  const alerts = (await repo.allAlerts()).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 30);
+  currentVisitUnseenIds = alerts.filter((a) => !a.seenAt).map((a) => a.id);
 
   el.innerHTML = `
     <div class="page-title">Alerts</div>
@@ -18,16 +20,19 @@ export async function render(el: HTMLElement) {
             <div class="row-alert-text">${a.message}</div>
             <div class="row-meta">${new Date(a.createdAt).toLocaleDateString()}</div>
           </div>
-          ${!a.seenAt ? '<span class="new-dot"></span>' : ''}
+          ${!a.seenAt ? '<span class="new-dot" aria-label="New alert"></span>' : ''}
         </button>
       `).join('')}
     </div>`}
   `;
-  el.querySelectorAll('[data-open]').forEach((r) => r.addEventListener('click', () => navigate(`#/title/${(r as HTMLElement).dataset.open}`)));
+  el.querySelectorAll('[data-open]').forEach((row) => row.addEventListener('click', () => navigate(`#/title/${(row as HTMLElement).dataset.open}`)));
+}
 
-  // Newly unseen alerts stay visually marked for this visit; persist as seen so badge clears
-  // and the next visit shows no NEW indicator.
-  if (unseenIds.length > 0) {
-    await repo.markAlertsSeen(unseenIds);
-  }
+/** Persist the unseen alerts from this Alerts-page visit only when the user leaves the page.
+ * This keeps NEW indicators visible for the whole first visit, matching the product lifecycle,
+ * while allowing the header badge to clear before the destination screen renders. */
+export async function commitVisitSeen(): Promise<void> {
+  const ids = currentVisitUnseenIds;
+  currentVisitUnseenIds = [];
+  if (ids.length > 0) await repo.markAlertsSeen(ids);
 }

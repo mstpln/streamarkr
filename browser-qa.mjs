@@ -83,6 +83,13 @@ async function main() {
     await page.goto(BASE + '/#/alerts');
     await page.waitForTimeout(200);
     record('Alerts renders', (await page.locator('.page-title').count()) > 0);
+    const firstVisitNewCount = await page.locator('.new-dot').count();
+    record('Alerts keep NEW indicators visible during the first visit', firstVisitNewCount > 0, `new=${firstVisitNewCount}`);
+    await page.goto(BASE + '/#/home');
+    await page.waitForTimeout(150);
+    await page.goto(BASE + '/#/alerts');
+    await page.waitForTimeout(150);
+    record('Leaving Alerts marks that visit seen for the next visit', await page.locator('.new-dot').count() === 0);
 
     // Detail + trailer + primary streaming action, via the first library poster card
     await page.goto(BASE + '/#/library');
