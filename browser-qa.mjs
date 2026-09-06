@@ -117,7 +117,7 @@ async function main() {
       }
       await page.click('[data-tab="history"]');
       await page.waitForTimeout(100);
-      record('Detail History separates manual corrections', await page.getByText('Manual corrections').isVisible());
+      record('Detail History separates manual corrections', await page.getByText('Manual corrections', { exact: true }).isVisible());
       await page.click('[data-tab="streaming"]');
       await page.waitForTimeout(150);
       record('Streaming tab renders', (await page.locator('#tab-body').count()) > 0);
