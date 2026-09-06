@@ -1,6 +1,6 @@
 # Streamarkr current state
 
-Updated: 2026-09-06. Current build: **v0.10.2** / service-worker cache **streamarkr-v0.10.2**.
+Updated: 2026-09-07. Current build: **v0.10.2** / service-worker cache **streamarkr-v0.10.2**.
 
 ## Implemented baseline
 - Installable local PWA shell with Home, Discover, My Library, History, Search, Alerts, Settings, and universal movie/series detail pages.
@@ -19,22 +19,23 @@ Updated: 2026-09-06. Current build: **v0.10.2** / service-worker cache **streama
 - Responsive dark UI targeted at Pixel 9 Pro Fold; streaming-service marks are still placeholders, not final licensed logos.
 
 ## Validation
-- `npm run build`: PASS in independent takeover environment.
-- `npm test`: **92/92 PASS**, 22 suites.
-- `browser-qa.mjs`: deterministic committed Playwright smoke/responsive QA. Last Claude environment run reported 19/19; independent takeover runtime could syntax-check but not execute Playwright.
+- GitHub CI on PR #1 uses Node 22 and reproducible `npm ci` from committed `package-lock.json`.
+- Build: PASS.
+- Automated logic/repository tests: **92/92 PASS**, 22 suites.
+- Playwright browser/responsive QA: **25/25 PASS** at mobile, folded, and unfolded target sizes, with no browser console/page errors in the smoke journey.
 - Physical Pixel 9 Pro Fold QA has not yet been performed.
 
 ## Repository state
 - Public repo: `mstpln/streamarkr`.
 - Baseline branch: `feat/establish-streamarkr-baseline-v0102`.
-- `main` initially contains only the user-created README until the baseline PR is reviewed/merged.
+- Baseline PR: **#1**, open, mergeable, awaiting explicit user merge authorization after final review.
+- `main` still contains only the user-created initial repository state; no baseline merge has occurred.
 - No Cloudflare resources, provider secrets, or personal viewing data are connected or committed.
 
 ## Target architecture still pending
 The build plan target remains Vite + TypeScript, a separate Cloudflare Worker, separate D1 database, optional R2 if justified, and real Trakt/TMDB/Streaming Availability adapters. The current IndexedDB/fake-provider baseline is temporary and exists to preserve already-validated product/domain behavior while that migration is done in focused builds.
 
 ## Known limitations / next work
-- Establish GitHub CI and a lockfile; first baseline CI uses pinned devDependency versions with `npm install` because the takeover runtime cannot reach npm.
 - Migrate to Vite/Worker/D1 in focused builds rather than combining it with this baseline import.
 - Add real TMDB, Trakt OAuth/history, and streaming-availability integrations without violating ownership boundaries.
 - Replace placeholder service badges with properly sourced/licensed service logos.

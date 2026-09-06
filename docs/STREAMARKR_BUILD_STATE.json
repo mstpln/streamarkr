@@ -1,8 +1,8 @@
 {
-  "_readMeFirst": "This describes the CURRENT LOCAL-ONLY STAND-IN build, not the target architecture. The Streamarkr build plan's target is Vite + Cloudflare Worker + D1 (+ optional R2) + real provider adapters + GitHub CI. Everything below exists because this environment had no npm registry access — see AGENTS.md and docs/STREAMARKR_DECISIONS.md. Migrating to the real target architecture is expected future work, not forbidden.",
+  "_readMeFirst": "This describes the CURRENT reviewed synthetic/local baseline, not the final target architecture. The Streamarkr build plan target remains Vite + Cloudflare Worker + D1 (+ optional R2) + real provider adapters. The current IndexedDB/fake-provider implementation is temporary and preserves validated product behavior while that migration is done in focused builds.",
   "appVersion": "0.10.2",
   "cacheVersion": "streamarkr-v0.10.2",
-  "generatedAt": "2026-09-06T19:10:00Z",
+  "generatedAt": "2026-09-06T22:20:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -10,10 +10,10 @@
     "optionalStorage": "Cloudflare R2",
     "providers": "real Trakt/TMDB/Streaming Availability adapters",
     "ci": "GitHub CI/QA",
-    "status": "not yet started — current build is a local-only stand-in, see currentToolchain below"
+    "status": "not yet started — current build is the reviewed synthetic/local baseline"
   },
   "currentToolchain": {
-    "note": "App runtime has no third-party runtime dependencies in this baseline. Repository devDependencies pin TypeScript and Playwright; a package-lock is still pending because the takeover runtime cannot reach npm, so initial CI uses npm install.",
+    "note": "App runtime has no third-party runtime dependencies in this baseline. Repository devDependencies pin TypeScript and Playwright; package-lock.json is committed and CI uses npm ci.",
     "typescriptCompiler": {
       "tool": "tsc",
       "installedAs": "devDependency: typescript 5.9.2",
@@ -27,16 +27,16 @@
     "browserQa": {
       "tool": "playwright",
       "installedAs": "devDependency: playwright 1.55.0; Chromium installed in CI",
-      "usedFor": "node browser-qa.mjs"
+      "usedFor": "npm run qa:browser"
     },
-    "todoWhenCiIsSetUp": "Commit package-lock.json when a registry-enabled environment is available, switch CI from npm install to npm ci, then proceed with the planned Vite/Worker/D1 migration in focused builds."
+    "dependencyInstall": "npm ci --no-audit --no-fund"
   },
   "buildCommand": "npm run build",
   "buildCommandExpandsTo": "tsc -p tsconfig.json && node generate-sw-manifest.mjs",
   "serveCommand": "node server.mjs",
   "testCommand": "npm test",
   "testCommandExpandsTo": "rm -rf test-dist && tsc -p tsconfig.tests.json && node --test test-dist/tests/*.test.js",
-  "browserQaCommand": "node browser-qa.mjs",
+  "browserQaCommand": "npm run qa:browser",
   "browserQaRequires": "server.mjs running at http://localhost:8787",
   "sourceDirs": {
     "domainLogic": "src/lib",
@@ -125,8 +125,8 @@
     "tests/fake-indexeddb.ts"
   ],
   "lastKnownTestCount": 92,
-  "lastKnownTestResult": "92/92 passing in independent takeover environment",
-  "lastKnownBrowserQaResult": "Prior Claude run: 19/19 passing; GitHub CI browser QA pending first baseline PR",
+  "lastKnownTestResult": "92/92 passing in GitHub CI on the reproducible npm ci baseline",
+  "lastKnownBrowserQaResult": "25/25 passing in GitHub CI, including folded/unfolded responsive checks and no smoke-journey browser console/page errors",
   "pendingIntegrations": [
     "Real Trakt OAuth + history sync",
     "Real TMDB metadata/search/trailer API",
@@ -134,15 +134,14 @@
     "Cloudflare D1 (replacing IndexedDB)",
     "Cloudflare Workers deploy (replacing server.mjs)",
     "Real streaming-service logo licensing (replacing src/ui/logos.ts colored-badge approach) — explicitly pending, not final",
-    "Commit package-lock.json and switch GitHub CI from npm install to npm ci once registry access is available"
+    "Physical Pixel 9 Pro Fold validation before V1 release"
   ],
   "absoluteRules": [
-    "No live network calls to any provider from this local build",
-    "No GitHub, no deploy, no Cloudflare from this build (this build only — migrating to them later is expected, not forbidden)",
-    "No real/personal data — synthetic fixtures only, including in any future live-provider test (use sandboxed/synthetic accounts, never production credentials)",
-    "No external npm runtime dependencies in the shipped app (the build/test toolchain is a separate concern — see currentToolchain above)",
+    "No live network calls to any provider from the synthetic baseline",
+    "No deploy or Cloudflare production action without explicit authorization",
+    "No real/personal data in automated QA or fixtures",
     "Never overwrite user-owned data from a provider-refresh code path",
-    "Never commit a real API key, OAuth secret, or credential of any kind"
+    "Never commit a real API key, OAuth secret, token, or credential of any kind"
   ],
   "knownSchemaMigrationNotes": [
     "Current IndexedDB availability key [titleId, serviceKey] cannot represent multiple simultaneous option types for the same service; redesign this provider-owned table during D1 schema migration before live-provider integration."
@@ -152,7 +151,17 @@
     "visibility": "public",
     "defaultBranch": "main",
     "baselineBranch": "feat/establish-streamarkr-baseline-v0102",
-    "baselinePrStatus": "pending creation",
+    "baselinePr": 1,
+    "baselinePrStatus": "open, mergeable, final-review stage; do not merge without explicit user authorization",
     "cloudflareConnected": false
+  },
+  "ci": {
+    "workflow": ".github/workflows/ci.yml",
+    "nodeVersion": 22,
+    "install": "npm ci --no-audit --no-fund",
+    "latestValidatedHead": "f6d3cdc4e08d54270415a321f865aaf416254d9e",
+    "latestValidatedRun": 34063418104,
+    "verify": "success",
+    "browserQa": "success"
   }
 }

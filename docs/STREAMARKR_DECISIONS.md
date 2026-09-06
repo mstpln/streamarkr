@@ -54,4 +54,6 @@
 
 ## Current test/tooling decision
 - Baseline tests compile with TypeScript then use Node's built-in `node:test`; browser QA uses Playwright.
-- `typescript` and `playwright` are pinned devDependencies. A lockfile is pending because the takeover runtime cannot access npm; first CI may use `npm install`, then add `package-lock.json` and switch to `npm ci` as soon as a registry-enabled environment is available.
+- `typescript` and `playwright` are pinned devDependencies and `package-lock.json` is committed.
+- GitHub CI uses Node 22 and `npm ci` so dependency installation is reproducible.
+- Browser QA remains deterministic and synthetic-only; physical device QA is separate and still required before V1 release.
