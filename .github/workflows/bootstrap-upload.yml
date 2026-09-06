@@ -1,0 +1,43 @@
+name: Bootstrap uploaded Streamarkr baseline
+
+on:
+  push:
+    branches:
+      - feat/establish-streamarkr-baseline-v0102
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    if: contains(github.event.head_commit.message, '[upload baseline]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/establish-streamarkr-baseline-v0102
+      - name: Unpack reviewed baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="Streamarkr_v0.10.2_hardened.zip"
+          test -f "$ZIP"
+          rm -rf /tmp/streamarkr-bootstrap
+          mkdir -p /tmp/streamarkr-bootstrap
+          unzip -q "$ZIP" -d /tmp/streamarkr-bootstrap
+          if [ -d /tmp/streamarkr-bootstrap/streamarkr ]; then
+            cp -a /tmp/streamarkr-bootstrap/streamarkr/. .
+          else
+            cp -a /tmp/streamarkr-bootstrap/. .
+          fi
+          rm -f "$ZIP"
+          rm -f .github/workflows/bootstrap-upload.yml
+      - name: Commit reviewed baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Establish Streamarkr v0.10.2 reviewed baseline"
+          git push origin HEAD:feat/establish-streamarkr-baseline-v0102
