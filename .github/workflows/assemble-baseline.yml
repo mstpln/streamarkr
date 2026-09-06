@@ -1,4 +1,4 @@
-name: Bootstrap uploaded Streamarkr baseline
+name: Assemble Streamarkr baseline
 
 on:
   push:
@@ -9,30 +9,26 @@ permissions:
   contents: write
 
 jobs:
-  unpack:
-    if: contains(github.event.head_commit.message, '[upload baseline]')
+  assemble:
+    if: contains(github.event.head_commit.message, '[assemble baseline]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feat/establish-streamarkr-baseline-v0102
-      - name: Unpack reviewed baseline
+      - name: Validate and assemble reviewed baseline
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="Streamarkr_v0.10.2_hardened.zip"
-          test -f "$ZIP"
-          rm -rf /tmp/streamarkr-bootstrap
-          mkdir -p /tmp/streamarkr-bootstrap
-          unzip -q "$ZIP" -d /tmp/streamarkr-bootstrap
-          if [ -d /tmp/streamarkr-bootstrap/streamarkr ]; then
-            cp -a /tmp/streamarkr-bootstrap/streamarkr/. .
-          else
-            cp -a /tmp/streamarkr-bootstrap/. .
-          fi
-          rm -f "$ZIP"
+          cat .bootstrap/chunk* > /tmp/streamarkr-baseline.tar.xz
+          xz -t /tmp/streamarkr-baseline.tar.xz
+          tar -tJf /tmp/streamarkr-baseline.tar.xz >/dev/null
+          tar -xJf /tmp/streamarkr-baseline.tar.xz -C .
+          rm -rf .bootstrap
+          rm -f .github/workflows/assemble-baseline.yml
           rm -f .github/workflows/bootstrap-upload.yml
-      - name: Commit reviewed baseline
+          rm -f .github/workflows/bootstrap-baseline.yml
+      - name: Commit reviewed baseline source
         shell: bash
         run: |
           set -euo pipefail
