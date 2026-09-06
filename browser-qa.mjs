@@ -15,6 +15,8 @@ function record(name, ok, detail = '') {
 async function withPage(viewport, fn) {
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
+  page.setDefaultTimeout(5000);
+  page.setDefaultNavigationTimeout(15000);
   const consoleErrors = [];
   page.on('pageerror', (err) => consoleErrors.push(String(err)));
   page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
@@ -26,6 +28,7 @@ async function withPage(viewport, fn) {
 async function main() {
   const launchOptions = process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {};
   browser = await chromium.launch(launchOptions);
+  try {
 
   // ---- Journey smoke pass at a standard mobile viewport ----
   const errors = await withPage({ width: 390, height: 844 }, async (page, consoleErrors) => {
@@ -161,7 +164,9 @@ async function main() {
     record('Unfolded (873x1000): Detail hero renders', (await page.locator('.detail-hero').count()) > 0);
   });
 
-  await browser.close();
+  } finally {
+    await browser?.close();
+  }
 
   const fails = results.filter((r) => !r.ok);
   console.log(`\n${results.length - fails.length}/${results.length} checks passed.`);
