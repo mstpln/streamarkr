@@ -1,7 +1,6 @@
-// Repository layer: the only place UI code talks to the local database. Keeps the same
-// ownership boundaries as the build plan — user-owned mutations (library, ratings, overrides,
-// watched-service, alert seen-state) live here as explicit functions; provider refresh never
-// calls these directly.
+// Repository layer: the only place UI code talks to the browser cache. D1 is the target durable
+// source of truth; IndexedDB remains the cached/offline read layer. User-owned mutations remain
+// explicit here so later Worker-backed writes can preserve ownership boundaries consistently.
 import * as db from './db.js';
 import * as F from './fixtures.js';
 import { TmdbAdapter, TraktAdapter, AvailabilityAdapter } from './providers.js';
@@ -10,6 +9,7 @@ import { buildHistoryRow, sortRecentlyWatched, type HistoryRow } from './history
 import { generateAlerts, applyRetention, buildReleaseSnapshot, type ReleaseSnapshot } from './alerts.js';
 import { resolveMovie } from './resolve.js';
 import { exportTitleIdentity, type ExportTitleIdentity } from './export.js';
+import type { BackendSnapshot } from './backend-contract.js';
 import type {
   AlertRecord,
   AvailabilityEntry,
@@ -26,8 +26,15 @@ import type {
 } from './types.js';
 
 const SEED_FLAG = 'seeded_v1';
+const DATA_SOURCE_KEY = 'data_source';
+const BACKEND_SNAPSHOT_AT_KEY = 'backend_snapshot_generated_at';
 
 export async function ensureSeeded(): Promise<void> {
+  const source = await db.get<{ key: string; value: string }>('meta', DATA_SOURCE_KEY);
+  // A previously hydrated Worker snapshot is a valid offline cache. Never overwrite it with demo
+  // fixtures just because the app starts while the Worker is unavailable.
+  if (source?.value === 'backend') return;
+
   const flag = await db.get<{ key: string; value: boolean }>('meta', SEED_FLAG);
   if (flag?.value) return;
   await db.putAll('titles', F.TITLES);
@@ -42,11 +49,54 @@ export async function ensureSeeded(): Promise<void> {
   await db.putAll('services', F.SERVICES);
   await db.putAll('availability', F.AVAILABILITY);
   await db.putAll('alerts', F.ALERTS);
+  await db.put('meta', { key: DATA_SOURCE_KEY, value: 'fixtures' });
   await db.put('meta', { key: SEED_FLAG, value: true });
+}
+
+/** Atomically replace the complete browser cache from one authenticated Worker snapshot.
+ * This is intentionally a cache hydration boundary, not a provider refresh. The snapshot already
+ * contains both provider-owned and durable user-owned D1 state, so replacing these stores together
+ * prevents mixed old/new views. Schema mismatches fail before any local mutation. */
+export async function applyBackendSnapshot(snapshot: BackendSnapshot): Promise<void> {
+  if (snapshot.schemaVersion !== 1) {
+    throw new Error(`Unsupported Streamarkr backend schema version: ${snapshot.schemaVersion}`);
+  }
+  if (!snapshot.generatedAt || Number.isNaN(Date.parse(snapshot.generatedAt))) {
+    throw new Error('Invalid Streamarkr backend snapshot timestamp');
+  }
+
+  await db.replaceStores([
+    { store: 'titles', values: snapshot.titles },
+    { store: 'title_metadata', values: snapshot.metadata },
+    { store: 'seasons', values: snapshot.seasons },
+    { store: 'episodes', values: snapshot.episodes },
+    { store: 'watch_events', values: snapshot.watchEvents },
+    { store: 'watch_overrides', values: snapshot.watchOverrides },
+    { store: 'library_items', values: snapshot.library },
+    { store: 'ratings', values: snapshot.ratings },
+    { store: 'watched_service', values: snapshot.watchedService },
+    { store: 'services', values: snapshot.services },
+    { store: 'availability', values: snapshot.availability },
+    { store: 'alerts', values: snapshot.alerts },
+    { store: 'sync_state', values: snapshot.syncState },
+    { store: 'meta', values: [
+      { key: DATA_SOURCE_KEY, value: 'backend' },
+      { key: BACKEND_SNAPSHOT_AT_KEY, value: snapshot.generatedAt }
+    ] }
+  ]);
+}
+
+export async function backendCacheInfo(): Promise<{ active: boolean; generatedAt: string | null }> {
+  const [source, generatedAt] = await Promise.all([
+    db.get<{ key: string; value: string }>('meta', DATA_SOURCE_KEY),
+    db.get<{ key: string; value: string }>('meta', BACKEND_SNAPSHOT_AT_KEY)
+  ]);
+  return { active: source?.value === 'backend', generatedAt: generatedAt?.value ?? null };
 }
 
 export async function resetToFixtures(): Promise<void> {
   await db.clearAll();
+  await db.put('meta', { key: DATA_SOURCE_KEY, value: 'fixtures' });
   await db.put('meta', { key: SEED_FLAG, value: false });
   await ensureSeeded();
 }
@@ -141,7 +191,6 @@ export async function addToLibrary(titleId: string): Promise<void> {
 }
 
 export async function removeFromLibrary(titleId: string): Promise<void> {
-  // Only removes tracking membership. History, ratings, watched_service and overrides are untouched.
   await db.del('library_items', titleId);
 }
 
@@ -230,14 +279,15 @@ const PREV_RELEASE_KEY = 'prev_release_snapshot';
 const PREV_CHECK_AT_KEY = 'prev_alert_check_at';
 
 /** Availability is provider-owned, so a fresh provider snapshot fully replaces the previous one.
- * This never touches user-owned stores. */
+ * This never touches user-owned stores. The cache key includes optionType to match D1 semantics. */
 export async function reconcileAvailability(current: AvailabilityEntry[]): Promise<void> {
   const existing = await allAvailability();
-  const currentKeys = new Set(current.map((a) => `${a.titleId}${a.serviceKey}`));
+  const key = (row: AvailabilityEntry) => `${row.titleId}\u0000${row.serviceKey}\u0000${row.optionType}`;
+  const currentKeys = new Set(current.map(key));
   await db.putAll('availability', current);
   for (const row of existing) {
-    if (!currentKeys.has(`${row.titleId}${row.serviceKey}`)) {
-      await db.del('availability', [row.titleId, row.serviceKey]);
+    if (!currentKeys.has(key(row))) {
+      await db.del('availability', [row.titleId, row.serviceKey, row.optionType]);
     }
   }
 }
@@ -282,8 +332,6 @@ export async function syncNow(): Promise<{ historyEvents: number; alertsCreated:
 }
 
 // --- Data export -----------------------------------------------------------------------------
-// Provider-cache metadata/availability are re-fetchable and excluded, but stable external
-// identity crosswalks are preserved so exported user-owned state can be reconnected safely.
 export interface ExportPayload {
   exportedAt: string;
   titles: ExportTitleIdentity[];
@@ -313,4 +361,4 @@ export async function buildExportPayload(): Promise<ExportPayload> {
   };
 }
 
-export { TmdbAdapter, AvailabilityAdapter };
+export { TmdbAdapter, AvailabilityAdapter, computeNewSeasonEntry, isFullyWatchedForRating, buildHistoryRow, sortRecentlyWatched };
