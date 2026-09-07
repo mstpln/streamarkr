@@ -143,7 +143,7 @@ test('season correction materializes only released episodes in one transactional
   assert.deepEqual(releasedQuery?.values, ['series-1', 3, '2026-09-07']);
 });
 
-test('service preferences validate existence and custom services use durable unsupported rows', async () => {
+test('service preferences validate existence and custom services normalize durable unsupported keys', async () => {
   const db = new RecordingDb();
   await assert.rejects(() => setServiceSelected(db, 'missing', true), /streaming service record/);
   db.knownServices.add('netflix');
@@ -151,8 +151,8 @@ test('service preferences validate existence and custom services use durable uns
   assert.match(db.writes[0].sql, /UPDATE services SET user_selected/);
   assert.deepEqual(db.writes[0].values, [1, 'netflix']);
 
-  const key = await addCustomService(db, 'Criterion Channel');
-  assert.equal(key, 'criterion-channel');
+  const key = await addCustomService(db, 'MUBI + More');
+  assert.equal(key, 'mubi-more');
   assert.match(db.writes[1].sql, /availability_source/);
-  assert.deepEqual(db.writes[1].values.slice(0, 2), ['criterion-channel', 'Criterion Channel']);
+  assert.deepEqual(db.writes[1].values.slice(0, 2), ['mubi-more', 'MUBI + More']);
 });
