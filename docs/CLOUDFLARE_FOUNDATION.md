@@ -1,6 +1,6 @@
 # Streamarkr Cloudflare foundation
 
-This document describes the source-level Worker + D1 foundation. No Cloudflare resource has been created, bound, migrated remotely, or deployed by this build.
+This document describes the source-level Worker + D1 foundation and the local-only Cloudflare runtime validation layer. No remote Cloudflare resource has been created, bound, migrated, or deployed by this build.
 
 ## Isolation names
 Use separate Streamarkr resources only:
@@ -15,7 +15,7 @@ Never reuse or bind BANDMARKR Worker, D1, R2, secrets, or production data.
 - `worker/repository.ts`: D1 reads/writes and ownership-safe mutations.
 - `worker/provider-contracts.ts`: provider interfaces only; no live adapter implementation is committed.
 - `migrations/0001_initial.sql`: normalized schema aligned to the build plan.
-- `src/lib/backend-client.ts`: browser-side Worker client boundary. The existing UI remains on IndexedDB/fake adapters until a later focused migration, so this build does not change working local behavior.
+- `src/lib/backend-client.ts`: browser-side Worker client boundary. The existing UI remains on IndexedDB/fake adapters until a later focused migration.
 
 The D1 availability primary key is `(title_id, service_key, option_type)`, deliberately fixing the IndexedDB prototype limitation that could not retain subscription and rent/buy options for the same service simultaneously.
 
@@ -24,10 +24,26 @@ Every personal-data API route requires `Authorization: Bearer <device token>`. T
 
 CORS is deny-by-default for cross-origin requests. `APP_ORIGIN` must exactly match the approved PWA origin before cross-origin API access is allowed.
 
-## Activating later
-`wrangler.example.jsonc` is intentionally non-active until the separate Streamarkr D1 resource exists. When the user authorizes Cloudflare setup, create the resource in the Cloudflare UI, copy the example to the active Wrangler config with the real Streamarkr database identifier, and add secrets through Cloudflare secret storage. Do not put secret values in the config file.
+## Local-only Wrangler validation
+`wrangler.local.jsonc` is safe repository configuration for local D1 testing only:
+- Worker name `streamarkr-api-local`;
+- local database name `streamarkr-local`;
+- `database_id` is an obvious non-production placeholder UUID;
+- `preview_database_id` is a local identifier;
+- no credentials or real account-level resource IDs are present.
 
-The current repository does not yet pin Wrangler or the Cloudflare Vite plugin. That toolchain migration is a separate focused step so the existing reproducible `package-lock.json` and synthetic browser QA are not disrupted casually.
+`scripts/validate-wrangler-d1.mjs` invokes exactly Wrangler **4.129.0** through `npx`, uses ignored `.wrangler/test-d1` state, and always passes `--local`. It applies the committed migrations and verifies schema/seed state afterward. CI runs this check after the deterministic Node SQLite migration tests.
+
+The local validator must never be changed to `--remote`, given a real database ID, or pointed at any BANDMARKR resource merely to make CI pass.
+
+## Activating later
+`wrangler.example.jsonc` remains intentionally non-active until the user explicitly authorizes separate Streamarkr Cloudflare resource creation. After the dedicated Streamarkr D1 resource exists, activate an account-specific config using its real identifier and add secrets only through Cloudflare secret storage. Do not commit secret values or private runtime data.
+
+The local Wrangler validation pin does not itself create, provision, bind, migrate, or deploy a Cloudflare account resource. A remote activation step is a separate milestone and requires explicit user authorization.
 
 ## Migration validation
-The initial SQL migration is exercised in CI against Node 22's SQLite engine for syntax, idempotence, canonical identity, foreign-key data safety, default-service behavior, and the multi-option availability key. Once Wrangler is pinned, add a second migration check using Wrangler's local D1 simulator before any remote D1 migration is authorized.
+Two independent gates now protect the initial SQL migration before remote activation:
+1. `npm run test:d1` exercises syntax and semantics with Node 22 SQLite, including idempotence, canonical identity, foreign-key data safety, default-service behavior and multi-option availability.
+2. `npm run test:d1:wrangler` applies the same committed migration through Wrangler's local D1 runtime and verifies schema version, seeded services, core table presence and Wrangler migration history.
+
+Both checks must pass on the literal final PR head before any remote D1 migration is considered.
