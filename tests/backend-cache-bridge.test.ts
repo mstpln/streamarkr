@@ -117,3 +117,15 @@ test('unsupported backend schema is rejected before replacing cached data', asyn
   await assert.rejects(() => repo.applyBackendSnapshot(invalid), /Unsupported Streamarkr backend schema version/);
   assert.deepEqual((await repo.allTitles()).map((title) => title.id), ['movie-42']);
 });
+
+test('malformed snapshot rows are rejected before any cache store is cleared', async () => {
+  await hydrateFreshBackendCache();
+  const invalid = {
+    ...snapshot(),
+    titles: [{ mediaType: 'movie', tmdbId: 99, title: 'Missing canonical id', year: 2026 }]
+  } as unknown as BackendSnapshot;
+
+  await assert.rejects(() => repo.applyBackendSnapshot(invalid), /Invalid titles cache row: missing key field id/);
+  assert.deepEqual((await repo.allTitles()).map((title) => title.id), ['movie-42']);
+  assert.equal((await repo.allLibrary()).length, 1);
+});
