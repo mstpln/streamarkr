@@ -69,15 +69,19 @@ Final PR #6 validation on exact head `6020bb2c595d14328d3220226e997b3bbaf1471c`,
 PR #8 introduces the first frontend-to-Worker/D1 bridge without activating production browser access:
 - IndexedDB becomes an explicit offline/cache layer while D1 remains the target durable source of truth.
 - IndexedDB schema v2 aligns availability identity with D1 using `(titleId, serviceKey, optionType)`.
-- The v1 -> v2 migration recreates only provider-owned availability and preserves user-owned stores.
-- One authenticated `BackendSnapshot` can atomically replace the complete related browser cache in a single IndexedDB transaction.
+- The v1 -> v2 migration recreates only provider-owned availability and preserves user-owned stores. Its availability-invalidation marker is written inside the same versionchange transaction, so the schema change and refill signal cannot diverge.
+- Legacy v0.13-and-older caches that predate the `data_source` marker are detected from actual stored rows, tagged as fixture/local state on normal startup, and cannot be mistaken for an empty cache during backend takeover.
+- One authenticated `BackendSnapshot` can atomically replace the complete related browser cache in a single IndexedDB transaction. Malformed key-path rows are rejected before any store is cleared.
+- Initial backend takeover is permitted only for a genuinely empty cache; existing local/fixture state requires a later explicit migration/reset path rather than silent replacement.
 - Backend-hydrated cache state is marked so an offline restart never silently reseeds demo fixtures over it.
 - `refreshBackendCache()` uses the existing `BackendClient` seam; failed network fetches leave the previous cache untouched.
-- Deterministic tests cover snapshot hydration, multi-option availability, offline-failure safety, unsupported schema rejection and v1 -> v2 user-data preservation.
+- Synthetic provider sync and local-only user mutations are blocked whenever a Worker/D1 snapshot cache is active, preventing edits that would disappear on the next authoritative snapshot.
 - Runtime remains synthetic until PWA origin/browser authentication and all required user mutation endpoints are ready.
 
+Implementation-candidate validation reached **137/137** logic/repository/Worker/client/security/deployment tests, **5/5** deterministic D1 semantics and pinned Wrangler local-D1 validation. The documentation-inclusive exact PR head must still pass the complete normal CI/browser QA before PR #8 is called merge-ready.
+
 ## Next work
-1. Finish exact-head PR #8 review/CI and merge only after explicit user authorization.
+1. Complete exact-head PR #8 CI/browser QA and final diff/security/review-thread inspection; merge only after explicit user authorization.
 2. Establish the real PWA hosting origin and configure exact `APP_ORIGIN` only when that hosting decision is made.
 3. Design a safe browser authentication/bootstrap flow that does not embed `DEVICE_ACCESS_TOKEN` in public source or generated assets.
 4. Add missing Worker mutation endpoints and route supported user mutations through `BackendClient` before enabling backend mode for real use.
