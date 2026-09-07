@@ -307,7 +307,8 @@ export async function setServiceSelected(db: D1Database, serviceKey: string, sel
 
 export async function addCustomService(db: D1Database, displayName: string): Promise<string> {
   const trimmed = displayName.trim();
-  const serviceKey = trimmed.toLowerCase().replace(/\s+/g, '-');
+  const serviceKey = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!serviceKey) throw new Error('Invalid custom service key');
   await run(db, `INSERT INTO services (service_key, display_name, logo_ref, user_selected, availability_source, subscription_catalog_key)
     VALUES (?, ?, ?, 1, 'unsupported', NULL) ON CONFLICT(service_key) DO NOTHING`,
   [serviceKey, trimmed, trimmed[0]?.toUpperCase() ?? '?']);
