@@ -9,7 +9,7 @@
     "build:worker": "rm -rf worker-dist && tsc -p tsconfig.worker.json",
     "build:cloudflare": "npm run build:worker",
     "prepare:cloudflare": "node scripts/prepare-cloudflare-deploy.mjs",
-    "deploy:cloudflare": "node scripts/prepare-cloudflare-deploy.mjs && wrangler d1 migrations apply DB --remote --yes --config .wrangler/deploy/wrangler.generated.jsonc --x-provision=false --x-auto-create=false && wrangler deploy --config .wrangler/deploy/wrangler.generated.jsonc --x-provision=false --x-auto-create=false",
+    "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs",
     "start": "npm run build && node server.mjs",
     "serve": "node server.mjs",
     "test": "rm -rf test-dist && tsc -p tsconfig.tests.json && node --test test-dist/tests/*.test.js tests/cloudflare-deploy-config.test.mjs",
