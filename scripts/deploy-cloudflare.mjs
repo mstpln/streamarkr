@@ -2,21 +2,47 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { prepareCloudflareDeploy } from './prepare-cloudflare-deploy.mjs';
+import { prepareCloudflareDeploy, validateD1DatabaseId } from './prepare-cloudflare-deploy.mjs';
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(MODULE_DIR, '..');
 const WRANGLER_BIN = process.platform === 'win32'
   ? path.join(PROJECT_ROOT, 'node_modules', '.bin', 'wrangler.cmd')
   : path.join(PROJECT_ROOT, 'node_modules', '.bin', 'wrangler');
+const ACCOUNT_NEUTRAL_CONFIG_PATH = path.join(PROJECT_ROOT, 'wrangler.jsonc');
 const CONFIG_PATH = path.join(PROJECT_ROOT, '.wrangler', 'deploy', 'wrangler.generated.jsonc');
 const SAFETY_FLAGS = ['--x-provision=false', '--x-auto-create=false'];
+const EXPECTED_D1_NAME = 'streamarkr';
+const EXPECTED_D1_JURISDICTION = 'eu';
 
 export function assertRequiredSecretNames(secretList) {
   if (!Array.isArray(secretList)) throw new Error('Could not verify Streamarkr Worker secrets.');
   const names = new Set(secretList.map((item) => item && typeof item === 'object' ? item.name : undefined));
   if (!names.has('DEVICE_ACCESS_TOKEN')) {
     throw new Error('DEVICE_ACCESS_TOKEN is not configured on streamarkr-api; refusing to migrate or deploy.');
+  }
+}
+
+export function assertDedicatedD1Info(databaseInfo, expectedDatabaseId) {
+  if (!databaseInfo || typeof databaseInfo !== 'object' || Array.isArray(databaseInfo)) {
+    throw new Error('Could not verify the dedicated Streamarkr D1 database; refusing to migrate or deploy.');
+  }
+
+  const expectedId = validateD1DatabaseId(expectedDatabaseId).toLowerCase();
+  const actualId = typeof databaseInfo.uuid === 'string' ? databaseInfo.uuid.toLowerCase() : '';
+  const actualName = typeof databaseInfo.name === 'string' ? databaseInfo.name : '';
+  const actualJurisdiction = typeof databaseInfo.jurisdiction === 'string' ? databaseInfo.jurisdiction.toLowerCase() : '';
+
+  if (actualName !== EXPECTED_D1_NAME || actualId !== expectedId || actualJurisdiction !== EXPECTED_D1_JURISDICTION) {
+    throw new Error('Remote D1 identity does not match the dedicated EU Streamarkr database; refusing to migrate or deploy.');
+  }
+}
+
+function parseJsonMetadata(output, label) {
+  try {
+    return JSON.parse(output);
+  } catch {
+    throw new Error(`Could not parse ${label}; refusing to migrate or deploy.`);
   }
 }
 
@@ -36,7 +62,19 @@ function runWrangler(args, { capture = false } = {}) {
 }
 
 export async function deployCloudflare() {
-  await prepareCloudflareDeploy();
+  const databaseId = validateD1DatabaseId(process.env.STREAMARKR_D1_DATABASE_ID);
+  await prepareCloudflareDeploy({ databaseId });
+
+  // Query by literal database name using the account-neutral config, which deliberately contains
+  // no D1 binding. This forces Wrangler to resolve `streamarkr` from the authenticated account
+  // instead of trusting the build-supplied UUID. No D1 mutation is attempted until both match.
+  const databaseOutput = runWrangler([
+    'd1', 'info', EXPECTED_D1_NAME,
+    '--json',
+    '--config', ACCOUNT_NEUTRAL_CONFIG_PATH,
+    ...SAFETY_FLAGS
+  ], { capture: true });
+  assertDedicatedD1Info(parseJsonMetadata(databaseOutput, 'Streamarkr D1 metadata'), databaseId);
 
   const secretOutput = runWrangler([
     'secret', 'list',
@@ -44,17 +82,10 @@ export async function deployCloudflare() {
     '--format', 'json',
     ...SAFETY_FLAGS
   ], { capture: true });
-
-  let secretList;
-  try {
-    secretList = JSON.parse(secretOutput);
-  } catch {
-    throw new Error('Could not parse Streamarkr Worker secret metadata; refusing to migrate or deploy.');
-  }
-  assertRequiredSecretNames(secretList);
+  assertRequiredSecretNames(parseJsonMetadata(secretOutput, 'Streamarkr Worker secret metadata'));
 
   runWrangler([
-    'd1', 'migrations', 'apply', 'streamarkr',
+    'd1', 'migrations', 'apply', EXPECTED_D1_NAME,
     '--remote', '--yes',
     '--config', CONFIG_PATH,
     ...SAFETY_FLAGS
