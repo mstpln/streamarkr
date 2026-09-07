@@ -67,18 +67,20 @@ Final results on that exact head:
 Automated tests must not execute `npm run deploy:cloudflare`, because that command intentionally performs remote D1 migration and Worker deployment when valid Cloudflare build credentials/configuration are present.
 
 ## v0.14.0 backend cache bridge validation
-PR #8 adds deterministic browser-cache migration and Worker-snapshot bridge coverage while remaining fully synthetic. The exact final PR head must pass the full normal CI suite before merge.
+PR #8 adds deterministic browser-cache migration and Worker-snapshot bridge coverage while remaining fully synthetic. An implementation candidate passed **137/137 tests across 26 suites**, **5/5** deterministic D1 semantics and pinned Wrangler **4.129.0** local-D1 validation. Because continuity-document updates change the PR head, the complete normal CI/browser suite must pass again on the unchanged final head before merge.
 
 New regression coverage includes:
-- authenticated `BackendSnapshot` data can atomically replace the related IndexedDB cache stores;
-- simultaneous subscription + rent availability survives in IndexedDB because the v2 cache key includes `optionType`;
-- backend cache metadata records the snapshot timestamp/source;
-- a later offline `ensureSeeded()` call does not overwrite a hydrated backend cache with demo fixtures;
-- unsupported backend schema versions are rejected before any cache replacement;
-- `refreshBackendCache()` uses the existing `BackendClient` seam;
-- failed Worker fetches leave the existing offline cache untouched;
-- IndexedDB v1 -> v2 migration preserves synthetic user-owned Library/rating rows while discarding only the provider-owned availability cache that requires a key change;
-- the recreated v2 availability store accepts multiple option types for the same title/service.
+- authenticated `BackendSnapshot` data atomically replaces related IndexedDB cache stores only when first takeover is safe;
+- simultaneous subscription + rent availability survives because the v2 key includes `optionType`;
+- backend cache metadata records snapshot timestamp/source and survives offline fixture seeding;
+- failed Worker fetches leave existing offline cache untouched;
+- unsupported backend schemas and malformed key-path rows fail before cache replacement/clearing;
+- IndexedDB v1 -> v2 recreates only provider-owned availability, preserves user-owned Library/rating rows, and writes its invalidation/refill marker in the same versionchange transaction;
+- legacy v0.13-and-older non-empty caches without a `data_source` provenance marker are detected from actual stored data, tagged as fixture/local state during normal startup, and rejected as unsafe initial backend takeover targets;
+- initial backend takeover refuses existing local/fixture state rather than silently replacing it;
+- synthetic provider sync cannot mutate a Worker/D1-hydrated cache;
+- local-only user mutations are blocked in backend-cache mode so they cannot disappear on a later authoritative snapshot refresh;
+- `refreshBackendCache()` uses the existing `BackendClient` seam.
 
 The v0.14.0 browser QA remains synthetic; no test is allowed to set `APP_ORIGIN`, use the production Worker token, fetch the real Worker, or operate on real D1/personal data.
 
