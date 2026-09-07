@@ -1,15 +1,16 @@
 {
-  "_readMeFirst": "Current reviewed synthetic/local baseline. Target architecture remains Vite + TypeScript + separate Cloudflare Worker + D1 (+ optional R2) + real provider adapters. IndexedDB/fake providers are temporary.",
-  "appVersion": "0.10.2",
-  "cacheVersion": "streamarkr-v0.10.2",
-  "generatedAt": "2026-09-06T22:35:00Z",
+  "_readMeFirst": "v0.11.0 candidate adds the source-level Worker + D1 backend foundation while the current PWA UI intentionally remains on IndexedDB/fake providers until a later focused migration. No Cloudflare resource is created or deployed by this build.",
+  "appVersion": "0.11.0",
+  "cacheVersion": "streamarkr-v0.11.0",
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-07T05:30:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
     "primaryStorage": "Cloudflare D1",
     "optionalStorage": "Cloudflare R2",
     "providers": "real Trakt/TMDB/Streaming Availability adapters",
-    "status": "pending after baseline merge"
+    "status": "Worker/D1 source foundation implemented; Cloudflare activation and live providers still pending"
   },
   "currentToolchain": {
     "node": 22,
@@ -17,28 +18,46 @@
     "playwright": "1.55.0",
     "dependencyInstall": "npm ci --no-audit --no-fund",
     "build": "npm run build",
+    "workerTypecheck": "npm run build:worker",
     "tests": "npm test",
+    "d1SchemaTests": "npm run test:d1",
     "browserQa": "npm run qa:browser"
   },
-  "compiledOutputDir": "dist",
-  "serviceWorker": "sw.js",
-  "serviceWorkerManifest": "sw-manifest.json",
-  "compiledModuleCount": 29,
-  "providerMode": "fake-adapters-only",
-  "database": {
-    "kind": "IndexedDB",
-    "temporary": true,
-    "standsInFor": "Cloudflare D1",
-    "file": "src/lib/db.ts"
+  "pwa": {
+    "compiledOutputDir": "dist",
+    "serviceWorker": "sw.js",
+    "serviceWorkerManifest": "sw-manifest.json",
+    "storage": "IndexedDB temporary runtime persistence/cache",
+    "providerMode": "fake-adapters-only"
+  },
+  "backendFoundation": {
+    "workerSource": "worker/index.ts",
+    "repository": "worker/repository.ts",
+    "providerContracts": "worker/provider-contracts.ts",
+    "browserClient": "src/lib/backend-client.ts",
+    "sharedContract": "src/lib/backend-contract.ts",
+    "d1Migration": "migrations/0001_initial.sql",
+    "d1AvailabilityKey": ["title_id", "service_key", "option_type"],
+    "auth": "Bearer device token from Worker DEVICE_ACCESS_TOKEN secret; fail closed if unconfigured",
+    "cors": "exact APP_ORIGIN only",
+    "requestTracing": "x-request-id on responses; sanitized structured server errors",
+    "cloudflareResourcesCreated": false,
+    "deployed": false,
+    "liveProviders": false
   },
   "implementedScreens": ["home", "library", "history", "search", "discover", "detail", "alerts", "settings"],
-  "implementedDomainModules": [
-    "alerts.ts", "db.ts", "discover.ts", "export.ts", "fixtures.ts", "history.ts", "providers.ts", "repo.ts", "resolve.ts", "season-select.ts", "service-options.ts", "status.ts", "streaming.ts", "types.ts", "views.ts"
-  ],
   "validation": {
-    "build": "pass",
-    "tests": {"count": 101, "suites": 26, "pass": 101, "fail": 0, "skipped": 0, "todo": 0},
-    "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0},
+    "baselineV0102": {
+      "commit": "438997dedc282366339e6507d826441d99a81adc",
+      "tests": {"count": 101, "pass": 101, "fail": 0},
+      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
+    },
+    "candidateV0110": {
+      "status": "final exact-head CI pending",
+      "expectedLogicWorkerClientTests": 117,
+      "d1SchemaTests": 5,
+      "browserQaChecks": 27
+    },
     "responsive": ["344x792 folded", "873x1000 unfolded"],
     "physicalPixel9ProFold": "not yet run"
   },
@@ -49,37 +68,35 @@
     "season bulk overrides are bounded to currently known/released episodes",
     "New Season supports future seasons before episode records exist",
     "availability alerts are transition/cycle-aware",
-    "provider-owned availability reconciliation removes stale rows without touching user-owned stores",
+    "provider-owned availability reconciliation never touches user-owned stores",
     "Search/Library membership rejects dangling title IDs",
-    "Rate Now stays visible when either media type has eligible titles",
-    "Settings re-entry resets to Preferences",
-    "Detail overview/history/episodes expose required progress, release, synopsis, and manual-correction context",
-    "Discover removes a title after it is added to Library",
-    "stable provider crosswalk IDs are included in user-data export",
-    "Detail primary streaming action prefers selected services but falls back to another actionable subscription service",
-    "History retains deselected historical watched-service values and filters",
-    "Library service filter reflects represented current availability regardless of preference selection",
+    "D1 Library membership also rejects dangling canonical title IDs",
+    "D1 availability represents multiple option types for one title/service",
+    "Worker personal routes fail closed without configured auth",
+    "unexpected Worker failures do not return raw internal error messages",
+    "History and Library preserve their distinct streaming-service semantics",
     "Alerts remain NEW during first visit and are marked seen on page exit"
   ],
   "pendingIntegrations": [
+    "Create/approve separate Streamarkr Cloudflare Worker and D1 resources",
+    "Pin and validate Wrangler/local D1 runtime before any remote migration",
+    "Migrate frontend repository calls to Worker while retaining IndexedDB caching/offline behavior",
     "Real Trakt OAuth + history sync",
     "Real TMDB metadata/search/trailer API",
     "Real Streaming Availability API",
-    "Cloudflare D1",
-    "Cloudflare Worker",
     "properly sourced/licensed streaming-service logos",
     "physical Pixel 9 Pro Fold validation before V1 release"
-  ],
-  "knownSchemaMigrationNotes": [
-    "Current IndexedDB availability key [titleId, serviceKey] cannot represent multiple simultaneous option types for the same service; redesign during D1 migration."
   ],
   "repository": {
     "fullName": "mstpln/streamarkr",
     "visibility": "public",
     "defaultBranch": "main",
-    "baselineBranch": "feat/establish-streamarkr-baseline-v0102",
     "baselinePr": 1,
-    "baselinePrStatus": "open; final review; never merge without explicit user authorization",
+    "baselinePrStatus": "merged",
+    "baselineMergeCommit": "438997dedc282366339e6507d826441d99a81adc",
+    "currentBranch": "feat/worker-d1-foundation-v0110",
+    "currentPr": 2,
+    "currentPrStatus": "open; never merge without explicit user authorization",
     "cloudflareConnected": false
   },
   "absoluteRules": [
@@ -87,6 +104,7 @@
     "No deploy or Cloudflare production action without explicit authorization",
     "No real/personal data in fixtures or automated QA",
     "Never overwrite user-owned data from provider refresh",
-    "Never commit API keys, OAuth secrets/tokens, Cloudflare credentials, or other secrets"
+    "Never commit API keys, OAuth secrets/tokens, Cloudflare credentials, personal data, or BANDMARKR data",
+    "Never reuse or modify BANDMARKR Cloudflare resources for Streamarkr"
   ]
 }
