@@ -47,7 +47,7 @@ Validate the same migration through Cloudflare's local D1 runtime:
 ```bash
 npm run test:d1:wrangler
 ```
-This command uses exactly Wrangler `4.129.0`, resets an ignored `.wrangler/test-d1` state directory, applies `migrations/0001_initial.sql` with `--local`, and verifies the resulting schema/seed state. It does not contact or mutate a remote D1 database.
+This command uses the repository-pinned Wrangler `4.129.0` installed by `npm ci`, resets an ignored `.wrangler/test-d1` state directory, applies `migrations/0001_initial.sql` with `--local`, and verifies the resulting schema/seed state. It does not contact or mutate a remote D1 database.
 
 Run browser QA after installing the Playwright Chromium browser once:
 ```bash
