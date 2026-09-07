@@ -1,46 +1,53 @@
 # Streamarkr current state
 
-Updated: 2026-09-07. Current build: **v0.10.2** / service-worker cache **streamarkr-v0.10.2**.
+Updated: 2026-09-07. Current candidate build: **v0.11.0** / service-worker cache **streamarkr-v0.11.0**.
 
-## Implemented baseline
-- Installable synthetic/local PWA shell with Home, Discover, My Library, History, Search, Alerts, Settings, and universal movie/series detail pages.
-- TypeScript source compiled to native ES modules; IndexedDB is the temporary local data store standing in for future D1.
-- Fake TMDB, Trakt, and Streaming Availability adapters with synthetic fixtures only.
-- User-owned Library membership, 1-5 star ratings, manual watched/unwatched overrides, selected streaming services, historical watched-service, and alert seen state.
-- Status engine: To Watch, Watching, On Hold, Caught Up, Finished. Finished requires provider series status `Ended`; an untouched newer season does not break Caught Up; On Hold uses real watch timestamps only.
-- Season bulk corrections affect only currently known/released episodes, never future episodes.
-- Home: Watching Now/On Hold, Rate Now with cross-media fallback, and New Season including future seasons known before episode records exist.
-- Library: Series/Movies, sorting/filtering, poster grid, current availability badges. Service filtering uses real represented availability even when a service is not selected in Preferences.
-- History: one row per title, progress, known watched date, persistent historical watched-service. Historical service filtering/display survives later service deselection.
-- Search: All/Series/Movies, availability and Library heart, with Library-integrity protection against dangling title IDs.
-- Detail: Overview/Episodes/Streaming/History; progress/release context, relevant season selection, expandable episode synopsis, manual corrections separated from provider history, trailer action, and a primary streaming action that prefers selected subscription services but falls back to another actionable subscription service.
-- Discover: Top Picks, Similar To, By Genre; excludes History/Library and requires subscription availability on a selected service.
-- Alerts: transition-based season/episode/release/availability/leaving-soon alerts, 30-item retention, and NEW indicators that remain visible throughout the first Alerts visit and are persisted as seen on page exit.
-- User-data export includes user-owned records plus stable title/provider crosswalk IDs needed to reconnect data safely.
-- Offline shell/service worker with generated compiled-module manifest.
-- Responsive dark UI targeted at Pixel 9 Pro Fold; streaming-service marks remain placeholders, not final licensed logos.
-
-## Validation
-- GitHub CI on PR #1 uses Node 22 and reproducible `npm ci` from committed `package-lock.json`.
-- Build: **PASS**.
-- Automated logic/repository tests: **101/101 PASS**, **26 suites**, 0 failures/skips/todos.
-- Playwright browser/responsive QA: **27/27 PASS**, including Alerts seen lifecycle, folded/unfolded checks, and no browser console/page errors in the smoke journey.
-- Current build generates a service-worker manifest covering **29 compiled modules**.
-- Physical Pixel 9 Pro Fold QA has not yet been performed.
-
-## Repository state
+## Repository baseline
 - Public repo: `mstpln/streamarkr`.
-- Baseline branch: `feat/establish-streamarkr-baseline-v0102`.
-- Baseline PR: **#1**, open and in final review. It must not be merged without explicit user authorization.
-- `main` has not received the baseline yet; no deploy has occurred.
-- No Cloudflare resources, provider secrets, or personal viewing data are connected or committed.
+- PR #1 was merged into `main` at `438997dedc282366339e6507d826441d99a81adc`, establishing the reviewed v0.10.2 baseline.
+- Current backend-foundation branch: `feat/worker-d1-foundation-v0110` / PR #2.
+- PR #2 must not be merged without explicit user authorization.
+- Nothing has been deployed to Cloudflare and no production resources have been created or modified.
 
-## Target architecture still pending
-The build plan target remains Vite + TypeScript, a separate Cloudflare Worker, separate D1 database, optional R2 if justified, and real Trakt/TMDB/Streaming Availability adapters. The current IndexedDB/fake-provider baseline is temporary and exists to preserve validated product/domain behavior while that migration is done in focused builds.
+## Validated PWA behavior preserved from v0.10.2
+- Installable synthetic/local PWA with Home, Discover, My Library, History, Search, Alerts, Settings, and universal movie/series detail pages.
+- Current UI persistence remains IndexedDB and current provider behavior remains synthetic/fake-only while the backend migration is staged safely.
+- User-owned Library membership, 1-5 star ratings, manual watched/unwatched overrides, selected streaming services, historical watched-service, and alert seen state.
+- Status engine: To Watch, Watching, On Hold, Caught Up, Finished. Finished requires provider series status `Ended`; untouched newer seasons do not break Caught Up; On Hold uses real provider watch timestamps only.
+- Season bulk corrections affect only currently known/released episodes, never future episodes.
+- Home: Watching Now/On Hold, Rate Now, and New Season including future seasons known before episode records exist.
+- Library and History sorting/filtering preserve the distinction between current availability and historical Where I watched it.
+- Search and Library writes protect against dangling title IDs.
+- Detail pages include Overview/Episodes/Streaming/History behavior, progress/release context, manual corrections, trailers and primary streaming actions.
+- Discover excludes History/Library and requires subscription availability on a selected service.
+- Alerts are transition-based, cycle-aware, capped at 30, and preserve the agreed first-visit NEW lifecycle.
+- Export preserves stable title/provider crosswalk IDs needed to reconnect user-owned data safely.
+- Responsive dark UI remains targeted at Pixel 9 Pro Fold; streaming-service marks remain placeholders pending licensed assets.
 
-## Known limitations / next work
-- Migrate to Vite/Worker/D1 in focused builds after the baseline is merged.
-- Add real TMDB, Trakt OAuth/history, and streaming-availability integrations without violating ownership boundaries.
+## v0.11.0 Worker + D1 foundation
+- Added a separate source-level Cloudflare Worker boundary under `worker/`; it is not deployed or bound to any Cloudflare account resource.
+- Added `migrations/0001_initial.sql` with normalized D1 tables for titles, metadata, seasons, episodes, watch events, watch overrides, Library, ratings, watched-service, services, availability, alerts, provider connections, sync state, recommendation cache and schema metadata.
+- Canonical title identity remains media type + TMDB ID, with Trakt/IMDb/availability IDs as secondary crosswalks.
+- D1 foreign-key behavior is deliberately non-destructive for durable/user-owned state; provider refreshes cannot cascade-delete Library rows.
+- D1 availability identity is now `(title_id, service_key, option_type)`, so subscription/rent/buy rows for one service can coexist. This resolves the known IndexedDB prototype limitation at the target-schema level.
+- Added a D1 repository boundary for snapshot reads, canonical-title upserts, current availability reconciliation, Library membership, ratings and alert seen-state.
+- Added authenticated Worker routes for a compact snapshot plus initial personal-data mutations. The API fails closed if `DEVICE_ACCESS_TOKEN` is not configured.
+- Cross-origin access is allowed only for the exact configured `APP_ORIGIN`.
+- Every Worker response receives a request ID; unexpected errors are logged structurally without returning raw internal/database messages to the browser.
+- Added shared `BackendSnapshot` and `WorkerBackendClient` contracts. The existing UI has not yet been switched to this client, so current synthetic/local behavior remains intact during the migration.
+- Added explicit TMDB/Trakt/availability provider interfaces, but no live provider implementation or credential is present.
+- `wrangler.example.jsonc` and `.dev.vars.example` are examples only. No active Wrangler binding/configuration containing a real D1 ID or secret is committed.
+
+## Validation for the current PR
+- GitHub CI uses Node 22 and reproducible `npm ci` from the committed lockfile.
+- PWA build, Worker type-check, existing logic/repository tests, new Worker/client tests, and D1 migration tests are CI-gated.
+- Browser/responsive QA remains synthetic-only and must stay green on the exact final PR head.
+- Physical Pixel 9 Pro Fold QA has not yet been performed and remains required before V1 release.
+
+## Still pending
+- Create/approve separate Streamarkr Cloudflare Worker and D1 resources only when the user authorizes that account-level step.
+- Pin/activate the Cloudflare/Wrangler runtime toolchain and validate the migration against Wrangler local D1 before any remote migration.
+- Move the existing UI/repository calls to the Worker backend in a focused migration while retaining IndexedDB as the cached/offline layer.
+- Add real TMDB search/metadata, Trakt OAuth/history, and streaming-availability adapters in later focused builds using secret storage and synthetic provider contract tests.
 - Replace placeholder service badges with properly sourced/licensed service logos.
-- Redesign provider-owned availability identity during D1 migration so one title/service can represent multiple option types safely.
 - Run physical Pixel 9 Pro Fold QA before V1 release.
