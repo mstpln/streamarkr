@@ -26,7 +26,7 @@ Implemented on PR #2:
 
 ### D1 schema
 - Added `migrations/0001_initial.sql` with normalized tables for canonical titles/crosswalks, metadata, seasons, episodes, provider watch events, authoritative manual overrides, Library membership, ratings, historical watched-service, service preferences, current availability, alerts, provider connection state, sync state, recommendation cache and schema metadata.
-- Canonical identity is enforced by media type + TMDB ID.
+- Canonical identity is enforced by media type + TMDB ID, including a database-level `${media_type}-${tmdb_id}` key-format check.
 - Durable/user-owned relationships use restrictive foreign keys so provider-owned cleanup cannot cascade-delete personal state.
 - Availability now keys by `(title_id, service_key, option_type)`, fixing the prototype limitation that prevented simultaneous subscription/rent/buy rows for one service.
 - Initial service registry contains the eight agreed Preferences choices without preselecting personal preferences. Viaplay/TV4 remain unsupported for automatic availability until an actual provider response proves otherwise.
@@ -51,16 +51,19 @@ Implemented on PR #2:
 - Wrangler/Cloudflare runtime dependencies are not yet pinned; that happens before local Wrangler D1 validation and before any account-level Cloudflare setup is authorized.
 - Planned isolated names are documented in `docs/CLOUDFLARE_FOUNDATION.md`; Streamarkr must never bind to BANDMARKR resources.
 
-## Validation added for v0.11.0
-CI now gates:
-- `npm ci`
-- PWA build
-- Worker TypeScript build/type-check
-- the existing domain/repository suite plus Worker/auth/client/repository tests
-- deterministic D1 migration semantics against Node 22 SQLite
-- existing Playwright browser/responsive QA against synthetic fixtures only
+## v0.11.0 validation
+The full GitHub CI gate has passed after the final code/security review changes:
+- `npm ci`: PASS
+- PWA build: PASS
+- Worker TypeScript build/type-check: PASS
+- logic/repository/Worker/client tests: **117/117 PASS**
+- D1 migration semantics: **5/5 PASS**
+- Playwright browser/responsive QA: **27/27 PASS**
+- Folded proxy 344×792: PASS
+- Unfolded proxy 873×1000: PASS
+- Smoke-journey console/page errors: 0
 
-The candidate suite contains **117 TypeScript logic/repository/Worker/client tests**, plus **5 D1 schema tests**, with **27 browser QA checks**. The exact final PR head must pass all of them before PR #2 can be called ready to merge; `TESTS.md` records the final outcome once that exact-head run completes.
+The final documentation commit is also required to receive this same green CI gate before PR #2 is called ready to merge; the exact final PR head remains authoritative.
 
 ## Next work after PR #2 is merged
 1. With explicit user approval, create/approve separate Streamarkr Cloudflare Worker and D1 resources.
