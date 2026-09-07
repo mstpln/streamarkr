@@ -62,7 +62,7 @@ npm run qa:browser
 
 `wrangler.local.jsonc` remains strictly local-only. The committed `wrangler.jsonc` identifies only the dedicated Worker name and required secret name; it contains no real D1 UUID or secret value.
 
-Remote deployment uses `scripts/prepare-cloudflare-deploy.mjs`. It requires the build-only `STREAMARKR_D1_DATABASE_ID`, validates that it is a non-placeholder UUID, and writes the account-specific D1 binding only into ignored `.wrangler/deploy/` state. `npm run deploy:cloudflare` then applies pending migrations to binding `DB` with `--remote` and deploys the Worker with Wrangler automatic provisioning explicitly disabled. The generated configuration preserves dashboard-managed runtime variables and requires `DEVICE_ACCESS_TOKEN` to already exist on the Worker before deployment.
+Remote deployment uses `scripts/prepare-cloudflare-deploy.mjs` plus the guarded `scripts/deploy-cloudflare.mjs` wrapper. The build-only `STREAMARKR_D1_DATABASE_ID` is validated as a non-placeholder UUID and written only into ignored `.wrangler/deploy/` configuration. Before any remote D1 write, deployment verifies that `DEVICE_ACCESS_TOKEN` already exists on `streamarkr-api`; it then applies pending migrations specifically to the named remote database `streamarkr` and deploys the Worker with Wrangler automatic provisioning/auto-create explicitly disabled. Dashboard-managed variables are preserved.
 
 The intended Cloudflare Workers Builds setup is:
 - repository: `mstpln/streamarkr`;
@@ -71,8 +71,10 @@ The intended Cloudflare Workers Builds setup is:
 - build command: `npm run build:cloudflare`;
 - deploy command: `npm run deploy:cloudflare`;
 - non-production branch builds disabled;
+- build variable `NODE_VERSION=22`;
 - build secret `STREAMARKR_D1_DATABASE_ID` set to the dedicated `streamarkr` D1 UUID;
-- runtime secret `DEVICE_ACCESS_TOKEN` configured in Worker Variables & Secrets before the first Streamarkr deployment.
+- runtime secret `DEVICE_ACCESS_TOKEN` configured in Worker Variables & Secrets before the first Streamarkr deployment;
+- a user-scoped Workers Builds token with the normal Worker deployment permissions **plus D1 Edit**, scoped to the Streamarkr account. Cloudflare's automatically generated Workers Builds token currently does not include D1 Edit by default.
 
 This separation prevents an ordinary merge to `main` from silently becoming a production deployment. Do not create, bind, migrate or deploy Streamarkr against BANDMARKR infrastructure. Streamarkr Worker, D1, secrets and any future R2 storage must remain completely separate.
 
