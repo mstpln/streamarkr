@@ -38,18 +38,30 @@
 
 ## Architecture
 - Target: Vite + TypeScript PWA, separate Cloudflare Worker, separate D1, optional separate R2 only if needed, real provider adapters, GitHub CI.
-- PR #1 established the reviewed v0.10.2 synthetic/local baseline. The Worker/D1 migration is intentionally separate from that baseline import.
-- PR #2 / v0.11.0 established the **source-level** Worker + D1 backend foundation while leaving the working UI on IndexedDB/fake providers until a later focused migration. Backend source existing in the repo does not mean a Cloudflare resource has been created or deployed.
+- PR #1 established the reviewed v0.10.2 synthetic/local baseline.
+- PR #2 / v0.11.0 established the source-level Worker + D1 backend foundation while leaving the working UI on IndexedDB/fake providers.
+- PR #3 / v0.12.0 established pinned Wrangler-local D1 runtime validation before remote activation.
 - `worker/repository.ts` is the server-side persistence boundary. Worker routes should not contain ad-hoc D1 mutation logic when the operation belongs in the repository layer.
 - `src/lib/backend-contract.ts` defines the shared browser/Worker snapshot shape; `src/lib/backend-client.ts` is the browser transport seam. UI modules should migrate through this seam rather than calling Worker endpoints directly.
 - Real provider code implements the interfaces in `worker/provider-contracts.ts`; provider credentials remain Worker-only and provider-specific concerns must not leak into UI/domain logic.
 - The D1 availability key is `(title_id, service_key, option_type)`. This intentionally fixes the temporary IndexedDB `[titleId, serviceKey]` limitation and allows subscription/rent/buy options to coexist for one service.
 - D1 foreign keys use restrictive deletion for durable relationships. Provider refresh code reconciles provider-owned rows; it does not cascade-delete user-owned Library/rating/override/history preference state.
 - The initial Worker API exposes a compact snapshot plus a small set of representative personal mutations. Remaining mutations are added as the frontend migrates, rather than duplicating every current IndexedDB function before it is needed.
-- `wrangler.example.jsonc` remains an inactive example until a separate Streamarkr Cloudflare D1 resource is explicitly authorized.
-- v0.12.0 adds `wrangler.local.jsonc` strictly for local D1 testing. It must contain only non-production placeholder identifiers and must never become the active remote configuration.
-- Wrangler-local migration validation is pinned to the exact CLI version used by the build (**4.129.0**) and always runs with `--local` against isolated ignored state before any remote D1 migration is considered.
-- Remote resource creation, real D1 identifiers, secrets, migration, or deployment remain a separate explicitly authorized step; local validation does not imply account-level activation.
+- `wrangler.local.jsonc` is strictly local-only and may contain only non-production placeholder identifiers.
+- Wrangler is pinned to **4.129.0** and local migration validation always runs with `--local` against isolated ignored state.
+
+## Cloudflare activation and deployment
+- The dedicated Cloudflare resources are named exactly Worker `streamarkr-api` and D1 `streamarkr`; the Worker binding is `DB`.
+- The user explicitly created those resources on 2026-09-07. They must never be replaced with, bound to, or confused with BANDMARKR resources.
+- The real D1 UUID remains account/build configuration and must not be committed to the public repository.
+- The committed `wrangler.jsonc` remains account-neutral. `scripts/prepare-cloudflare-deploy.mjs` generates the account-specific D1 binding under ignored `.wrangler/deploy/` state from the build-only `STREAMARKR_D1_DATABASE_ID` value.
+- Remote deploy preparation must validate the D1 ID as a non-placeholder UUID and must not print it.
+- Remote migration/deployment commands explicitly disable Wrangler automatic provisioning and draft-resource auto-creation.
+- `DEVICE_ACCESS_TOKEN` is declared as a required Worker secret. The first Streamarkr deployment must fail if it is not configured.
+- Wrangler must preserve dashboard-managed runtime variables (`keep_vars: true`) and never remove encrypted Worker secrets as a side-effect of deployment.
+- The real `APP_ORIGIN` is not invented before the PWA hosting origin exists. Until configured, cross-origin API access remains denied by design.
+- **Normal merges to `main` must not automatically deploy production.** Cloudflare Workers Builds must use a dedicated production deployment branch that is advanced only after explicit user authorization. Non-production branch builds remain disabled for this single-user production Worker.
+- A production deployment may apply pending committed D1 migrations immediately before deploying the Worker, but only from an explicitly authorized deployment-branch update after the exact source head has already passed the normal PR review/test cycle.
 
 ## Single-user Worker authentication
 - Personal-data API routes require a strong bearer device token. The expected value is supplied only as the Worker secret `DEVICE_ACCESS_TOKEN`.
@@ -62,7 +74,7 @@
 - Repository is public: `mstpln/streamarkr`.
 - Only source, documentation, and synthetic fixtures may be committed.
 - Never commit API keys, OAuth secrets/tokens, Cloudflare credentials, `.env`/`.dev.vars`, real D1 identifiers that should remain account configuration, or personal History/Library/ratings/runtime data.
-- `.dev.vars.example`, `wrangler.example.jsonc`, and `wrangler.local.jsonc` may contain obvious non-working placeholder values only.
+- `.dev.vars.example`, `wrangler.example.jsonc`, `wrangler.local.jsonc`, and account-neutral `wrangler.jsonc` may contain no usable credentials or private account identifiers.
 - Real secrets belong in GitHub/Cloudflare secret stores/environment bindings.
 - Automated QA remains synthetic and never calls live providers or production data.
 - Streamarkr Cloudflare resources are always separate from BANDMARKR. Never bind, inspect, reuse, migrate or modify BANDMARKR Worker/D1/R2/secrets/data for Streamarkr.
@@ -78,6 +90,6 @@
 - Application/domain/Worker tests compile with TypeScript then use Node's built-in `node:test`; browser QA uses Playwright.
 - `typescript`, `playwright`, and Wrangler **4.129.0** are pinned devDependencies and `package-lock.json` is committed.
 - GitHub CI uses Node 22 and `npm ci` so repository dependency installation is reproducible.
-- `migrations/0001_initial.sql` is exercised against Node 22's SQLite engine for deterministic schema semantics **and** against pinned Wrangler 4.129.0 local D1 for Cloudflare-runtime migration validation.
-- The Wrangler-local validator executes the repository-installed CLI, verifies the expected version, uses isolated `.wrangler/test-d1` persistence, and explicitly requires `--local`; it must never silently fall back to a remote database.
+- `migrations/0001_initial.sql` is exercised against Node 22 SQLite and pinned Wrangler local D1.
+- Remote-deployment configuration tests use only synthetic D1 UUIDs and must never contact Cloudflare.
 - Browser QA remains deterministic and synthetic-only; physical device QA is separate and still required before V1 release.
