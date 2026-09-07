@@ -44,7 +44,12 @@
 - `worker/repository.ts` is the server-side persistence boundary. Worker routes should not contain ad-hoc D1 mutation logic when the operation belongs in the repository layer.
 - `src/lib/backend-contract.ts` defines the shared browser/Worker snapshot shape; `src/lib/backend-client.ts` is the browser transport seam. UI modules should migrate through this seam rather than calling Worker endpoints directly.
 - Real provider code implements the interfaces in `worker/provider-contracts.ts`; provider credentials remain Worker-only and provider-specific concerns must not leak into UI/domain logic.
-- The D1 availability key is `(title_id, service_key, option_type)`. This intentionally fixes the temporary IndexedDB `[titleId, serviceKey]` limitation and allows subscription/rent/buy options to coexist for one service.
+- D1 is the durable source of truth once backend mode is activated. IndexedDB remains the browser cache/offline read layer rather than a second independent authority.
+- Backend snapshots hydrate IndexedDB atomically across related stores so the UI never observes a mixed old/new snapshot after a successful refresh.
+- A failed Worker snapshot fetch must leave the previously cached IndexedDB state untouched so offline use remains possible.
+- Synthetic fixtures remain the active runtime until an explicit later build safely configures the real PWA origin/browser authentication and routes all required user mutations through the Worker.
+- The D1 and IndexedDB availability key is `(title_id, service_key, option_type)` / `(titleId, serviceKey, optionType)`, allowing subscription/rent/buy options to coexist for one title/service.
+- The IndexedDB v1 -> v2 migration may discard the provider-owned availability cache to change its key, but must preserve all user-owned local stores.
 - D1 foreign keys use restrictive deletion for durable relationships. Provider refresh code reconciles provider-owned rows; it does not cascade-delete user-owned Library/rating/override/history preference state.
 - The initial Worker API exposes a compact snapshot plus a small set of representative personal mutations. Remaining mutations are added as the frontend migrates, rather than duplicating every current IndexedDB function before it is needed.
 - `wrangler.local.jsonc` is strictly local-only and may contain only non-production placeholder identifiers.
@@ -57,17 +62,19 @@
 - The committed `wrangler.jsonc` remains account-neutral. `scripts/prepare-cloudflare-deploy.mjs` generates the account-specific D1 binding under ignored `.wrangler/deploy/` state from the build-only `STREAMARKR_D1_DATABASE_ID` value.
 - Remote deploy preparation must validate the D1 ID as a non-placeholder UUID and must not print it.
 - Remote migration/deployment commands explicitly disable Wrangler automatic provisioning and draft-resource auto-creation.
-- `DEVICE_ACCESS_TOKEN` is declared as a required Worker secret. The first Streamarkr deployment must fail if it is not configured.
+- `DEVICE_ACCESS_TOKEN` is declared as a required Worker secret. Production deployment must fail if it is not configured.
 - Wrangler must preserve dashboard-managed runtime variables (`keep_vars: true`) and never remove encrypted Worker secrets as a side-effect of deployment.
 - The real `APP_ORIGIN` is not invented before the PWA hosting origin exists. Until configured, cross-origin API access remains denied by design.
-- **Normal merges to `main` must not automatically deploy production.** Cloudflare Workers Builds must use a dedicated production deployment branch that is advanced only after explicit user authorization. Non-production branch builds remain disabled for this single-user production Worker.
+- **Normal merges to `main` must not automatically deploy production.** Cloudflare Workers Builds uses dedicated branch `deploy/production`, advanced only after fresh explicit user authorization. Non-production branch builds remain disabled for this single-user production Worker.
 - A production deployment may apply pending committed D1 migrations immediately before deploying the Worker, but only from an explicitly authorized deployment-branch update after the exact source head has already passed the normal PR review/test cycle.
+- The authorization used for the first production activation is consumed and must never be treated as reusable authorization for a later deploy.
 
 ## Single-user Worker authentication
 - Personal-data API routes require a strong bearer device token. The expected value is supplied only as the Worker secret `DEVICE_ACCESS_TOKEN`.
 - The Worker fails closed with 503 when authentication has not been configured; it never silently exposes personal routes in a local/open mode.
 - `/api/health` may remain public because it returns only service/schema health and whether auth is configured, never user data or credentials.
 - Cross-origin browser access is deny-by-default and allowed only for the exact configured `APP_ORIGIN`.
+- The production PWA must not embed `DEVICE_ACCESS_TOKEN` in public source, generated assets, logs or repository configuration. Browser authentication/bootstrap requires a separate explicit design before backend mode is enabled.
 - Worker responses carry request IDs. Unexpected errors may be logged structurally by request ID/route/error class, but raw database/provider error messages, Authorization headers, secrets, OAuth payloads and tokens must not be returned to the browser or written to logs.
 
 ## Repository/security

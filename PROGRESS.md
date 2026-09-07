@@ -9,11 +9,12 @@ Updated: 2026-09-07.
 - PR #3 established the reviewed v0.12.0 Wrangler-local D1 validation layer and merged at `02238c00150b059e9f73cb768e87a62a0d8b25e9`.
 - PR #4 established the reviewed v0.13.0 guarded Cloudflare activation configuration and merged at `bb1b59427eaa906c5ae3e85a7daba9bdf2601770`.
 - PR #6 fixed the Wrangler 4.129.0 remote migration invocation and merged at `73359c56825ea7d9b6bfa1245f513d23c9e08e30`; its exact final reviewed head `6020bb2c595d14328d3220226e997b3bbaf1471c` passed CI #83.
-- The first real Streamarkr Worker + D1 activation is now deployed and manually verified.
+- PR #7 synchronized verified Cloudflare activation state and merged at `d9dc0cda4cf57f2e9322739241ff65f4d09bbafb`.
+- The first real Streamarkr Worker + D1 activation is deployed and manually verified.
 - No live provider credentials, personal viewing data, or BANDMARKR resources were used.
 
 ## Cloudflare account-level setup and activation completed
-Dedicated Streamarkr resources now exist and are active:
+Dedicated Streamarkr resources are active:
 - D1 database `streamarkr` with EU jurisdiction;
 - Worker `streamarkr-api`;
 - D1 binding `DB` -> `streamarkr`;
@@ -22,15 +23,9 @@ Dedicated Streamarkr resources now exist and are active:
 - non-production builds disabled;
 - `NODE_VERSION=22` configured;
 - `STREAMARKR_D1_DATABASE_ID` stored only as a masked build secret;
-- Workers Builds token granted D1 Edit in addition to its deployment permissions.
+- Workers Builds token granted D1 Edit in addition to deployment permissions.
 
-With explicit user authorization, deployment commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed the reviewed tree from `main` merge commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. The Cloudflare build completed successfully.
-
-Manual production verification confirmed:
-- `/api/health` => `ok: true`, `service: streamarkr-worker`, `schemaVersion: 1`, `authConfigured: true`;
-- remote D1 `app_meta` has `schema_version = 1`;
-- `services` count is exactly 8;
-- expected application tables plus `d1_migrations` are present.
+The first authorized deployment used deployment commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` for reviewed main commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed healthy Worker/D1 connectivity, schema version 1, eight seeded services and the expected tables. That deployment authorization is consumed; future production deployment requires fresh explicit authorization.
 
 ## v0.10.2 reviewed baseline
 The baseline remains the product-behavior safety net while infrastructure is migrated. It includes the full synthetic PWA experience and the hardened status, History, Library, Search, Detail, Discover, Alerts, export, offline and responsive behavior documented in `docs/STREAMARKR_STATE.md` and `docs/STREAMARKR_DECISIONS.md`.
@@ -58,14 +53,7 @@ Final PR #2 validation:
 PR #3 added repository-pinned Wrangler 4.129.0, local-only Wrangler config, isolated Wrangler local D1 migration validation, CI gating, v0.12.0 version/cache synchronization and continuity updates. It merged only after exact-final-head review/CI passed.
 
 ## v0.13.0 — guarded Cloudflare activation
-PR #4 added the guarded deployment architecture and PR #6 corrected the discovered Wrangler migration CLI incompatibility. The final deployment path:
-- keeps the committed Wrangler config account-neutral;
-- validates the build-only D1 UUID and independently resolves the literal remote database name `streamarkr` before mutation;
-- verifies `DEVICE_ACCESS_TOKEN` exists;
-- applies pending migrations with `--remote`;
-- deploys only `streamarkr-api`;
-- disables Wrangler auto-provisioning and auto-create;
-- keeps normal `main` merges separate from production deploys through `deploy/production`.
+PR #4 added the guarded deployment architecture and PR #6 corrected the discovered Wrangler migration CLI incompatibility. The final deployment path keeps committed config account-neutral, verifies the exact named D1 database and Worker secret before mutation, applies migrations with `--remote`, disables Wrangler auto-provisioning, and keeps normal `main` merges separate from production deployment through `deploy/production`.
 
 Final PR #6 validation on exact head `6020bb2c595d14328d3220226e997b3bbaf1471c`, CI #83:
 - PWA build PASS;
@@ -77,16 +65,34 @@ Final PR #6 validation on exact head `6020bb2c595d14328d3220226e997b3bbaf1471c`,
 - folded 344×792 and unfolded 873×1000 PASS;
 - zero smoke-journey console/page errors.
 
+## v0.14.0 — backend snapshot cache bridge
+PR #8 introduces the first frontend-to-Worker/D1 bridge without activating production browser access:
+- IndexedDB becomes an explicit offline/cache layer while D1 remains the target durable source of truth.
+- IndexedDB schema v2 aligns availability identity with D1 using `(titleId, serviceKey, optionType)`.
+- The v1 -> v2 migration recreates only provider-owned availability and preserves user-owned stores. Its availability-invalidation marker is written inside the same versionchange transaction, so the schema change and refill signal cannot diverge.
+- Legacy v0.13-and-older caches that predate the `data_source` marker are detected from actual stored rows, tagged as fixture/local state on normal startup, and cannot be mistaken for an empty cache during backend takeover.
+- One authenticated `BackendSnapshot` can atomically replace the complete related browser cache in a single IndexedDB transaction. Malformed key-path rows are rejected before any store is cleared.
+- Initial backend takeover is permitted only for a genuinely empty cache; existing local/fixture state requires a later explicit migration/reset path rather than silent replacement.
+- Backend-hydrated cache state is marked so an offline restart never silently reseeds demo fixtures over it.
+- `refreshBackendCache()` uses the existing `BackendClient` seam; failed network fetches leave the previous cache untouched.
+- Synthetic provider sync and local-only user mutations are blocked whenever a Worker/D1 snapshot cache is active, preventing edits that would disappear on the next authoritative snapshot.
+- Runtime remains synthetic until PWA origin/browser authentication and all required user mutation endpoints are ready.
+
+Implementation-candidate validation reached **137/137** logic/repository/Worker/client/security/deployment tests, **5/5** deterministic D1 semantics and pinned Wrangler local-D1 validation. The documentation-inclusive exact PR head must still pass the complete normal CI/browser QA before PR #8 is called merge-ready.
+
 ## Next work
-1. Keep production deployment gated behind explicit authorization and `deploy/production`.
-2. Set `APP_ORIGIN` once the real PWA hosting origin is known.
-3. Move the frontend repository/data calls to the Worker backend while retaining IndexedDB as cache/offline support.
-4. Add real TMDB metadata/search, then Trakt OAuth/history, then streaming availability in focused reviewed builds.
-5. Replace placeholder service badges with properly sourced/licensed assets and complete physical Pixel 9 Pro Fold QA before V1.
+1. Complete exact-head PR #8 CI/browser QA and final diff/security/review-thread inspection; merge only after explicit user authorization.
+2. Establish the real PWA hosting origin and configure exact `APP_ORIGIN` only when that hosting decision is made.
+3. Design a safe browser authentication/bootstrap flow that does not embed `DEVICE_ACCESS_TOKEN` in public source or generated assets.
+4. Add missing Worker mutation endpoints and route supported user mutations through `BackendClient` before enabling backend mode for real use.
+5. Add real TMDB metadata/search, then Trakt OAuth/history, then streaming availability in focused reviewed builds.
+6. Replace placeholder service badges with properly sourced/licensed assets and complete physical Pixel 9 Pro Fold QA before V1.
 
 ## Remaining V1 limitations
-- Current PWA UI still uses IndexedDB + synthetic providers.
-- `APP_ORIGIN` is not yet configured because the final PWA hosting origin is not established.
+- Production browser backend mode is not enabled yet; the active UI still uses synthetic providers/local fixture state.
+- `APP_ORIGIN` is intentionally unset because the final PWA hosting origin is not established.
+- Browser authentication/bootstrap is not yet designed/activated.
+- Several user-owned mutations still lack Worker routes.
 - No live provider integration yet.
 - Streaming-service marks remain placeholders pending properly sourced/licensed assets.
 - Physical Pixel 9 Pro Fold QA remains required before V1 release.
