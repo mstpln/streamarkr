@@ -155,7 +155,9 @@ export async function upsertTitle(db: D1Database, title: Title): Promise<void> {
   await run(db, `INSERT INTO titles (id, media_type, tmdb_id, trakt_id, imdb_id, availability_id, title, year)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET media_type=excluded.media_type, tmdb_id=excluded.tmdb_id,
-      trakt_id=excluded.trakt_id, imdb_id=excluded.imdb_id, availability_id=excluded.availability_id,
+      trakt_id=COALESCE(excluded.trakt_id, titles.trakt_id),
+      imdb_id=COALESCE(excluded.imdb_id, titles.imdb_id),
+      availability_id=COALESCE(excluded.availability_id, titles.availability_id),
       title=excluded.title, year=excluded.year`, [title.id, title.mediaType, title.tmdbId, title.traktId ?? null,
     title.imdbId ?? null, title.availabilityId ?? null, title.title, title.year]);
 }
