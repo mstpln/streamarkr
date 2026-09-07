@@ -82,7 +82,7 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         <div class="card-row"><span>History / import</span><span>Synthetic fixtures</span></div>
         <div class="card-row"><span>Export personal data</span><button class="action-btn" id="export-btn">Export JSON</button></div>
         <div class="card-row"><span>Reset local data</span><button class="action-btn" id="reset-btn" style="border-color:var(--coral);color:var(--coral);">Reset to fixtures…</button></div>
-        <div class="card-row"><span>App version</span><span>v0.14.0 (backend cache bridge)</span></div>
+        <div class="card-row"><span>App version</span><span>v0.15.0 (backend user-state routes)</span></div>
       </div>
     `;
     body.querySelector('#export-btn')?.addEventListener('click', async () => {
