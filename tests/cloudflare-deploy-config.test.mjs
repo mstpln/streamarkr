@@ -73,7 +73,8 @@ test('committed Wrangler config is account-neutral and deployment is guarded', a
   assert.match(deployScript, /assertDedicatedD1Info/);
   assert.match(deployScript, /secret', 'list'/);
   assert.match(deployScript, /'d1', 'migrations', 'apply', EXPECTED_D1_NAME/);
-  assert.match(deployScript, /'--remote', '--yes'/);
+  assert.match(deployScript, /'--remote'/);
+  assert.doesNotMatch(deployScript, /'--yes'/);
   assert.match(deployScript, /'deploy'/);
   assert.match(deployScript, /--x-provision=false/);
   assert.match(deployScript, /--x-auto-create=false/);
