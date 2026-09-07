@@ -62,7 +62,7 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         <div class="card-row"><span><span class="status-dot off"></span>Trakt</span><span>Not connected (synthetic mode)</span></div>
         <div class="card-row"><span><span class="status-dot ok"></span>TMDB</span><span>Fake adapter active</span></div>
         <div class="card-row"><span><span class="status-dot ok"></span>Streaming Availability</span><span>Fake adapter active</span></div>
-        <div class="card-row"><span><span class="status-dot ok"></span>Data storage</span><span>Local IndexedDB (Worker/D1 foundation not activated)</span></div>
+        <div class="card-row"><span><span class="status-dot ok"></span>Data storage</span><span>Local IndexedDB (Worker/D1 local runtime validated, not activated)</span></div>
       </div>
       <button class="action-btn primary" id="sync-now" style="width:100%;justify-content:center;">Sync now</button>
       <div id="sync-status" class="section-empty-hint" style="margin-top:8px;" aria-live="polite"></div>
@@ -79,7 +79,7 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         <div class="card-row"><span>History / import</span><span>Synthetic fixtures</span></div>
         <div class="card-row"><span>Export personal data</span><button class="action-btn" id="export-btn">Export JSON</button></div>
         <div class="card-row"><span>Reset local data</span><button class="action-btn" id="reset-btn" style="border-color:var(--coral);color:var(--coral);">Reset to fixtures…</button></div>
-        <div class="card-row"><span>App version</span><span>v0.11.0 (backend foundation)</span></div>
+        <div class="card-row"><span>App version</span><span>v0.12.0 (local D1 validation)</span></div>
       </div>
     `;
     body.querySelector('#export-btn')?.addEventListener('click', async () => {
