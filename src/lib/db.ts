@@ -1,10 +1,9 @@
-// Local "D1" replacement. One IndexedDB object store per table from the build plan's data
-// model (section 9). Keeps the same ownership boundaries: user-owned stores (library_items,
-// ratings, watch_overrides, watched_service, alerts, services) are never touched by provider
-// refresh code paths — only by repo.ts functions that represent explicit user actions.
+// IndexedDB is the browser-side cache/offline layer. D1 is the target durable source of truth,
+// but UI/domain code continues to read through repo.ts so cached-first rendering works offline.
+// User-owned local-only stores must never be overwritten by provider refresh paths.
 
 const DB_NAME = 'streamarkr';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const STORES = [
   'titles',
@@ -20,6 +19,7 @@ export const STORES = [
   'availability',
   'alerts',
   'sync_state',
+  'backend_outbox',
   'meta'
 ] as const;
 
@@ -36,9 +36,10 @@ const KEY_PATHS: Record<StoreName, string | string[]> = {
   ratings: 'titleId',
   watched_service: 'titleId',
   services: 'serviceKey',
-  availability: ['titleId', 'serviceKey'],
+  availability: ['titleId', 'serviceKey', 'optionType'],
   alerts: 'id',
   sync_state: 'syncType',
+  backend_outbox: 'id',
   meta: 'key'
 };
 
@@ -48,8 +49,17 @@ export function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result;
+      const oldVersion = (event as IDBVersionChangeEvent).oldVersion;
+
+      // v1 used [titleId, serviceKey], which could not retain simultaneous subscription/rent/buy
+      // rows. Availability is provider-owned cache data, so deleting/recreating only this store is
+      // the safe migration; user-owned stores are preserved intact.
+      if (oldVersion < 2 && db.objectStoreNames.contains('availability')) {
+        db.deleteObjectStore('availability');
+      }
+
       for (const name of STORES) {
         if (!db.objectStoreNames.contains(name)) {
           db.createObjectStore(name, { keyPath: KEY_PATHS[name] as any });
@@ -100,6 +110,22 @@ export async function putAll<T>(store: StoreName, values: T[]): Promise<void> {
     const t = tx(db, [store], 'readwrite');
     const os = t.objectStore(store);
     for (const v of values) os.put(v as any);
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+  });
+}
+
+export async function replaceStores(replacements: Array<{ store: StoreName; values: unknown[] }>): Promise<void> {
+  if (replacements.length === 0) return;
+  const db = await openDb();
+  const stores = [...new Set(replacements.map((replacement) => replacement.store))];
+  return new Promise((resolve, reject) => {
+    const t = tx(db, stores, 'readwrite');
+    for (const replacement of replacements) {
+      const os = t.objectStore(replacement.store);
+      os.clear();
+      for (const value of replacement.values) os.put(value as any);
+    }
     t.oncomplete = () => resolve();
     t.onerror = () => reject(t.error);
   });
