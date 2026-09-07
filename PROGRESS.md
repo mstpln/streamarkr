@@ -40,10 +40,11 @@ Implemented on PR #2:
 - Added initial routes for compact snapshot reads, Library add/remove, rating set/clear and alert seen-state.
 - Added provider interfaces for TMDB, Trakt and availability, but no live provider implementation.
 
-### Frontend seam
+### Frontend seam and cache safety
 - Added a shared `BackendSnapshot` contract and `WorkerBackendClient`.
 - The current PWA still uses IndexedDB + synthetic adapters so this infrastructure build does not destabilize the working baseline.
 - A later focused build will move current repository calls through the Worker and retain IndexedDB as the cached/offline layer.
+- The service worker now caches only same-origin unauthenticated app assets. `/api/` requests, cross-origin requests, and requests carrying `Authorization` bypass Cache Storage so future personal Worker responses cannot leak into the app-shell cache.
 
 ### Cloudflare activation status
 - `wrangler.example.jsonc` and `.dev.vars.example` are deliberately non-production examples only.
@@ -52,18 +53,18 @@ Implemented on PR #2:
 - Planned isolated names are documented in `docs/CLOUDFLARE_FOUNDATION.md`; Streamarkr must never bind to BANDMARKR resources.
 
 ## v0.11.0 validation
-The full GitHub CI gate has passed after the final code/security review changes:
+The full GitHub CI gate has passed on the reviewed code path after the security hardening changes:
 - `npm ci`: PASS
 - PWA build: PASS
 - Worker TypeScript build/type-check: PASS
-- logic/repository/Worker/client tests: **117/117 PASS**
+- logic/repository/Worker/client/security tests: **118/118 PASS**
 - D1 migration semantics: **5/5 PASS**
-- Playwright browser/responsive QA: **27/27 PASS**
+- Playwright browser/responsive QA: **27/27 PASS** on the reviewed v0.11.0 code head
 - Folded proxy 344×792: PASS
 - Unfolded proxy 873×1000: PASS
 - Smoke-journey console/page errors: 0
 
-The final documentation commit is also required to receive this same green CI gate before PR #2 is called ready to merge; the exact final PR head remains authoritative.
+The exact final PR head must still receive the same complete green CI gate before PR #2 is called ready to merge.
 
 ## Next work after PR #2 is merged
 1. With explicit user approval, create/approve separate Streamarkr Cloudflare Worker and D1 resources.
