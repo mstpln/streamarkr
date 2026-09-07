@@ -64,6 +64,27 @@ test('initial backend takeover refuses to overwrite an existing fixture/local ca
   assert.equal((await repo.backendCacheInfo()).active, false);
 });
 
+test('legacy non-empty cache without provenance marker cannot be mistaken for an empty cache', async () => {
+  await db.clearAll();
+  await repo.ensureSeeded();
+  const beforeTitles = (await repo.allTitles()).map((title) => title.id);
+  const beforeLibrary = await repo.allLibrary();
+  // Simulate a v0.13-or-older installed cache, which had real local rows and seeded_v1 but no
+  // data_source marker introduced by this bridge build.
+  await db.del('meta', 'data_source');
+  assert.equal(await db.get('meta', 'data_source'), undefined);
+  assert.equal(await db.hasAnyData(), true);
+
+  await assert.rejects(
+    () => repo.applyBackendSnapshot(snapshot()),
+    /Initial Worker\/D1 cache activation is blocked/
+  );
+
+  assert.deepEqual((await repo.allTitles()).map((title) => title.id), beforeTitles);
+  assert.deepEqual(await repo.allLibrary(), beforeLibrary);
+  assert.equal((await repo.backendCacheInfo()).active, false);
+});
+
 test('Worker refresh uses the backend client seam and hydrates an empty cache only after fetch succeeds', async () => {
   await db.clearAll();
   let calls = 0;
