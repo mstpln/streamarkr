@@ -25,11 +25,16 @@ export class MissingCanonicalTitleError extends Error {
     this.name = 'MissingCanonicalTitleError';
   }
 }
-
 export class MissingServiceError extends Error {
   constructor(serviceKey: string) {
     super(`Missing service record: ${serviceKey}`);
     this.name = 'MissingServiceError';
+  }
+}
+export class MissingEpisodeError extends Error {
+  constructor(titleId: string, seasonNumber: number, episodeNumber: number) {
+    super(`Missing episode record: ${titleId} S${seasonNumber}E${episodeNumber}`);
+    this.name = 'MissingEpisodeError';
   }
 }
 
@@ -140,21 +145,23 @@ async function run(db: D1Database, sql: string, values: D1Primitive[]): Promise<
   const result = await db.prepare(sql).bind(...values).run();
   if (!result.success) throw new Error('D1 write failed');
 }
-
 async function requireCanonicalTitle(db: D1Database, titleId: string): Promise<void> {
   const title = await db.prepare('SELECT id FROM titles WHERE id = ?').bind(titleId).first<{ id: string }>();
   if (!title) throw new MissingCanonicalTitleError(titleId);
 }
-
 async function requireService(db: D1Database, serviceKey: string): Promise<void> {
   const service = await db.prepare('SELECT service_key FROM services WHERE service_key = ?').bind(serviceKey).first<{ service_key: string }>();
   if (!service) throw new MissingServiceError(serviceKey);
+}
+async function requireEpisode(db: D1Database, titleId: string, seasonNumber: number, episodeNumber: number): Promise<void> {
+  const episode = await db.prepare(`SELECT episode_number FROM episodes
+    WHERE title_id = ? AND season_number = ? AND episode_number = ?`).bind(titleId, seasonNumber, episodeNumber).first<{ episode_number: number }>();
+  if (!episode) throw new MissingEpisodeError(titleId, seasonNumber, episodeNumber);
 }
 
 function overrideId(scope: 'movie' | 'episode', titleId: string, seasonNumber?: number, episodeNumber?: number): string {
   return scope === 'movie' ? `manual-movie:${titleId}` : `manual-episode:${titleId}:${seasonNumber}:${episodeNumber}`;
 }
-
 async function upsertOverride(db: D1Database, id: string, scopeType: 'movie' | 'episode', titleId: string,
   seasonNumber: number | null, episodeNumber: number | null, state: WatchOverrideState, now: string): Promise<void> {
   await run(db, `INSERT INTO watch_overrides (id, scope_type, title_id, season_number, episode_number, state, changed_at)
@@ -212,10 +219,10 @@ export async function setMovieOverride(db: D1Database, titleId: string, state: W
   await requireCanonicalTitle(db, titleId);
   await upsertOverride(db, overrideId('movie', titleId), 'movie', titleId, null, null, state, now);
 }
-
 export async function setEpisodeOverride(db: D1Database, titleId: string, seasonNumber: number, episodeNumber: number,
   state: WatchOverrideState, now: string): Promise<void> {
   await requireCanonicalTitle(db, titleId);
+  await requireEpisode(db, titleId, seasonNumber, episodeNumber);
   await upsertOverride(db, overrideId('episode', titleId, seasonNumber, episodeNumber), 'episode', titleId, seasonNumber, episodeNumber, state, now);
 }
 
@@ -244,11 +251,7 @@ export async function setServiceSelected(db: D1Database, serviceKey: string, sel
   await requireService(db, serviceKey);
   await run(db, 'UPDATE services SET user_selected = ? WHERE service_key = ?', [selected ? 1 : 0, serviceKey]);
 }
-
-export function customServiceKey(displayName: string): string {
-  return displayName.trim().toLowerCase().replace(/\s+/g, '-');
-}
-
+export function customServiceKey(displayName: string): string { return displayName.trim().toLowerCase().replace(/\s+/g, '-'); }
 export async function addCustomService(db: D1Database, displayName: string): Promise<string> {
   const name = displayName.trim();
   const key = customServiceKey(name);
