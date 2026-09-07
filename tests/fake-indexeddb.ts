@@ -79,6 +79,11 @@ class FakeIDBDatabase {
   transaction(_names: string[], _mode: string): FakeTransaction {
     return new FakeTransaction(this);
   }
+  seedStore(name: string, keyPath: KeyPath, values: any[]) {
+    const data = new Map<string, any>();
+    for (const value of values) data.set(extractKey(keyPath, value), value);
+    this.tables.set(name, { keyPath, data });
+  }
 }
 
 class FakeIDBOpenRequest {
@@ -92,6 +97,22 @@ class FakeIDBOpenRequest {
 
 class FakeIDBFactory {
   private dbs = new Map<string, FakeIDBDatabase>();
+  constructor(seedV1 = false) {
+    if (seedV1) {
+      const db = new FakeIDBDatabase();
+      db.version = 1;
+      db.seedStore('library_items', 'titleId', [
+        { titleId: 'movie-preserved', addedAt: '2026-09-01T00:00:00.000Z', derivedStatus: 'To Watch', statusComputedAt: '2026-09-01T00:00:00.000Z' }
+      ]);
+      db.seedStore('ratings', 'titleId', [
+        { titleId: 'movie-preserved', stars: 4, ratedAt: '2026-09-01T00:01:00.000Z' }
+      ]);
+      db.seedStore('availability', ['titleId', 'serviceKey'], [
+        { titleId: 'movie-stale', serviceKey: 'netflix', optionType: 'subscription' }
+      ]);
+      this.dbs.set('streamarkr', db);
+    }
+  }
   open(name: string, version: number): FakeIDBOpenRequest {
     let db = this.dbs.get(name);
     if (!db) { db = new FakeIDBDatabase(); this.dbs.set(name, db); }
@@ -108,8 +129,15 @@ class FakeIDBFactory {
   }
 }
 
-/** Installs a fresh fake indexedDB global. Call before importing/using src/lib/db.ts's cached
- * connection in a given test process. */
+/** Installs a fresh empty fake IndexedDB global. Call before importing/using src/lib/db.ts's
+ * cached connection in a given test process. */
 export function installFakeIndexedDB(): void {
   (globalThis as any).indexedDB = new FakeIDBFactory();
+}
+
+/** Installs a synthetic v1 Streamarkr database containing user-owned rows plus stale provider
+ * availability. Used to verify the v2 key migration preserves user data while recreating only the
+ * provider-owned availability cache. */
+export function installFakeIndexedDBV1(): void {
+  (globalThis as any).indexedDB = new FakeIDBFactory(true);
 }
