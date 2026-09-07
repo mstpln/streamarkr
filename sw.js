@@ -38,23 +38,25 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-function isAppAssetRequest(request) {
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return false;
-  if (url.pathname.startsWith('/api/')) return false;
-  if (request.headers.has('authorization')) return false;
-  return true;
-}
-
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET' || !isAppAssetRequest(event.request)) return;
+  const url = new URL(event.request.url);
+  const isPersonalApi = url.pathname.startsWith('/api/');
+  const hasAuthorization = event.request.headers.has('authorization');
+
+  // Cache only same-origin unauthenticated app assets. This prevents Worker snapshot/personal-data
+  // responses from entering Cache Storage when the PWA and API eventually share an origin, and
+  // also avoids caching cross-origin API responses if the Worker is hosted separately.
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin || isPersonalApi || hasAuthorization) return;
+
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
-      if (response.ok) {
-        const copy = response.clone();
-        caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, copy));
-      }
-      return response;
-    }))
+    caches.match(event.request).then((cached) => {
+      const network = fetch(event.request)
+        .then((response) => {
+          if (response.ok) caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, response.clone()));
+          return response;
+        })
+        .catch(() => cached);
+      return cached ?? network;
+    })
   );
 });
