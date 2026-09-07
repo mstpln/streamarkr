@@ -82,9 +82,11 @@ export async function deployCloudflare() {
   ], { capture: true });
   assertRequiredSecretNames(parseJsonMetadata(secretOutput, 'Streamarkr Worker secret metadata'));
 
+  // Wrangler 4.129.0 automatically skips the confirmation prompt in CI/non-interactive
+  // environments. Its d1 migrations apply command does not accept a --yes flag.
   runWrangler([
     'd1', 'migrations', 'apply', EXPECTED_D1_NAME,
-    '--remote', '--yes',
+    '--remote',
     '--config', CONFIG_PATH,
     ...SAFETY_FLAGS
   ]);
