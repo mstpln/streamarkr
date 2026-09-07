@@ -1,9 +1,9 @@
 {
-  "_readMeFirst": "v0.11.0 candidate adds the source-level Worker + D1 backend foundation while the current PWA UI intentionally remains on IndexedDB/fake providers until a later focused migration. No Cloudflare resource is created or deployed by this build.",
+  "_readMeFirst": "v0.11.0 adds the source-level Worker + D1 backend foundation while the current PWA UI intentionally remains on IndexedDB/fake providers until a later focused migration. No Cloudflare resource is created or deployed by this build.",
   "appVersion": "0.11.0",
   "cacheVersion": "streamarkr-v0.11.0",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-07T05:30:00Z",
+  "generatedAt": "2026-09-07T05:31:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -38,6 +38,7 @@
     "sharedContract": "src/lib/backend-contract.ts",
     "d1Migration": "migrations/0001_initial.sql",
     "d1AvailabilityKey": ["title_id", "service_key", "option_type"],
+    "canonicalTitleKey": "${media_type}-${tmdb_id}, enforced by D1 CHECK plus UNIQUE(media_type, tmdb_id)",
     "auth": "Bearer device token from Worker DEVICE_ACCESS_TOKEN secret; fail closed if unconfigured",
     "cors": "exact APP_ORIGIN only",
     "requestTracing": "x-request-id on responses; sanitized structured server errors",
@@ -52,11 +53,12 @@
       "tests": {"count": 101, "pass": 101, "fail": 0},
       "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
     },
-    "candidateV0110": {
-      "status": "final exact-head CI pending",
-      "expectedLogicWorkerClientTests": 117,
-      "d1SchemaTests": 5,
-      "browserQaChecks": 27
+    "v0110": {
+      "pwaBuild": "pass",
+      "workerTypecheck": "pass",
+      "logicRepositoryWorkerClientTests": {"count": 117, "pass": 117, "fail": 0},
+      "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
+      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
     },
     "responsive": ["344x792 folded", "873x1000 unfolded"],
     "physicalPixel9ProFold": "not yet run"
@@ -71,6 +73,7 @@
     "provider-owned availability reconciliation never touches user-owned stores",
     "Search/Library membership rejects dangling title IDs",
     "D1 Library membership also rejects dangling canonical title IDs",
+    "D1 canonical IDs are structurally tied to media type and TMDB ID",
     "D1 availability represents multiple option types for one title/service",
     "Worker personal routes fail closed without configured auth",
     "unexpected Worker failures do not return raw internal error messages",
@@ -96,7 +99,7 @@
     "baselineMergeCommit": "438997dedc282366339e6507d826441d99a81adc",
     "currentBranch": "feat/worker-d1-foundation-v0110",
     "currentPr": 2,
-    "currentPrStatus": "open; never merge without explicit user authorization",
+    "currentPrStatus": "open; validated candidate; never merge without explicit user authorization",
     "cloudflareConnected": false
   },
   "absoluteRules": [
