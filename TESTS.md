@@ -1,39 +1,70 @@
 # Streamarkr — Tests
 
-## Authoritative baseline validation
+Updated: 2026-09-07.
 
-The current v0.10.2 baseline is validated in GitHub Actions on Node 22 using the committed `package-lock.json` and reproducible `npm ci` installation.
+## Test policy
+All automated Streamarkr QA is deterministic and synthetic-only. It must never call live Trakt/TMDB/Streaming Availability APIs, production Streamarkr data, or any BANDMARKR resource. No API keys, OAuth tokens, Cloudflare credentials, or personal viewing data belong in test fixtures.
 
-### Build
+## v0.10.2 authoritative merged baseline
+PR #1 was validated on Node 22 with the committed lockfile and reproducible `npm ci`:
+- PWA build: **PASS**.
+- Logic/repository tests: **101/101 PASS**.
+- Playwright browser/responsive QA: **27/27 PASS**.
+- Smoke-journey console/page errors: **0**.
+- Folded proxy 344×792: PASS.
+- Unfolded proxy 873×1000: PASS.
+
+## v0.11.0 — PR #2 validation
+The Worker + D1 foundation adds validation layers without replacing the existing baseline tests.
+
+### PWA build
 ```bash
-npm ci
 npm run build
 ```
-Current result: **PASS**, generating a service-worker manifest covering **29 compiled modules**.
+Reviewed candidate heads: **PASS**.
 
-### Logic / repository tests
+### Worker type-check/build
+```bash
+npm run build:worker
+```
+Reviewed candidate heads: **PASS**. This compiles `worker/**/*.ts` plus the shared backend/domain contracts without requiring live Cloudflare resources or credentials.
+
+### Logic / repository / Worker / client tests
 ```bash
 npm test
 ```
-Current result: **101/101 PASS**, **26 suites**, 0 failures, 0 skipped, 0 todo.
+Expected final suite after the latest review fix: **120 tests**. The exact final PR head must report **120/120 PASS** before merge readiness is declared.
 
-Coverage includes:
-- series status semantics: To Watch / Watching / On Hold / Caught Up / Finished
-- Ended-only Finished rule for series
-- real-watch timestamp ordering and On Hold timing
-- untouched-new-season Caught Up behavior and older-season gaps
-- bounded season bulk watched/unwatched corrections
-- provider/manual watch-state precedence and unknown manual watch dates
-- History aggregation and recently-watched ordering
-- alert transition detection, repeat availability cycles, release-date changes, 30-item retention
-- provider-owned availability reconciliation without touching user-owned stores
-- future New Season records before episode records exist
-- Library integrity against dangling title IDs
-- user-data export completeness and stable provider crosswalk preservation
-- Discover eligibility/ranking/exclusions
-- primary streaming-action selected-service preference with unselected-service fallback
-- historical/current service filter behavior when Preferences selection changes
-- Home Rate Now and Watching Now read models
+This is the merged 101-test baseline plus 19 backend/security tests. New coverage includes:
+- bearer device-token authentication accepts only the exact expected value;
+- protected routes reject invalid credentials before touching D1;
+- protected routes fail closed when the Worker authentication secret is unconfigured;
+- exact-origin CORS behavior;
+- request IDs on Worker responses;
+- unexpected backend failures do not expose raw database/internal error messages;
+- rating input validation;
+- Library writes require a canonical title record;
+- rating writes require a canonical title record and return a controlled conflict for an unknown title instead of surfacing a D1 foreign-key failure as a server error;
+- provider title upserts stay in provider-owned storage and do not mutate user-owned tables;
+- provider title upserts preserve already-known Trakt/IMDb/availability crosswalk IDs when a later partial provider payload omits them;
+- availability replacement uses one D1 batch and preserves multiple option types per title/service;
+- `WorkerBackendClient` sends bearer auth, URL-encodes IDs, sends JSON mutations and does not expose its token in surfaced errors;
+- the service worker bypasses Cache Storage for `/api/`, cross-origin, and authenticated requests so future personal API snapshots cannot enter the app-shell cache.
+
+### D1 migration semantics
+```bash
+npm run test:d1
+```
+Reviewed candidate heads: **5/5 PASS** using Node 22's built-in SQLite engine against `migrations/0001_initial.sql`.
+
+Coverage:
+- migration applies cleanly and is idempotent;
+- canonical `(media_type, tmdb_id)` uniqueness and `${media_type}-${tmdb_id}` key format;
+- simultaneous subscription + rent availability for one title/service;
+- restrictive foreign-key behavior prevents provider title deletion from cascading away Library membership;
+- all eight agreed service registry rows exist without silently preselecting personal preferences.
+
+This SQLite check is a deterministic schema safety layer, not a substitute for Wrangler's local D1 runtime. Before any Cloudflare D1 resource is migrated, the same migration must also pass a pinned Wrangler-local D1 check.
 
 ### Browser / responsive QA
 ```bash
@@ -41,24 +72,22 @@ npm run build
 npm run serve
 npm run qa:browser
 ```
-Current GitHub result: **27/27 PASS** in Playwright Chromium.
+Reviewed candidate heads have passed **27/27** Playwright checks with zero smoke-journey console/page errors. The exact final PR head must receive the same gate before merge readiness is declared.
 
-The deterministic synthetic-only journey covers:
-- Home, My Library, History, Search, Discover, Settings, Alerts, and Detail
-- Discover heart add/removal from recommendation results
-- Settings re-entry to Preferences
-- Alerts NEW indicator lifecycle: visible during first visit, marked seen on page exit, absent next visit
-- semantic rating controls
-- Detail progress/release context, trailer overlay, episode list/synopsis, separated manual corrections, Streaming tab
-- zero `console.error` / `pageerror` events in the smoke journey
-- folded proxy **344×792** with no Home horizontal overflow and sane Library grid
-- unfolded proxy **873×1000** with no Home horizontal overflow, non-stretched poster cards, and Detail hero rendering
+The unchanged synthetic browser journey verifies Home, Library, History, Search, Discover, Settings, Alerts and Detail behavior; Alerts NEW lifecycle; Discover heart behavior; Settings re-entry; semantic ratings; detail progress/trailer/episodes/history/streaming; folded 344×792 and unfolded 873×1000 layouts; and zero smoke-journey console/page errors.
 
-## Data-safety rules for testing
-- Synthetic fixtures only.
-- No live Trakt/TMDB/Streaming Availability calls.
-- No real API keys, OAuth tokens, Cloudflare credentials, or personal viewing data.
-- Future provider-integration tests must use synthetic/sandboxed accounts or recorded fixtures, never production credentials/data.
+## CI gate
+`.github/workflows/ci.yml` runs, in order:
+1. explicit checkout of the pull request **head SHA** (not only GitHub's synthetic merge ref) for PR validation;
+2. `npm ci --no-audit --no-fund`;
+3. PWA build;
+4. Worker type-check/build;
+5. 120 logic/repository/Worker/client/security tests;
+6. 5 D1 migration tests;
+7. Playwright Chromium install;
+8. PWA browser/responsive QA.
+
+The exact final PR head is authoritative. PR #2 is not ready until both CI jobs are green on that exact head.
 
 ## Manual limitation
 A physical **Pixel 9 Pro Fold** has not yet been tested. Browser viewport QA covers representative folded/unfolded dimensions, but physical-device validation remains required before V1 release.

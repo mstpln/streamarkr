@@ -1,12 +1,10 @@
 // Minimal hand-written service worker: app-shell cache-first strategy with a versioned cache
 // name tied to the app version, so a rebuild invalidates stale assets automatically.
 //
-// Correction 12: install-time caching must not assume runtime (fetch-time) caching alone will
-// eventually populate the cache — a user who goes offline right after first load must already
-// have every compiled JS module cached. `sw-manifest.json` is generated at build time
-// (`npm run build` -> generate-sw-manifest.mjs) listing every file under dist/, so install()
-// below pre-caches the static shell AND the full compiled module graph in one pass.
-const CACHE_VERSION = 'streamarkr-v0.10.2';
+// The install-time manifest pre-caches the complete compiled module graph so first-load offline
+// behavior does not depend on fetch-time caching having already visited every route.
+// Personal/API responses are deliberately never placed in the app-shell cache.
+const CACHE_VERSION = 'streamarkr-v0.11.0';
 const APP_SHELL = [
   './',
   './index.html',
@@ -26,9 +24,7 @@ self.addEventListener('install', (event) => {
           if (Array.isArray(files) && files.length) await cache.addAll(files);
         }
       } catch {
-        // If the manifest can't be fetched (e.g. dev server hiccup), fetch-time caching in the
-        // handler below still fills the cache progressively — this just makes first-load
-        // reliability best-effort rather than a hard install failure.
+        // Fetch-time caching remains a fallback if the generated manifest is temporarily unavailable.
       }
       await self.skipWaiting();
     })()
@@ -43,7 +39,15 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  const isPersonalApi = url.pathname.startsWith('/api/');
+  const hasAuthorization = event.request.headers.has('authorization');
+
+  // Cache only same-origin unauthenticated app assets. This prevents Worker snapshot/personal-data
+  // responses from entering Cache Storage when the PWA and API eventually share an origin, and
+  // also avoids caching cross-origin API responses if the Worker is hosted separately.
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin || isPersonalApi || hasAuthorization) return;
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const network = fetch(event.request)

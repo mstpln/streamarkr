@@ -4,9 +4,11 @@ Streamarkr is a personal movie and TV tracking PWA for keeping a clean view of w
 
 ## Current status
 
-This repository currently contains the reviewed **v0.10.2 synthetic/local baseline**. It is intentionally disconnected from live providers and production infrastructure while the real Trakt, TMDB, streaming-availability, Cloudflare Worker, and D1 integrations are built safely.
+The repository now contains the validated synthetic/local PWA baseline plus the **v0.11.0 source-level Worker + D1 backend foundation**. The working UI still uses IndexedDB and synthetic providers while the backend migration is staged safely.
 
-All automated QA uses synthetic fixtures only. Real API keys, OAuth secrets, Cloudflare credentials, and personal viewing data must never be committed to this public repository.
+The Worker/D1 source is not deployed and no Cloudflare resource, real provider connection, API key, OAuth token, or personal viewing data is present in this public repository. All automated QA remains synthetic-only.
+
+The target architecture remains Vite + TypeScript, a separate Cloudflare Worker, a separate D1 database, optional R2 if justified, and real Trakt/TMDB/streaming-availability adapters as defined in the build plan.
 
 ## Local development
 
@@ -19,16 +21,26 @@ Install the exact repository development toolchain:
 npm ci
 ```
 
-Build and serve:
+Build and serve the current PWA:
 ```bash
 npm run build
 npm run serve
 ```
 Then open `http://localhost:8787`.
 
-Run deterministic logic/integration tests:
+Type-check the Worker foundation:
+```bash
+npm run build:worker
+```
+
+Run deterministic logic/repository/Worker/client tests:
 ```bash
 npm test
+```
+
+Validate the D1 migration semantics with Node 22 SQLite:
+```bash
+npm run test:d1
 ```
 
 Run browser QA after installing the Playwright Chromium browser once:
@@ -40,18 +52,18 @@ npm run serve
 npm run qa:browser
 ```
 
-## Current automated baseline
-- Build: PASS
-- Logic/repository tests: **101/101 PASS**
-- Playwright browser/responsive QA: **27/27 PASS**
-- Physical Pixel 9 Pro Fold QA: pending before V1 release
+## Cloudflare activation
+
+`wrangler.example.jsonc` and `.dev.vars.example` are examples only. They contain no usable credentials or real D1 binding. See `docs/CLOUDFLARE_FOUNDATION.md` before any account-level setup.
+
+Do not create, bind, migrate or deploy Streamarkr against BANDMARKR infrastructure. Streamarkr Worker, D1, secrets and any future R2 storage must remain completely separate.
 
 ## Engineering continuity
-Read these before making changes:
+Read these before making substantial changes:
 - `AGENTS.md`
 - `docs/STREAMARKR_STATE.md`
 - `docs/STREAMARKR_DECISIONS.md`
 - `docs/STREAMARKR_BUILD_STATE.json`
 - `docs/STREAMARKR_BUILD_PLAN.md`
-
-The current IndexedDB/fake-provider setup is a temporary baseline. The target architecture remains Vite + TypeScript, Cloudflare Worker + D1, and real provider adapters, as defined in the build plan and continuity files.
+- `PROGRESS.md`
+- `TESTS.md`

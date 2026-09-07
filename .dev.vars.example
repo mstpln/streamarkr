@@ -1,0 +1,2 @@
+# Example only. Never commit a real token.
+DEVICE_ACCESS_TOKEN=replace-with-a-long-random-local-only-token

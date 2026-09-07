@@ -13,16 +13,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - name: Install development tools
         run: npm ci --no-audit --no-fund
-      - name: Build
+      - name: Build PWA
         run: npm run build
-      - name: Logic and repository tests
+      - name: Type-check Worker
+        run: npm run build:worker
+      - name: Logic, repository, Worker and client tests
         run: npm test
+      - name: Validate D1 migration semantics
+        run: npm run test:d1
 
   browser-qa:
     runs-on: ubuntu-latest
@@ -30,6 +36,8 @@ jobs:
     needs: verify
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
