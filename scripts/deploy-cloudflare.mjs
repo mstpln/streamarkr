@@ -54,7 +54,7 @@ export async function deployCloudflare() {
   assertRequiredSecretNames(secretList);
 
   runWrangler([
-    'd1', 'migrations', 'apply', 'DB',
+    'd1', 'migrations', 'apply', 'streamarkr',
     '--remote', '--yes',
     '--config', CONFIG_PATH,
     ...SAFETY_FLAGS
