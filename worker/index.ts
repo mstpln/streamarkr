@@ -80,6 +80,10 @@ function positiveInteger(value: unknown): value is number {
   return Number.isInteger(value) && Number(value) > 0;
 }
 
+function nonNegativeInteger(value: unknown): value is number {
+  return Number.isInteger(value) && Number(value) >= 0;
+}
+
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const requestId = crypto.randomUUID();
@@ -149,6 +153,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     const movieOverrideTitleId = routeTitleId(url.pathname, '/api/overrides/movie/');
     if (movieOverrideTitleId && request.method === 'PUT') {
+      if (!movieOverrideTitleId.startsWith('movie-')) return json({ error: 'invalid_override_scope' }, 400, responseHeaders);
       const body = await bodyJson<{ state?: unknown }>(request);
       if (!body || !validOverrideState(body.state)) return json({ error: 'invalid_override_state' }, 400, responseHeaders);
       await setMovieOverride(env.DB, movieOverrideTitleId, body.state, new Date().toISOString());
@@ -157,8 +162,9 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     const episodeOverrideTitleId = routeTitleId(url.pathname, '/api/overrides/episode/');
     if (episodeOverrideTitleId && request.method === 'PUT') {
+      if (!episodeOverrideTitleId.startsWith('series-')) return json({ error: 'invalid_override_scope' }, 400, responseHeaders);
       const body = await bodyJson<{ seasonNumber?: unknown; episodeNumber?: unknown; state?: unknown }>(request);
-      if (!body || !positiveInteger(body.seasonNumber) || !positiveInteger(body.episodeNumber) || !validOverrideState(body.state)) {
+      if (!body || !nonNegativeInteger(body.seasonNumber) || !positiveInteger(body.episodeNumber) || !validOverrideState(body.state)) {
         return json({ error: 'invalid_episode_override' }, 400, responseHeaders);
       }
       await setEpisodeOverride(env.DB, episodeOverrideTitleId, body.seasonNumber, body.episodeNumber, body.state, new Date().toISOString());
@@ -167,8 +173,9 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
     const seasonOverrideTitleId = routeTitleId(url.pathname, '/api/overrides/season/');
     if (seasonOverrideTitleId && request.method === 'PUT') {
+      if (!seasonOverrideTitleId.startsWith('series-')) return json({ error: 'invalid_override_scope' }, 400, responseHeaders);
       const body = await bodyJson<{ seasonNumber?: unknown; state?: unknown }>(request);
-      if (!body || !positiveInteger(body.seasonNumber) || !validOverrideState(body.state)) {
+      if (!body || !nonNegativeInteger(body.seasonNumber) || !validOverrideState(body.state)) {
         return json({ error: 'invalid_season_override' }, 400, responseHeaders);
       }
       const affectedEpisodes = await setSeasonOverride(env.DB, seasonOverrideTitleId, body.seasonNumber, body.state, new Date().toISOString());
