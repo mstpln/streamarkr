@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { assertRequiredSecretNames } from '../scripts/deploy-cloudflare.mjs';
 import {
   buildRemoteConfig,
   prepareCloudflareDeploy,
@@ -34,24 +35,33 @@ test('builds only the dedicated Streamarkr Worker and D1 binding', () => {
   assert.doesNotMatch(JSON.stringify(config), /bandmarkr/i);
 });
 
+test('refuses remote migration/deployment when the device secret is absent', () => {
+  assert.doesNotThrow(() => assertRequiredSecretNames([{ name: 'DEVICE_ACCESS_TOKEN', type: 'secret_text' }]));
+  assert.throws(() => assertRequiredSecretNames([]), /refusing to migrate or deploy/);
+  assert.throws(() => assertRequiredSecretNames([{ name: 'OTHER_SECRET' }]), /refusing to migrate or deploy/);
+  assert.throws(() => assertRequiredSecretNames(null), /Could not verify/);
+});
+
 test('committed Wrangler config is account-neutral and deployment is guarded', async () => {
   const committedConfig = JSON.parse(await readFile(path.join(PROJECT_ROOT, 'wrangler.jsonc'), 'utf8'));
   const packageJson = JSON.parse(await readFile(path.join(PROJECT_ROOT, 'package.json'), 'utf8'));
   const gitignore = await readFile(path.join(PROJECT_ROOT, '.gitignore'), 'utf8');
+  const deployScript = await readFile(path.join(PROJECT_ROOT, 'scripts', 'deploy-cloudflare.mjs'), 'utf8');
 
   assert.equal(committedConfig.name, 'streamarkr-api');
   assert.equal(committedConfig.keep_vars, true);
   assert.deepEqual(committedConfig.secrets.required, ['DEVICE_ACCESS_TOKEN']);
   assert.equal(Object.hasOwn(committedConfig, 'd1_databases'), false);
   assert.match(gitignore, /^\.wrangler\/$/m);
+  assert.equal(packageJson.scripts['deploy:cloudflare'], 'node scripts/deploy-cloudflare.mjs');
 
-  const deploy = packageJson.scripts['deploy:cloudflare'];
-  assert.match(deploy, /prepare-cloudflare-deploy\.mjs/);
-  assert.match(deploy, /d1 migrations apply DB --remote --yes/);
-  assert.match(deploy, /wrangler deploy/);
-  assert.equal((deploy.match(/--x-provision=false/g) ?? []).length, 2);
-  assert.equal((deploy.match(/--x-auto-create=false/g) ?? []).length, 2);
-  assert.doesNotMatch(deploy, /bandmarkr/i);
+  assert.match(deployScript, /secret', 'list'/);
+  assert.match(deployScript, /'d1', 'migrations', 'apply', 'DB'/);
+  assert.match(deployScript, /'--remote', '--yes'/);
+  assert.match(deployScript, /'deploy'/);
+  assert.match(deployScript, /--x-provision=false/);
+  assert.match(deployScript, /--x-auto-create=false/);
+  assert.doesNotMatch(deployScript, /bandmarkr/i);
 });
 
 test('writes generated deployment configuration outside tracked source', async () => {
