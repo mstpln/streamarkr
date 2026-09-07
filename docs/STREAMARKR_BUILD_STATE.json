@@ -3,7 +3,7 @@
   "appVersion": "0.11.0",
   "cacheVersion": "streamarkr-v0.11.0",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-07T07:06:00Z",
+  "generatedAt": "2026-09-07T07:10:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -41,6 +41,7 @@
     "d1AvailabilityKey": ["title_id", "service_key", "option_type"],
     "canonicalTitleKey": "${media_type}-${tmdb_id}, enforced by D1 CHECK plus UNIQUE(media_type, tmdb_id)",
     "crosswalkUpsertRule": "later partial provider payloads preserve already-known Trakt/IMDb/availability IDs when the incoming field is omitted",
+    "canonicalMutationPrecondition": "Library and rating writes require an existing canonical title and return a controlled conflict when it is missing",
     "auth": "Bearer device token from Worker DEVICE_ACCESS_TOKEN secret; fail closed if unconfigured",
     "cors": "exact APP_ORIGIN only",
     "requestTracing": "x-request-id on responses; sanitized structured server errors",
@@ -58,9 +59,9 @@
     "v0110": {
       "pwaBuild": "pass on reviewed candidate heads",
       "workerTypecheck": "pass on reviewed candidate heads",
-      "logicRepositoryWorkerClientSecurityTests": {"count": 119, "pass": 119, "fail": 0},
-      "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
-      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0},
+      "logicRepositoryWorkerClientSecurityTests": {"count": 120, "requiredPass": 120, "failAllowed": 0},
+      "d1SchemaTests": {"count": 5, "requiredPass": 5, "failAllowed": 0},
+      "browserQa": {"checks": 27, "requiredPass": 27, "failAllowed": 0, "consoleOrPageErrorsAllowed": 0},
       "exactHeadCheckout": "pull-request CI explicitly checks out pull_request.head.sha; merge readiness always requires both CI jobs green on the literal final head"
     },
     "responsive": ["344x792 folded", "873x1000 unfolded"],
@@ -75,7 +76,7 @@
     "availability alerts are transition/cycle-aware",
     "provider-owned availability reconciliation never touches user-owned stores",
     "Search/Library membership rejects dangling title IDs",
-    "D1 Library membership also rejects dangling canonical title IDs",
+    "D1 Library and rating writes reject missing canonical title IDs as controlled conflicts",
     "D1 canonical IDs are structurally tied to media type and TMDB ID",
     "D1 provider upserts preserve known optional stable crosswalk IDs across later partial payloads",
     "D1 availability represents multiple option types for one title/service",
