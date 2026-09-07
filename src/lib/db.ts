@@ -89,6 +89,24 @@ function tx(db: IDBDatabase, stores: StoreName[], mode: IDBTransactionMode) {
   return db.transaction(stores as string[], mode);
 }
 
+function assertReplacementKeys(replacements: Array<{ store: StoreName; values: unknown[] }>): void {
+  for (const replacement of replacements) {
+    const keyPath = KEY_PATHS[replacement.store];
+    const keys = Array.isArray(keyPath) ? keyPath : [keyPath];
+    for (const value of replacement.values) {
+      if (typeof value !== 'object' || value === null) {
+        throw new Error(`Invalid ${replacement.store} cache row: expected an object`);
+      }
+      const row = value as Record<string, unknown>;
+      for (const key of keys) {
+        if (row[key] === undefined || row[key] === null) {
+          throw new Error(`Invalid ${replacement.store} cache row: missing key field ${key}`);
+        }
+      }
+    }
+  }
+}
+
 export async function getAll<T>(store: StoreName): Promise<T[]> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
@@ -130,18 +148,36 @@ export async function putAll<T>(store: StoreName, values: T[]): Promise<void> {
 
 export async function replaceStores(replacements: Array<{ store: StoreName; values: unknown[] }>): Promise<void> {
   if (replacements.length === 0) return;
+  // Validate all key-path fields before opening a write transaction. This prevents a malformed
+  // snapshot from clearing any existing cache rows before IndexedDB reports a key error.
+  assertReplacementKeys(replacements);
+
   const db = await openDb();
   const stores = [...new Set(replacements.map((replacement) => replacement.store))];
   return new Promise((resolve, reject) => {
     const t = tx(db, stores, 'readwrite');
-    for (const replacement of replacements) {
-      const os = t.objectStore(replacement.store);
-      os.clear();
-      for (const value of replacement.values) os.put(value as any);
-    }
+    let schedulingError: unknown;
+
     t.oncomplete = () => resolve();
-    t.onerror = () => reject(t.error ?? new Error('IndexedDB cache replacement failed'));
-    t.onabort = () => reject(t.error ?? new Error('IndexedDB cache replacement aborted'));
+    // Request-level IndexedDB errors abort a normal readwrite transaction. Wait for onabort before
+    // rejecting so callers cannot observe the cache until the rollback has completed.
+    t.onerror = () => undefined;
+    t.onabort = () => reject(schedulingError ?? t.error ?? new Error('IndexedDB cache replacement aborted'));
+
+    try {
+      for (const replacement of replacements) {
+        const os = t.objectStore(replacement.store);
+        os.clear();
+        for (const value of replacement.values) os.put(value as any);
+      }
+    } catch (error) {
+      schedulingError = error;
+      try {
+        t.abort();
+      } catch {
+        reject(error);
+      }
+    }
   });
 }
 
