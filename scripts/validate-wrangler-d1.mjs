@@ -2,16 +2,17 @@ import { rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 const WRANGLER_VERSION = '4.129.0';
+const WRANGLER_BIN = process.platform === 'win32'
+  ? 'node_modules/.bin/wrangler.cmd'
+  : 'node_modules/.bin/wrangler';
 const CONFIG = 'wrangler.local.jsonc';
 const DATABASE = 'streamarkr-local';
 const PERSIST_DIR = '.wrangler/test-d1';
 
 function runWrangler(args, { json = false } = {}) {
   const result = spawnSync(
-    'npx',
+    WRANGLER_BIN,
     [
-      '--yes',
-      `wrangler@${WRANGLER_VERSION}`,
       ...args,
       '--config', CONFIG,
       '--x-provision=false',
@@ -22,6 +23,10 @@ function runWrangler(args, { json = false } = {}) {
       env: { ...process.env, CI: '1', NO_D1_WARNING: 'true' }
     }
   );
+
+  if (result.error) {
+    throw new Error(`Unable to launch the repository-pinned Wrangler binary: ${result.error.message}`);
+  }
 
   if (result.status !== 0) {
     process.stderr.write(result.stdout ?? '');
@@ -58,6 +63,14 @@ function findRows(value) {
   }
 
   return null;
+}
+
+const versionOutput = spawnSync(WRANGLER_BIN, ['--version'], { encoding: 'utf8' });
+if (versionOutput.error || versionOutput.status !== 0) {
+  throw new Error('Repository-pinned Wrangler is unavailable; run npm ci before validation');
+}
+if (!versionOutput.stdout.includes(WRANGLER_VERSION)) {
+  throw new Error(`Expected Wrangler ${WRANGLER_VERSION}, received ${versionOutput.stdout.trim() || 'unknown'}`);
 }
 
 rmSync(PERSIST_DIR, { recursive: true, force: true });
