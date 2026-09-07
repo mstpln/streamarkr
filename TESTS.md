@@ -21,21 +21,21 @@ The Worker + D1 foundation adds validation layers without replacing the existing
 ```bash
 npm run build
 ```
-Result on the last completed reviewed head: **PASS**.
+Reviewed candidate heads: **PASS**.
 
 ### Worker type-check/build
 ```bash
 npm run build:worker
 ```
-Result on the last completed reviewed head: **PASS**. This compiles `worker/**/*.ts` plus the shared backend/domain contracts without requiring live Cloudflare resources or credentials.
+Reviewed candidate heads: **PASS**. This compiles `worker/**/*.ts` plus the shared backend/domain contracts without requiring live Cloudflare resources or credentials.
 
 ### Logic / repository / Worker / client tests
 ```bash
 npm test
 ```
-Result after the stable-crosswalk regression fix: **119/119 PASS**, 0 failures.
+Expected final suite after the latest review fix: **120 tests**. The exact final PR head must report **120/120 PASS** before merge readiness is declared.
 
-This is the merged 101-test baseline plus 18 backend/security tests. New coverage includes:
+This is the merged 101-test baseline plus 19 backend/security tests. New coverage includes:
 - bearer device-token authentication accepts only the exact expected value;
 - protected routes reject invalid credentials before touching D1;
 - protected routes fail closed when the Worker authentication secret is unconfigured;
@@ -44,6 +44,7 @@ This is the merged 101-test baseline plus 18 backend/security tests. New coverag
 - unexpected backend failures do not expose raw database/internal error messages;
 - rating input validation;
 - Library writes require a canonical title record;
+- rating writes require a canonical title record and return a controlled conflict for an unknown title instead of surfacing a D1 foreign-key failure as a server error;
 - provider title upserts stay in provider-owned storage and do not mutate user-owned tables;
 - provider title upserts preserve already-known Trakt/IMDb/availability crosswalk IDs when a later partial provider payload omits them;
 - availability replacement uses one D1 batch and preserves multiple option types per title/service;
@@ -54,7 +55,7 @@ This is the merged 101-test baseline plus 18 backend/security tests. New coverag
 ```bash
 npm run test:d1
 ```
-Result on the last completed reviewed head: **5/5 PASS** using Node 22's built-in SQLite engine against `migrations/0001_initial.sql`.
+Reviewed candidate heads: **5/5 PASS** using Node 22's built-in SQLite engine against `migrations/0001_initial.sql`.
 
 Coverage:
 - migration applies cleanly and is idempotent;
@@ -71,7 +72,7 @@ npm run build
 npm run serve
 npm run qa:browser
 ```
-The last completed run after the stable-crosswalk fix passed **27/27** Playwright checks with zero smoke-journey console/page errors. The final PR head must receive the same gate before merge readiness is declared.
+Reviewed candidate heads have passed **27/27** Playwright checks with zero smoke-journey console/page errors. The exact final PR head must receive the same gate before merge readiness is declared.
 
 The unchanged synthetic browser journey verifies Home, Library, History, Search, Discover, Settings, Alerts and Detail behavior; Alerts NEW lifecycle; Discover heart behavior; Settings re-entry; semantic ratings; detail progress/trailer/episodes/history/streaming; folded 344×792 and unfolded 873×1000 layouts; and zero smoke-journey console/page errors.
 
@@ -81,7 +82,7 @@ The unchanged synthetic browser journey verifies Home, Library, History, Search,
 2. `npm ci --no-audit --no-fund`;
 3. PWA build;
 4. Worker type-check/build;
-5. 119 logic/repository/Worker/client/security tests;
+5. 120 logic/repository/Worker/client/security tests;
 6. 5 D1 migration tests;
 7. Playwright Chromium install;
 8. PWA browser/responsive QA.
