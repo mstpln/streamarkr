@@ -198,6 +198,15 @@ export async function clearAll(): Promise<void> {
   });
 }
 
+/** True when any real cache/data store contains rows. Browser-only meta markers do not count;
+ * this is used to distinguish a genuinely empty cache from legacy v1 installs that predate the
+ * data_source marker and therefore still require explicit migration/reset before backend takeover. */
+export async function hasAnyData(): Promise<boolean> {
+  const dataStores = STORES.filter((store): store is Exclude<StoreName, 'meta'> => store !== 'meta');
+  const rows = await Promise.all(dataStores.map((store) => getAll(store)));
+  return rows.some((values) => values.length > 0);
+}
+
 export async function countAny(): Promise<number> {
   const titles = await getAll('titles');
   return titles.length;
