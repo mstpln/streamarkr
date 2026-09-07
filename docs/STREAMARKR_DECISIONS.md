@@ -76,8 +76,8 @@
 
 ## Current test/tooling decision
 - Application/domain/Worker tests compile with TypeScript then use Node's built-in `node:test`; browser QA uses Playwright.
-- `typescript` and `playwright` are pinned devDependencies and `package-lock.json` is committed.
+- `typescript`, `playwright`, and Wrangler **4.129.0** are pinned devDependencies and `package-lock.json` is committed.
 - GitHub CI uses Node 22 and `npm ci` so repository dependency installation is reproducible.
 - `migrations/0001_initial.sql` is exercised against Node 22's SQLite engine for deterministic schema semantics **and** against pinned Wrangler 4.129.0 local D1 for Cloudflare-runtime migration validation.
-- The Wrangler-local validator uses an exact CLI version through `npx`, isolated `.wrangler/test-d1` persistence, and explicit `--local`; it must never silently fall back to a remote database.
+- The Wrangler-local validator executes the repository-installed CLI, verifies the expected version, uses isolated `.wrangler/test-d1` persistence, and explicitly requires `--local`; it must never silently fall back to a remote database.
 - Browser QA remains deterministic and synthetic-only; physical device QA is separate and still required before V1 release.
