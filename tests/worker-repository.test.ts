@@ -39,6 +39,18 @@ test('provider title upsert writes only the provider-owned titles table', async 
   assert.equal(/library_items|ratings|watch_overrides|watched_service/.test(db.writes[0].sql), false);
 });
 
+test('provider title upsert preserves known crosswalk ids when a later payload omits them', async () => {
+  const db = new RecordingDb();
+  await upsertTitle(db, title);
+  assert.equal(db.writes.length, 1);
+  assert.match(db.writes[0].sql, /trakt_id=COALESCE\(excluded\.trakt_id, titles\.trakt_id\)/);
+  assert.match(db.writes[0].sql, /imdb_id=COALESCE\(excluded\.imdb_id, titles\.imdb_id\)/);
+  assert.match(db.writes[0].sql, /availability_id=COALESCE\(excluded\.availability_id, titles\.availability_id\)/);
+  assert.equal(db.writes[0].values[3], null);
+  assert.equal(db.writes[0].values[4], null);
+  assert.equal(db.writes[0].values[5], null);
+});
+
 test('Library membership refuses dangling title ids', async () => {
   const db = new RecordingDb();
   await assert.rejects(() => addLibraryItem(db, 'missing', '2026-09-07T00:00:00Z'), /canonical title record/);
