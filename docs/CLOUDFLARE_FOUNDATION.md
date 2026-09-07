@@ -63,13 +63,14 @@ It deliberately does **not** contain the real D1 UUID.
 The generated file and Wrangler redirect file live under `.wrangler/`, which is gitignored. The script never prints the UUID. Tests use only a synthetic UUID.
 
 `npm run deploy:cloudflare` uses `scripts/deploy-cloudflare.mjs` and performs guarded preflight before any D1 mutation:
-1. prepare the generated account-specific configuration;
-2. query the existing `streamarkr-api` Worker secret names and require `DEVICE_ACCESS_TOKEN` to already exist;
-3. apply pending migrations specifically to the named remote database `streamarkr` with `--remote --yes`;
-4. deploy the reviewed Worker source;
-5. explicitly pass `--x-provision=false` and `--x-auto-create=false` to all Wrangler account operations.
+1. validate the build-supplied D1 UUID and prepare the generated account-specific configuration;
+2. query D1 by the literal name `streamarkr` using the account-neutral Wrangler config and require Cloudflare's authoritative UUID for that named database to match `STREAMARKR_D1_DATABASE_ID`;
+3. query the existing `streamarkr-api` Worker secret names and require `DEVICE_ACCESS_TOKEN` to already exist;
+4. apply pending migrations specifically to the named remote database `streamarkr` with `--remote --yes`;
+5. deploy the reviewed Worker source;
+6. explicitly pass `--x-provision=false` and `--x-auto-create=false` to all Wrangler account operations.
 
-If secret metadata cannot be read or `DEVICE_ACCESS_TOKEN` is absent, the command stops before the D1 migration. Wrangler deployments do not delete existing encrypted secrets, and `keep_vars` preserves dashboard-managed plaintext runtime variables.
+If D1 metadata does not identify the exact named database expected by the configured UUID, if secret metadata cannot be read, or if `DEVICE_ACCESS_TOKEN` is absent, the command stops before the D1 migration. The EU jurisdiction remains a creation-time account property recorded from the manual Cloudflare setup; current Wrangler `d1 info --json` exposes name/UUID but not jurisdiction, so the automated preflight validates the authoritative database identity without pretending it can re-verify jurisdiction. Wrangler deployments do not delete existing encrypted secrets, and `keep_vars` preserves dashboard-managed plaintext runtime variables.
 
 ## Workers Builds deployment gate
 Do not connect ordinary `main` merges directly to production deployment. The intended setup is a dedicated production deployment branch that is advanced only after explicit user authorization.
