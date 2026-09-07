@@ -3,7 +3,7 @@
   "appVersion": "0.11.0",
   "cacheVersion": "streamarkr-v0.11.0",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-07T05:35:00Z",
+  "generatedAt": "2026-09-07T06:58:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -40,6 +40,7 @@
     "d1Migration": "migrations/0001_initial.sql",
     "d1AvailabilityKey": ["title_id", "service_key", "option_type"],
     "canonicalTitleKey": "${media_type}-${tmdb_id}, enforced by D1 CHECK plus UNIQUE(media_type, tmdb_id)",
+    "crosswalkUpsertRule": "later partial provider payloads preserve already-known Trakt/IMDb/availability IDs when the incoming field is omitted",
     "auth": "Bearer device token from Worker DEVICE_ACCESS_TOKEN secret; fail closed if unconfigured",
     "cors": "exact APP_ORIGIN only",
     "requestTracing": "x-request-id on responses; sanitized structured server errors",
@@ -55,11 +56,13 @@
       "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
     },
     "v0110": {
+      "lastCompletedReviewedHead": "f21c4d06571cd0fe608e7f8a413d58bae1564393",
       "pwaBuild": "pass",
       "workerTypecheck": "pass",
-      "logicRepositoryWorkerClientSecurityTests": {"count": 118, "pass": 118, "fail": 0},
+      "logicRepositoryWorkerClientSecurityTests": {"count": 119, "pass": 119, "fail": 0},
       "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
-      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
+      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0},
+      "exactHeadCheckout": "CI now explicitly checks out pull_request.head.sha; final head still requires a complete green run before merge readiness"
     },
     "responsive": ["344x792 folded", "873x1000 unfolded"],
     "physicalPixel9ProFold": "not yet run"
@@ -75,10 +78,12 @@
     "Search/Library membership rejects dangling title IDs",
     "D1 Library membership also rejects dangling canonical title IDs",
     "D1 canonical IDs are structurally tied to media type and TMDB ID",
+    "D1 provider upserts preserve known optional stable crosswalk IDs across later partial payloads",
     "D1 availability represents multiple option types for one title/service",
     "Worker personal routes fail closed without configured auth",
     "unexpected Worker failures do not return raw internal error messages",
     "service worker never app-shell caches personal API, cross-origin, or Authorization-bearing responses",
+    "pull-request CI validates the literal PR head SHA rather than relying only on GitHub's synthetic merge ref",
     "History and Library preserve their distinct streaming-service semantics",
     "Alerts remain NEW during first visit and are marked seen on page exit"
   ],
@@ -101,7 +106,7 @@
     "baselineMergeCommit": "438997dedc282366339e6507d826441d99a81adc",
     "currentBranch": "feat/worker-d1-foundation-v0110",
     "currentPr": 2,
-    "currentPrStatus": "open; validated candidate; never merge without explicit user authorization",
+    "currentPrStatus": "open; final exact-head validation pending; never merge without explicit user authorization",
     "cloudflareConnected": false
   },
   "absoluteRules": [
