@@ -1,10 +1,10 @@
 {
-  "_readMeFirst": "v0.14.0 introduces the reviewed frontend cache bridge boundary: D1 is the target durable source of truth, IndexedDB is the browser cache/offline layer, authenticated BackendSnapshot hydration is atomic, and production browser backend mode remains intentionally disabled until PWA origin/authentication and all required user mutations are ready.",
+  "_readMeFirst": "v0.14.0 introduces the frontend cache bridge boundary: D1 is the target durable source of truth, IndexedDB is the browser cache/offline layer, authenticated BackendSnapshot hydration is atomic and guarded against overwriting an existing local cache, and production browser backend mode remains intentionally disabled until local-state migration, PWA origin/authentication, and all required user mutations are ready.",
   "appVersion": "0.14.0",
   "cacheVersion": "streamarkr-v0.14.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-07T18:30:00Z",
+  "generatedAt": "2026-09-07T17:05:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -12,7 +12,7 @@
     "browserCache": "IndexedDB",
     "optionalStorage": "Cloudflare R2",
     "providers": "real Trakt/TMDB/Streaming Availability adapters",
-    "status": "Dedicated Worker/D1 backend is deployed and verified; v0.14.0 adds the browser cache bridge but production browser activation and live providers remain pending"
+    "status": "Dedicated Worker/D1 backend is deployed and verified; v0.14.0 adds a guarded browser cache bridge but production browser activation and live providers remain pending"
   },
   "currentToolchain": {
     "node": 22,
@@ -38,6 +38,8 @@
     "providerMode": "fake-adapters-only until explicit backend/browser activation",
     "backendCacheBridge": "src/lib/backend-cache.ts -> BackendClient.getSnapshot -> repo.applyBackendSnapshot -> atomic IndexedDB replacement",
     "offlineRule": "failed Worker fetch keeps prior IndexedDB cache; backend-hydrated cache is never overwritten by fixture seeding",
+    "initialActivationGuard": "a fixture/local cache cannot be replaced by a backend snapshot until a later explicit local-state migration/reset flow is implemented",
+    "backendCacheMutationMode": "local-only user mutations and synthetic provider sync are blocked while a Worker/D1 snapshot cache is active",
     "cacheBoundary": "same-origin unauthenticated app assets only; /api, cross-origin, and Authorization-bearing requests bypass Cache Storage"
   },
   "backendFoundation": {
@@ -135,7 +137,7 @@
     "v0140": {
       "pr": 8,
       "baseMainCommit": "d9dc0cda4cf57f2e9322739241ff65f4d09bbafb",
-      "newCoverage": ["atomic backend snapshot hydration", "offline fetch failure preserves cache", "backend cache survives fixture seeding", "unsupported backend schema fails before replacement", "IndexedDB v1->v2 preserves user-owned stores", "multi-option availability in IndexedDB v2"],
+      "newCoverage": ["atomic backend snapshot hydration", "malformed snapshot rows rejected before cache mutation", "offline fetch failure preserves cache", "backend cache survives fixture seeding", "initial backend takeover refuses to overwrite existing local state", "local-only mutations blocked in backend cache mode", "synthetic sync blocked in backend cache mode", "unsupported backend schema fails before replacement", "IndexedDB v1->v2 preserves user-owned stores", "multi-option availability in IndexedDB v2"],
       "productionWorkerAccessedByTests": false,
       "personalDataUsed": false,
       "liveProvidersUsed": false,
@@ -158,10 +160,13 @@
     "D1 canonical IDs are structurally tied to media type and TMDB ID",
     "D1 provider upserts preserve known optional stable crosswalk IDs across later partial payloads",
     "D1 and IndexedDB availability can retain multiple option types for one title/service",
-    "IndexedDB v1->v2 migration recreates only provider-owned availability and preserves user-owned stores",
+    "IndexedDB v1->v2 migration recreates/refills only provider-owned availability and preserves user-owned stores",
     "backend snapshot hydration is atomic across related IndexedDB cache stores",
+    "malformed snapshot key rows are rejected before any cache store is cleared",
     "failed backend refresh leaves prior offline cache untouched",
     "backend-hydrated cache is not overwritten by synthetic fixture seeding",
+    "initial backend activation cannot overwrite an existing fixture/local cache before local-state migration/reset is explicitly implemented",
+    "local-only user mutations and synthetic provider sync are blocked while backend cache mode is active",
     "Worker personal routes fail closed without configured auth",
     "unexpected Worker failures do not return raw internal error messages",
     "service worker never app-shell caches personal API, cross-origin, or Authorization-bearing responses",
@@ -172,6 +177,7 @@
     "normal main merges cannot be the production deployment trigger"
   ],
   "pendingIntegrations": [
+    "Migrate or explicitly reconcile existing local user-owned state into D1 before first browser backend activation",
     "Establish real PWA hosting origin and configure APP_ORIGIN",
     "Design secure browser authentication/bootstrap without embedding DEVICE_ACCESS_TOKEN in public source",
     "Route supported user mutations through BackendClient",
@@ -203,7 +209,9 @@
     "No production deploy without fresh explicit authorization",
     "No real/personal data in fixtures or automated QA",
     "Never overwrite user-owned data from provider refresh",
+    "Never overwrite existing local user-owned state during first backend cache activation without an explicit migration/reset step",
     "Never overwrite a valid backend-hydrated offline cache with demo fixtures",
+    "Never allow local-only user writes while a Worker/D1 snapshot cache is active",
     "Never cache personal API responses in the app-shell service-worker cache",
     "Never embed DEVICE_ACCESS_TOKEN in public frontend source or generated assets",
     "Never commit API keys, OAuth secrets/tokens, Cloudflare credentials, real D1 UUIDs, personal data, or BANDMARKR data",
