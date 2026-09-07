@@ -7,11 +7,13 @@ const db = await import('../src/lib/db.js');
 const repo = await import('../src/lib/repo.js');
 
 test('IndexedDB v1 to v2 migration preserves user-owned stores and refills only invalidated synthetic availability', async () => {
-  // Opening db.ts at DB_VERSION=2 triggers the synthetic v1 -> v2 upgrade. ensureSeeded then sees
-  // the persistent invalidation marker and refills provider-owned fixture availability exactly once.
+  // Opening db.ts at DB_VERSION=2 triggers the synthetic legacy v1 -> v2 upgrade. The old cache
+  // intentionally has no data_source marker; ensureSeeded must both refill provider availability
+  // and tag the surviving legacy cache as fixture/local data.
   await db.openDb();
   assert.equal((await db.getAll<any>('availability')).length, 0);
   assert.equal((await db.get<any>('meta', db.AVAILABILITY_CACHE_INVALIDATED_KEY))?.value, true);
+  assert.equal(await db.get('meta', 'data_source'), undefined);
 
   await repo.ensureSeeded();
 
@@ -25,6 +27,7 @@ test('IndexedDB v1 to v2 migration preserves user-owned stores and refills only 
   assert.equal(ratings[0]?.stars, 4);
   assert.ok(availability.length > 0);
   assert.equal(await db.get('meta', db.AVAILABILITY_CACHE_INVALIDATED_KEY), undefined);
+  assert.equal((await db.get<any>('meta', 'data_source'))?.value, 'fixtures');
 
   // The recreated v2 store must retain simultaneous option types for one title/service.
   await db.put('availability', { titleId: 'movie-preserved', serviceKey: 'netflix', optionType: 'subscription' });
