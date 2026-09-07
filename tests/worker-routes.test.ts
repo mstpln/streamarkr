@@ -11,11 +11,18 @@ class Statement implements D1PreparedStatement {
     this.db.touched += 1;
     if (this.sql.includes('app_meta')) return { value: '1' } as T;
     if (this.sql.includes('SELECT id FROM titles') && this.db.knownTitles.has(String(this.values[0]))) return { id: String(this.values[0]) } as T;
+    if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
+    if (this.sql.includes('SELECT episode_number FROM episodes') && this.db.knownEpisodes.has(`${this.values[0]}:${this.values[1]}:${this.values[2]}`)) {
+      return { episode_number: Number(this.values[2]) } as T;
+    }
     return null;
   }
   async all<T>(): Promise<D1Result<T>> {
     this.db.touched += 1;
     if (this.db.failReads) throw new Error('synthetic-sensitive-database-detail');
+    if (this.sql.includes('SELECT episode_number FROM episodes')) {
+      return { success: true, results: this.db.releasedEpisodeNumbers.map((episode_number) => ({ episode_number } as T)) };
+    }
     return { success: true, results: [] };
   }
   async run<T>(): Promise<D1Result<T>> { this.db.touched += 1; this.db.writes.push({ sql: this.sql, values: this.values }); return { success: true, results: [] }; }
@@ -23,10 +30,22 @@ class Statement implements D1PreparedStatement {
 class FakeDb implements D1Database {
   touched = 0;
   failReads = false;
-  knownTitles = new Set(['movie-1']);
+  knownTitles = new Set(['movie-1', 'series-1']);
+  knownServices = new Set(['netflix', 'hbo-max']);
+  knownEpisodes = new Set(['series-1:2:3']);
+  releasedEpisodeNumbers = [1, 2, 3];
   writes: { sql: string; values: D1Primitive[] }[] = [];
+  batches: { sql: string; values: D1Primitive[] }[][] = [];
   prepare(query: string): D1PreparedStatement { return new Statement(query, this); }
-  async batch<T>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> { this.touched += statements.length; return statements.map(() => ({ success: true, results: [] })); }
+  async batch<T>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
+    this.touched += statements.length;
+    const batch = statements.map((statement) => {
+      const item = statement as Statement;
+      return { sql: item.sql, values: item.values };
+    });
+    this.batches.push(batch);
+    return statements.map(() => ({ success: true, results: [] }));
+  }
   async exec(): Promise<{ count: number; duration: number }> { this.touched += 1; return { count: 0, duration: 0 }; }
 }
 function env(db = new FakeDb(), overrides: Partial<Env> = {}): Env {
@@ -85,6 +104,84 @@ test('library add is authenticated and writes only after canonical title existen
   assert.equal(response.status, 200);
   assert.equal(db.writes.length, 1);
   assert.match(db.writes[0].sql, /INSERT INTO library_items/);
+});
+
+test('watched-service route validates the service and persists or clears the durable selection', async () => {
+  const db = new FakeDb();
+  const put = await handleRequest(new Request('https://worker.example/api/watched-service/movie-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ serviceKey: 'netflix' })
+  }), env(db));
+  assert.equal(put.status, 200);
+  assert.match(db.writes.at(-1)?.sql ?? '', /INSERT INTO watched_service/);
+  assert.deepEqual(db.writes.at(-1)?.values.slice(0, 2), ['movie-1', 'netflix']);
+
+  const del = await handleRequest(new Request('https://worker.example/api/watched-service/movie-1', { method: 'DELETE', headers: authHeaders() }), env(db));
+  assert.equal(del.status, 204);
+  assert.match(db.writes.at(-1)?.sql ?? '', /DELETE FROM watched_service/);
+});
+
+test('unknown watched-service keys return a controlled conflict', async () => {
+  const db = new FakeDb();
+  const response = await handleRequest(new Request('https://worker.example/api/watched-service/movie-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ serviceKey: 'not-real' })
+  }), env(db));
+  assert.equal(response.status, 409);
+  assert.equal((await response.json() as any).error, 'missing_service');
+});
+
+test('movie and episode override routes validate scope and persist durable corrections', async () => {
+  const db = new FakeDb();
+  const movie = await handleRequest(new Request('https://worker.example/api/overrides/movie/movie-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ state: 'watched' })
+  }), env(db));
+  assert.equal(movie.status, 200);
+  assert.equal(db.writes.at(-1)?.values[1], 'movie');
+
+  const episode = await handleRequest(new Request('https://worker.example/api/overrides/episode/series-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ seasonNumber: 2, episodeNumber: 3, state: 'unwatched' })
+  }), env(db));
+  assert.equal(episode.status, 200);
+  assert.deepEqual(db.writes.at(-1)?.values.slice(1, 6), ['episode', 'series-1', 2, 3, 'unwatched']);
+});
+
+test('episode override rejects an episode that does not exist', async () => {
+  const db = new FakeDb();
+  const response = await handleRequest(new Request('https://worker.example/api/overrides/episode/series-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ seasonNumber: 2, episodeNumber: 99, state: 'watched' })
+  }), env(db));
+  assert.equal(response.status, 409);
+  assert.equal((await response.json() as any).error, 'missing_episode');
+});
+
+test('season override materializes only server-known released episodes and reports the affected count', async () => {
+  const db = new FakeDb();
+  const response = await handleRequest(new Request('https://worker.example/api/overrides/season/series-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ seasonNumber: 2, state: 'watched' })
+  }), env(db));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json() as any).affectedEpisodes, 3);
+  assert.equal(db.batches.length, 1);
+  assert.match(db.batches[0][0].sql, /DELETE FROM watch_overrides/);
+  assert.equal(db.batches[0].filter((entry) => /INSERT INTO watch_overrides/.test(entry.sql)).length, 3);
+});
+
+test('service preference and custom-service routes persist through D1', async () => {
+  const db = new FakeDb();
+  const selected = await handleRequest(new Request('https://worker.example/api/services/hbo-max/selected', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ selected: true })
+  }), env(db));
+  assert.equal(selected.status, 200);
+  assert.match(db.writes.at(-1)?.sql ?? '', /UPDATE services SET user_selected/);
+
+  const custom = await handleRequest(new Request('https://worker.example/api/services/custom', {
+    method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ displayName: 'Criterion Channel' })
+  }), env(db));
+  assert.equal(custom.status, 200);
+  assert.equal((await custom.json() as any).serviceKey, 'criterion-channel');
+  assert.match(db.writes.at(-1)?.sql ?? '', /INSERT INTO services/);
 });
 
 test('CORS is emitted only for the configured exact app origin', async () => {
