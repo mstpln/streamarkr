@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS titles (
   availability_id TEXT,
   title TEXT NOT NULL,
   year INTEGER NOT NULL,
-  UNIQUE (media_type, tmdb_id)
+  UNIQUE (media_type, tmdb_id),
+  CHECK (id = media_type || '-' || CAST(tmdb_id AS TEXT))
 );
 CREATE INDEX IF NOT EXISTS idx_titles_tmdb ON titles(media_type, tmdb_id);
 CREATE INDEX IF NOT EXISTS idx_titles_name ON titles(title COLLATE NOCASE);
