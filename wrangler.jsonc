@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "streamarkr-api",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-07",
+  "vars": {
+    "APP_ENV": "production"
+  },
+  "secrets": {
+    "required": ["DEVICE_ACCESS_TOKEN"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "streamarkr",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
