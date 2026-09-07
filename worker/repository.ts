@@ -39,6 +39,20 @@ export class MissingEpisodeError extends Error {
   }
 }
 
+export class MissingSeasonError extends Error {
+  constructor(titleId: string, seasonNumber: number) {
+    super(`Missing season record: ${titleId} S${seasonNumber}`);
+    this.name = 'MissingSeasonError';
+  }
+}
+
+export class InvalidOverrideScopeError extends Error {
+  constructor(titleId: string, expectedMediaType: Title['mediaType']) {
+    super(`Invalid override scope: ${titleId} must be a ${expectedMediaType}`);
+    this.name = 'InvalidOverrideScopeError';
+  }
+}
+
 function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
@@ -170,6 +184,12 @@ async function requireCanonicalTitle(db: D1Database, titleId: string): Promise<v
   if (!title) throw new MissingCanonicalTitleError(titleId);
 }
 
+async function requireTitleMediaType(db: D1Database, titleId: string, expectedMediaType: Title['mediaType']): Promise<void> {
+  const title = await db.prepare('SELECT media_type FROM titles WHERE id = ?').bind(titleId).first<{ media_type: string }>();
+  if (!title) throw new MissingCanonicalTitleError(titleId);
+  if (title.media_type !== expectedMediaType) throw new InvalidOverrideScopeError(titleId, expectedMediaType);
+}
+
 async function requireService(db: D1Database, serviceKey: string): Promise<void> {
   const service = await db.prepare('SELECT service_key FROM services WHERE service_key = ?').bind(serviceKey).first<{ service_key: string }>();
   if (!service) throw new MissingServiceError(serviceKey);
@@ -179,6 +199,12 @@ async function requireEpisode(db: D1Database, titleId: string, seasonNumber: num
   const episode = await db.prepare('SELECT episode_number FROM episodes WHERE title_id = ? AND season_number = ? AND episode_number = ?')
     .bind(titleId, seasonNumber, episodeNumber).first<{ episode_number: number }>();
   if (!episode) throw new MissingEpisodeError(titleId, seasonNumber, episodeNumber);
+}
+
+async function requireSeason(db: D1Database, titleId: string, seasonNumber: number): Promise<void> {
+  const season = await db.prepare('SELECT season_number FROM seasons WHERE title_id = ? AND season_number = ?')
+    .bind(titleId, seasonNumber).first<{ season_number: number }>();
+  if (!season) throw new MissingSeasonError(titleId, seasonNumber);
 }
 
 export async function upsertTitle(db: D1Database, title: Title): Promise<void> {
@@ -250,7 +276,7 @@ export async function setMovieOverride(
   now: string,
   id = `ov-api-${crypto.randomUUID()}`
 ): Promise<void> {
-  await requireCanonicalTitle(db, titleId);
+  await requireTitleMediaType(db, titleId, 'movie');
   await run(db, overrideInsertSql(), [id, 'movie', titleId, null, null, state, now]);
 }
 
@@ -263,7 +289,7 @@ export async function setEpisodeOverride(
   now: string,
   id = `ov-api-${crypto.randomUUID()}`
 ): Promise<void> {
-  await requireCanonicalTitle(db, titleId);
+  await requireTitleMediaType(db, titleId, 'series');
   await requireEpisode(db, titleId, seasonNumber, episodeNumber);
   await run(db, overrideInsertSql(), [id, 'episode', titleId, seasonNumber, episodeNumber, state, now]);
 }
@@ -278,7 +304,8 @@ export async function setSeasonOverride(
   state: WatchOverride['state'],
   now: string
 ): Promise<number> {
-  await requireCanonicalTitle(db, titleId);
+  await requireTitleMediaType(db, titleId, 'series');
+  await requireSeason(db, titleId, seasonNumber);
   const date = now.slice(0, 10);
   const result = await db.prepare(`SELECT episode_number FROM episodes
     WHERE title_id = ? AND season_number = ? AND air_date IS NOT NULL AND air_date <= ?
