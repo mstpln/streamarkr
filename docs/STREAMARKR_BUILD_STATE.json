@@ -1,10 +1,10 @@
 {
-  "_readMeFirst": "v0.14.0 introduces the frontend cache bridge boundary: D1 is the target durable source of truth, IndexedDB is the browser cache/offline layer, authenticated BackendSnapshot hydration is atomic and guarded against overwriting existing or legacy local caches, and production browser backend mode remains intentionally disabled until local-state migration, PWA origin/authentication, and all required user mutations are ready.",
-  "appVersion": "0.14.0",
-  "cacheVersion": "streamarkr-v0.14.0",
+  "_readMeFirst": "v0.15.0 adds the durable Worker/BackendClient user-state mutation surface needed before browser backend activation. D1 remains the target durable source of truth, IndexedDB remains the browser cache/offline layer, and production browser mode remains intentionally disabled until safe authentication, local-state migration/reconciliation, real PWA origin and UI write routing are complete.",
+  "appVersion": "0.15.0",
+  "cacheVersion": "streamarkr-v0.15.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-07T17:35:00Z",
+  "generatedAt": "2026-09-07T19:45:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -12,7 +12,7 @@
     "browserCache": "IndexedDB",
     "optionalStorage": "Cloudflare R2",
     "providers": "real Trakt/TMDB/Streaming Availability adapters",
-    "status": "Dedicated Worker/D1 backend is deployed and verified; v0.14.0 adds a guarded browser cache bridge but production browser activation and live providers remain pending"
+    "status": "Dedicated Worker/D1 backend is deployed and verified; v0.14.0 added the guarded browser cache bridge and v0.15.0 adds the remaining core user-state Worker routes, while production browser activation and live providers remain pending"
   },
   "currentToolchain": {
     "node": 22,
@@ -40,7 +40,7 @@
     "offlineRule": "failed Worker fetch keeps prior IndexedDB cache; backend-hydrated cache is never overwritten by fixture seeding",
     "initialActivationGuard": "backend takeover is allowed only for a genuinely empty cache; fixture/local and legacy non-empty caches require later explicit migration/reset",
     "legacyCacheRule": "v0.13-and-older caches without data_source are detected from actual stored rows and tagged as fixtures on normal startup",
-    "backendCacheMutationMode": "local-only user mutations and synthetic provider sync are blocked while a Worker/D1 snapshot cache is active",
+    "backendCacheMutationMode": "local-only user mutations and synthetic provider sync remain blocked while a Worker/D1 snapshot cache is active until active UI writes are routed through BackendClient",
     "cacheBoundary": "same-origin unauthenticated app assets only; /api, cross-origin, and Authorization-bearing requests bypass Cache Storage"
   },
   "backendFoundation": {
@@ -54,7 +54,11 @@
     "d1AvailabilityKey": ["title_id", "service_key", "option_type"],
     "canonicalTitleKey": "${media_type}-${tmdb_id}, enforced by D1 CHECK plus UNIQUE(media_type, tmdb_id)",
     "crosswalkUpsertRule": "later partial provider payloads preserve already-known Trakt/IMDb/availability IDs when the incoming field is omitted",
-    "canonicalMutationPrecondition": "Library and rating writes require an existing canonical title and return a controlled conflict when it is missing",
+    "canonicalMutationPrecondition": "Library/rating/watched-service/override writes validate their canonical references before durable mutation",
+    "userMutationRoutes": ["library add/remove", "rating set/clear", "alerts seen", "watched-service set/clear", "movie override", "episode override", "bounded season override", "service selection", "custom service creation"],
+    "seasonOverrideRule": "server selects episodes known and released at action date, removes legacy season wildcard, and materializes episode-level overrides in one D1 batch; season zero specials are valid",
+    "customServiceKeyRule": "trim, lowercase, collapse non-alphanumeric runs to hyphens, trim leading/trailing hyphens",
+    "overrideScopeRule": "movie override API accepts movie canonical IDs only; episode/season override APIs accept series canonical IDs only before D1 access",
     "auth": "Bearer device token from Worker DEVICE_ACCESS_TOKEN secret; fail closed if unconfigured",
     "browserAuth": "not activated; production PWA must not embed DEVICE_ACCESS_TOKEN in public source/generated assets",
     "cors": "exact APP_ORIGIN only; APP_ORIGIN intentionally not set until real PWA origin exists",
@@ -91,7 +95,8 @@
     "futureProductionDeploymentsRequireFreshExplicitAuthorization": true,
     "firstRealDeploymentCommit": "0c62c574a2680a01ae06dde2c1362e2ec1b5369a",
     "deployedReviewedMainCommit": "73359c56825ea7d9b6bfa1245f513d23c9e08e30",
-    "v0140ProductionDeploymentAuthorized": false
+    "v0140ProductionDeploymentAuthorized": false,
+    "v0150ProductionDeploymentAuthorized": false
   },
   "implementedScreens": ["home", "library", "history", "search", "discover", "detail", "alerts", "settings"],
   "validation": {
@@ -104,12 +109,12 @@
       "mergeCommit": "65fba889597a22f7703b3337833fc1f0ca3c5cb1",
       "logicRepositoryWorkerClientSecurityTests": {"count": 120, "pass": 120, "fail": 0},
       "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
-      "browserQa": {"checks": 27, "pass": 27, "fail": 0,"consoleOrPageErrors": 0}
+      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
     },
     "v0120": {
       "mergeCommit": "02238c00150b059e9f73cb768e87a62a0d8b25e9",
       "wranglerLocalD1": "pass on exact final PR head with Wrangler 4.129.0",
-      "browserQa": {"checks": 27, "pass": 27, "fail": 0,"consoleOrPageErrors": 0}
+      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
     },
     "v0130": {
       "activationConfigPr": 4,
@@ -123,7 +128,7 @@
       "logicRepositoryWorkerClientSecurityDeploymentTests": {"count": 126, "pass": 126, "fail": 0},
       "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
       "wranglerLocalD1": "pass with Wrangler 4.129.0",
-      "browserQa": {"checks": 27, "pass": 27, "fail": 0,"consoleOrPageErrors": 0},
+      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0},
       "manualCloudflareActivation": {
         "buildDeploy": "pass",
         "health": {"ok": true, "service": "streamarkr-worker", "schemaVersion": 1, "authConfigured": true},
@@ -138,15 +143,30 @@
     "v0140": {
       "pr": 8,
       "baseMainCommit": "d9dc0cda4cf57f2e9322739241ff65f4d09bbafb",
-      "implementationCandidateTests": {"count": 137, "pass": 137, "fail": 0, "suites": 26},
-      "implementationCandidateD1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
-      "implementationCandidateWranglerLocalD1": "pass with Wrangler 4.129.0",
+      "finalReviewedHead": "469235cc3e7ffe0df614b612bc73480cf4fd6da1",
+      "mergeCommit": "f6e6d4a04aa011e91036a773655e9572e2c6ded6",
+      "ciRun": 123,
+      "tests": {"count": 137, "pass": 137, "fail": 0, "suites": 26},
+      "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
+      "wranglerLocalD1": "pass with Wrangler 4.129.0",
+      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0},
       "newCoverage": ["atomic backend snapshot hydration", "malformed snapshot rows rejected before cache mutation", "offline fetch failure preserves cache", "backend cache survives fixture seeding", "initial backend takeover refuses existing local state", "legacy non-empty cache without data_source cannot be mistaken for empty", "legacy startup assigns fixture provenance", "local-only mutations blocked in backend cache mode", "synthetic sync blocked in backend cache mode", "unsupported backend schema fails before replacement", "IndexedDB v1->v2 preserves user-owned stores", "availability invalidation marker is atomic with v1->v2 upgrade", "multi-option availability in IndexedDB v2"],
       "productionWorkerAccessedByTests": false,
       "personalDataUsed": false,
       "liveProvidersUsed": false,
+      "bandmarkrAccessed": false
+    },
+    "v0150": {
+      "pr": 9,
+      "baseMainCommit": "f6e6d4a04aa011e91036a773655e9572e2c6ded6",
+      "initialImplementationCiRun": 125,
+      "initialImplementationCi": "pass before subsequent review hardening",
+      "newCoverage": ["watched-service set/clear", "canonical title and known service validation", "movie watched/unwatched override", "episode watched/unwatched override", "unknown episode conflict", "movie/series override scope rejection before D1 access", "season-zero specials", "bounded server-side season bulk materialization", "service selection", "custom service creation", "route-safe custom service key normalization", "expanded BackendClient requests"],
+      "productionWorkerAccessedByTests": false,
+      "personalDataUsed": false,
+      "liveProvidersUsed": false,
       "bandmarkrAccessed": false,
-      "finalExactHeadValidation": "full CI and browser QA required on unchanged documentation-inclusive PR head before merge"
+      "finalExactHeadValidation": "pending complete CI/browser QA on the unchanged documentation-inclusive final PR head"
     },
     "responsive": ["344x792 folded", "873x1000 unfolded"],
     "physicalPixel9ProFold": "not yet run"
@@ -155,12 +175,17 @@
     "Caught Up requires no gaps through the engaged season while untouched newer seasons are ignored until started",
     "On Hold and Watching Now use real watch timestamps, not manual correction changedAt",
     "Finished series requires provider status Ended",
-    "season bulk overrides are bounded to currently known/released episodes",
+    "season bulk overrides are bounded to currently known/released episodes and are materialized as episode-level rows so future episodes never inherit an old decision",
+    "season zero specials are valid for episode and season override routes",
     "New Season supports future seasons before episode records exist",
     "availability alerts are transition/cycle-aware",
     "provider-owned availability reconciliation never touches user-owned stores",
     "Search/Library membership rejects dangling title IDs",
     "D1 Library and rating writes reject missing canonical title IDs as controlled conflicts",
+    "D1 watched-service writes require both canonical title and known service",
+    "D1 episode override writes require an existing episode",
+    "Worker override routes reject media-type scope mismatches before D1 access",
+    "custom service keys normalize punctuation and whitespace to route-safe lowercase hyphenated keys",
     "D1 canonical IDs are structurally tied to media type and TMDB ID",
     "D1 provider upserts preserve known optional stable crosswalk IDs across later partial payloads",
     "D1 and IndexedDB availability can retain multiple option types for one title/service",
@@ -182,12 +207,12 @@
     "normal main merges cannot be the production deployment trigger"
   ],
   "pendingIntegrations": [
+    "Complete PR #9 exact-head validation and merge only after explicit user authorization",
+    "Design secure browser authentication/bootstrap without embedding DEVICE_ACCESS_TOKEN in public source",
     "Migrate or explicitly reconcile existing local user-owned state into D1 before first browser backend activation",
     "Establish real PWA hosting origin and configure APP_ORIGIN",
-    "Design secure browser authentication/bootstrap without embedding DEVICE_ACCESS_TOKEN in public source",
-    "Route supported user mutations through BackendClient",
-    "Add Worker routes for watched-service, manual overrides and service preferences",
-    "Activate backend mode only after read/write ownership is complete",
+    "Route active UI user mutations through BackendClient",
+    "Activate backend mode only after read/write ownership, auth and local-state migration are complete",
     "Real Trakt OAuth + history sync",
     "Real TMDB metadata/search/trailer API",
     "Real Streaming Availability API",
@@ -198,7 +223,8 @@
     "fullName": "mstpln/streamarkr",
     "visibility": "public",
     "defaultBranch": "main",
-    "baseMainCommitForV0140": "d9dc0cda4cf57f2e9322739241ff65f4d09bbafb",
+    "lastImplementationMergeCommit": "f6e6d4a04aa011e91036a773655e9572e2c6ded6",
+    "baseMainCommitForV0150": "f6e6d4a04aa011e91036a773655e9572e2c6ded6",
     "baselinePr": 1,
     "backendFoundationPr": 2,
     "wranglerLocalPr": 3,
@@ -206,6 +232,7 @@
     "cloudflareMigrationFixPr": 6,
     "cloudflareContinuityPr": 7,
     "backendCacheBridgePr": 8,
+    "backendUserStatePr": 9,
     "cloudflareResourcesConnected": true,
     "cloudflareBackendActivated": true
   },
