@@ -125,7 +125,8 @@ export async function replaceStores(replacements: Array<{ store: StoreName; valu
       for (const value of replacement.values) os.put(value as any);
     }
     t.oncomplete = () => resolve();
-    t.onerror = () => reject(t.error);
+    t.onerror = () => reject(t.error ?? new Error('IndexedDB cache replacement failed'));
+    t.onabort = () => reject(t.error ?? new Error('IndexedDB cache replacement aborted'));
   });
 }
 
