@@ -4,9 +4,9 @@ Streamarkr is a personal movie and TV tracking PWA for keeping a clean view of w
 
 ## Current status
 
-The repository contains the validated synthetic/local PWA baseline, the **v0.11.0 source-level Worker + D1 backend foundation**, and the **v0.12.0 Wrangler-local D1 validation layer**. The working UI still uses IndexedDB and synthetic providers while the backend migration is staged safely.
+The repository contains the validated synthetic/local PWA baseline, the **v0.11.0 source-level Worker + D1 backend foundation**, the **v0.12.0 Wrangler-local D1 validation layer**, and the **v0.13.0 guarded Cloudflare activation configuration**. The working UI still uses IndexedDB and synthetic providers while the backend migration is staged safely.
 
-The Worker/D1 source is not deployed and no Cloudflare resource, real provider connection, API key, OAuth token, or personal viewing data is present in this public repository. All automated QA remains synthetic-only.
+A dedicated Streamarkr D1 database (`streamarkr`) and Worker (`streamarkr-api`) now exist in the user's Cloudflare account and are bound as `DB`. The currently active Worker deployment is still Cloudflare's temporary Hello World starter; the Streamarkr schema has not yet been migrated remotely and the reviewed Streamarkr Worker source has not yet been deployed. No real provider connection, API key, OAuth token, personal viewing data, D1 UUID, or Cloudflare credential is present in this public repository.
 
 The target architecture remains Vite + TypeScript, a separate Cloudflare Worker, a separate D1 database, optional R2 if justified, and real Trakt/TMDB/streaming-availability adapters as defined in the build plan.
 
@@ -33,7 +33,7 @@ Type-check the Worker foundation:
 npm run build:worker
 ```
 
-Run deterministic logic/repository/Worker/client tests:
+Run deterministic logic/repository/Worker/client/deployment-config tests:
 ```bash
 npm test
 ```
@@ -60,9 +60,23 @@ npm run qa:browser
 
 ## Cloudflare activation
 
-`wrangler.local.jsonc` is local-only and contains only a non-production placeholder identifier. `wrangler.example.jsonc` and `.dev.vars.example` remain examples for later account-level activation. None contains usable credentials or a real D1 binding. See `docs/CLOUDFLARE_FOUNDATION.md` before any account-level setup.
+`wrangler.local.jsonc` remains strictly local-only. The committed `wrangler.jsonc` identifies only the dedicated Worker name and required secret name; it contains no real D1 UUID or secret value.
 
-Do not create, bind, migrate or deploy Streamarkr against BANDMARKR infrastructure. Streamarkr Worker, D1, secrets and any future R2 storage must remain completely separate.
+Remote deployment uses `scripts/prepare-cloudflare-deploy.mjs` plus the guarded `scripts/deploy-cloudflare.mjs` wrapper. The build-only `STREAMARKR_D1_DATABASE_ID` is validated as a non-placeholder UUID and written only into ignored `.wrangler/deploy/` configuration. Before any remote D1 write, deployment verifies that `DEVICE_ACCESS_TOKEN` already exists on `streamarkr-api`; it then applies pending migrations specifically to the named remote database `streamarkr` and deploys the Worker with Wrangler automatic provisioning/auto-create explicitly disabled. Dashboard-managed variables are preserved.
+
+The intended Cloudflare Workers Builds setup is:
+- repository: `mstpln/streamarkr`;
+- Worker: `streamarkr-api`;
+- production deployment branch: a dedicated deployment branch advanced only after explicit user authorization, not `main`;
+- build command: `npm run build:cloudflare`;
+- deploy command: `npm run deploy:cloudflare`;
+- non-production branch builds disabled;
+- build variable `NODE_VERSION=22`;
+- build secret `STREAMARKR_D1_DATABASE_ID` set to the dedicated `streamarkr` D1 UUID;
+- runtime secret `DEVICE_ACCESS_TOKEN` configured in Worker Variables & Secrets before the first Streamarkr deployment;
+- a user-scoped Workers Builds token with the normal Worker deployment permissions **plus D1 Edit**, scoped to the Streamarkr account. Cloudflare's automatically generated Workers Builds token currently does not include D1 Edit by default.
+
+This separation prevents an ordinary merge to `main` from silently becoming a production deployment. Do not create, bind, migrate or deploy Streamarkr against BANDMARKR infrastructure. Streamarkr Worker, D1, secrets and any future R2 storage must remain completely separate.
 
 ## Engineering continuity
 Read these before making substantial changes:
