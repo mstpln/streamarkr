@@ -35,8 +35,21 @@ export async function ensureSeeded(): Promise<void> {
   // fixtures just because the app starts while the Worker is unavailable.
   if (source?.value === 'backend') return;
 
-  const flag = await db.get<{ key: string; value: boolean }>('meta', SEED_FLAG);
-  if (flag?.value) return;
+  const [flag, availabilityInvalidated] = await Promise.all([
+    db.get<{ key: string; value: boolean }>('meta', SEED_FLAG),
+    db.get<{ key: string; value: boolean }>('meta', db.AVAILABILITY_CACHE_INVALIDATED_KEY)
+  ]);
+  if (flag?.value) {
+    // v1 -> v2 deliberately drops only provider-owned availability to change its key. Existing
+    // synthetic installs have seeded_v1=true, so refill exactly that cache once and preserve every
+    // user-owned store rather than re-running the full fixture seed.
+    if (availabilityInvalidated?.value) {
+      await db.putAll('availability', F.AVAILABILITY);
+      await db.del('meta', db.AVAILABILITY_CACHE_INVALIDATED_KEY);
+    }
+    return;
+  }
+
   await db.putAll('titles', F.TITLES);
   await db.putAll('title_metadata', F.TITLE_METADATA);
   await db.putAll('seasons', F.SEASONS);
