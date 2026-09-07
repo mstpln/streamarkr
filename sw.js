@@ -18,52 +18,45 @@ self.addEventListener('install', (event) => {
       const cache = await caches.open(CACHE_VERSION);
       await cache.addAll(APP_SHELL);
       try {
-        const response = await fetch('./sw-manifest.json', { cache: 'no-store' });
-        if (response.ok) {
-          const modules = await response.json();
-          await cache.addAll(modules);
+        const manifestRes = await fetch('./sw-manifest.json', { cache: 'no-store' });
+        if (manifestRes.ok) {
+          const { files } = await manifestRes.json();
+          if (Array.isArray(files) && files.length) await cache.addAll(files);
         }
       } catch {
-        // Keep install resilient if the generated module manifest is unavailable.
+        // Fetch-time caching remains a fallback if the generated manifest is temporarily unavailable.
       }
+      await self.skipWaiting();
     })()
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    (async () => {
-      const keys = await caches.keys();
-      await Promise.all(keys.filter((key) => key !== CACHE_VERSION).map((key) => caches.delete(key)));
-      await self.clients.claim();
-    })()
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
-  const request = event.request;
-  if (request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  const isPersonalApi = url.pathname.startsWith('/api/');
+  const hasAuthorization = event.request.headers.has('authorization');
 
-  const url = new URL(request.url);
-  if (
-    url.origin !== self.location.origin ||
-    url.pathname.startsWith('/api/') ||
-    request.headers.has('authorization')
-  ) {
-    return;
-  }
+  // Cache only same-origin unauthenticated app assets. This prevents Worker snapshot/personal-data
+  // responses from entering Cache Storage when the PWA and API eventually share an origin, and
+  // also avoids caching cross-origin API responses if the Worker is hosted separately.
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin || isPersonalApi || hasAuthorization) return;
 
   event.respondWith(
-    (async () => {
-      const cached = await caches.match(request);
-      if (cached) return cached;
-      const response = await fetch(request);
-      if (response.ok) {
-        const cache = await caches.open(CACHE_VERSION);
-        await cache.put(request, response.clone());
-      }
-      return response;
-    })()
+    caches.match(event.request).then((cached) => {
+      const network = fetch(event.request)
+        .then((response) => {
+          if (response.ok) caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, response.clone()));
+          return response;
+        })
+        .catch(() => cached);
+      return cached ?? network;
+    })
   );
 });
