@@ -68,6 +68,13 @@ test('failed Worker refresh leaves the existing offline cache untouched', async 
   assert.deepEqual(await repo.backendCacheInfo(), { active: true, generatedAt: snapshot().generatedAt });
 });
 
+test('synthetic provider sync cannot mutate a hydrated Worker/D1 cache', async () => {
+  await repo.applyBackendSnapshot(snapshot());
+  await assert.rejects(() => repo.syncNow(), /Synthetic provider sync is disabled/);
+  assert.deepEqual((await repo.allTitles()).map((title) => title.id), ['movie-42']);
+  assert.equal((await repo.allAvailability()).length, 2);
+});
+
 test('ensureSeeded never overwrites a hydrated backend cache while offline', async () => {
   await repo.applyBackendSnapshot(snapshot());
   await repo.ensureSeeded();
