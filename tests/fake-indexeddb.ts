@@ -53,6 +53,7 @@ class FakeObjectStore {
 class FakeTransaction {
   oncomplete: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  onabort: (() => void) | null = null;
   error: any = null;
   constructor(private db: FakeIDBDatabase) {
     queueMicrotask(() => queueMicrotask(() => queueMicrotask(() => { this.oncomplete?.(); })));
@@ -110,6 +111,10 @@ class FakeIDBFactory {
       db.seedStore('availability', ['titleId', 'serviceKey'], [
         { titleId: 'movie-stale', serviceKey: 'netflix', optionType: 'subscription' }
       ]);
+      db.seedStore('meta', 'key', [
+        { key: 'seeded_v1', value: true },
+        { key: 'data_source', value: 'fixtures' }
+      ]);
       this.dbs.set('streamarkr', db);
     }
   }
@@ -135,9 +140,9 @@ export function installFakeIndexedDB(): void {
   (globalThis as any).indexedDB = new FakeIDBFactory();
 }
 
-/** Installs a synthetic v1 Streamarkr database containing user-owned rows plus stale provider
- * availability. Used to verify the v2 key migration preserves user data while recreating only the
- * provider-owned availability cache. */
+/** Installs a synthetic v1 Streamarkr database containing user-owned rows, seeded fixture metadata
+ * and stale provider availability. Used to verify the v2 key migration preserves user data while
+ * recreating/refilling only the provider-owned availability cache. */
 export function installFakeIndexedDBV1(): void {
   (globalThis as any).indexedDB = new FakeIDBFactory(true);
 }
