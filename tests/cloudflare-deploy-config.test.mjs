@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { assertRequiredSecretNames } from '../scripts/deploy-cloudflare.mjs';
+import { assertDedicatedD1Info, assertRequiredSecretNames } from '../scripts/deploy-cloudflare.mjs';
 import {
   buildRemoteConfig,
   prepareCloudflareDeploy,
@@ -35,6 +35,19 @@ test('builds only the dedicated Streamarkr Worker and D1 binding', () => {
   assert.doesNotMatch(JSON.stringify(config), /bandmarkr/i);
 });
 
+test('refuses remote migration/deployment when D1 name and configured UUID do not match', () => {
+  assert.doesNotThrow(() => assertDedicatedD1Info({ name: 'streamarkr', uuid: SYNTHETIC_D1_ID }, SYNTHETIC_D1_ID));
+  assert.throws(
+    () => assertDedicatedD1Info({ name: 'different-db', uuid: SYNTHETIC_D1_ID }, SYNTHETIC_D1_ID),
+    /does not match the dedicated Streamarkr database/
+  );
+  assert.throws(
+    () => assertDedicatedD1Info({ name: 'streamarkr', uuid: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }, SYNTHETIC_D1_ID),
+    /does not match the dedicated Streamarkr database/
+  );
+  assert.throws(() => assertDedicatedD1Info(null, SYNTHETIC_D1_ID), /Could not verify/);
+});
+
 test('refuses remote migration/deployment when the device secret is absent', () => {
   assert.doesNotThrow(() => assertRequiredSecretNames([{ name: 'DEVICE_ACCESS_TOKEN', type: 'secret_text' }]));
   assert.throws(() => assertRequiredSecretNames([]), /refusing to migrate or deploy/);
@@ -55,8 +68,11 @@ test('committed Wrangler config is account-neutral and deployment is guarded', a
   assert.match(gitignore, /^\.wrangler\/$/m);
   assert.equal(packageJson.scripts['deploy:cloudflare'], 'node scripts/deploy-cloudflare.mjs');
 
+  assert.match(deployScript, /'d1', 'info', EXPECTED_D1_NAME/);
+  assert.match(deployScript, /ACCOUNT_NEUTRAL_CONFIG_PATH/);
+  assert.match(deployScript, /assertDedicatedD1Info/);
   assert.match(deployScript, /secret', 'list'/);
-  assert.match(deployScript, /'d1', 'migrations', 'apply', 'streamarkr'/);
+  assert.match(deployScript, /'d1', 'migrations', 'apply', EXPECTED_D1_NAME/);
   assert.match(deployScript, /'--remote', '--yes'/);
   assert.match(deployScript, /'deploy'/);
   assert.match(deployScript, /--x-provision=false/);
