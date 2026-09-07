@@ -4,6 +4,7 @@
 
 const DB_NAME = 'streamarkr';
 const DB_VERSION = 2;
+export const AVAILABILITY_CACHE_INVALIDATED_KEY = 'availability_cache_invalidated_v2';
 
 export const STORES = [
   'titles',
@@ -47,15 +48,19 @@ export function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
+    let availabilityCacheInvalidated = false;
     req.onupgradeneeded = (event) => {
       const db = req.result;
       const oldVersion = (event as IDBVersionChangeEvent).oldVersion;
 
       // v1 used [titleId, serviceKey], which could not retain simultaneous subscription/rent/buy
       // rows. Availability is provider-owned cache data, so deleting/recreating only this store is
-      // the safe migration; user-owned stores are preserved intact.
-      if (oldVersion < 2 && db.objectStoreNames.contains('availability')) {
+      // the safe migration; user-owned stores are preserved intact. Persist an invalidation marker
+      // after upgrade so synthetic mode can refill this cache exactly once instead of silently
+      // losing availability while the old seeded_v1 flag remains true.
+      if (oldVersion > 0 && oldVersion < 2 && db.objectStoreNames.contains('availability')) {
         db.deleteObjectStore('availability');
+        availabilityCacheInvalidated = true;
       }
 
       for (const name of STORES) {
@@ -64,7 +69,17 @@ export function openDb(): Promise<IDBDatabase> {
         }
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      if (!availabilityCacheInvalidated) {
+        resolve(req.result);
+        return;
+      }
+      const t = req.result.transaction(['meta'], 'readwrite');
+      t.objectStore('meta').put({ key: AVAILABILITY_CACHE_INVALIDATED_KEY, value: true });
+      t.oncomplete = () => resolve(req.result);
+      t.onerror = () => reject(t.error);
+      t.onabort = () => reject(t.error ?? new Error('IndexedDB availability migration marker aborted'));
+    };
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
