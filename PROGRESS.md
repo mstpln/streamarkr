@@ -50,8 +50,9 @@ Implemented on the current branch:
 - account-neutral committed `wrangler.jsonc` with exact Worker name `streamarkr-api`, source entrypoint, `keep_vars: true`, and required secret declaration for `DEVICE_ACCESS_TOKEN`;
 - no real D1 UUID or secret value in repository source;
 - `scripts/prepare-cloudflare-deploy.mjs` validates build-only `STREAMARKR_D1_DATABASE_ID` and generates the account-specific `DB` -> `streamarkr` binding only under ignored `.wrangler/deploy/` state;
-- deployment script applies pending committed migrations to `DB` with `--remote --yes`, then deploys the Worker, with Wrangler automatic provisioning and auto-create disabled for both commands;
-- deterministic deployment-config tests use only a synthetic UUID and assert exact Streamarkr names plus BANDMARKR isolation;
+- guarded deployment preflights the existing Worker secret metadata and refuses to mutate D1 unless `DEVICE_ACCESS_TOKEN` is already configured;
+- deployment applies pending committed migrations specifically to named remote database `streamarkr` with `--remote --yes`, then deploys the Worker, with Wrangler automatic provisioning and auto-create disabled for all account operations;
+- deterministic deployment-config tests use only a synthetic UUID and verify the secret preflight, exact Streamarkr names and BANDMARKR isolation;
 - package/lockfile version state synchronized;
 - continuity documentation updated to record the manually-created resources and the fact that the active Worker is still only the temporary starter;
 - deployment policy hardened so normal `main` merges do not automatically become production deployments.
@@ -75,10 +76,11 @@ Even after the PR is merged, **do not deploy automatically**. The first real Str
 ## Next work after v0.13.0 merge
 1. Configure `DEVICE_ACCESS_TOKEN` as a Worker runtime secret in Cloudflare.
 2. Connect the existing `streamarkr-api` Worker to `mstpln/streamarkr` using a dedicated production deployment branch, not `main`.
-3. Disable non-production branch builds and set masked build secret `STREAMARKR_D1_DATABASE_ID` to the dedicated `streamarkr` database UUID.
-4. With explicit user authorization, advance the deployment branch to the reviewed/merged commit. That build applies the initial D1 migration and deploys the reviewed Streamarkr Worker.
-5. Verify `/api/health` and D1 migration state with no personal data.
-6. Then continue backend migration and real providers in focused builds: UI repository -> Worker, TMDB, Trakt OAuth/history, streaming availability.
+3. Disable non-production branch builds, set build variable `NODE_VERSION=22`, and set masked build secret `STREAMARKR_D1_DATABASE_ID` to the dedicated `streamarkr` database UUID.
+4. Use a user-scoped Workers Builds token with Worker deployment permission plus **D1 Edit**, scoped to the Streamarkr account; the automatically-created default Workers Builds token does not currently include D1 Edit.
+5. With explicit user authorization, advance the deployment branch to the reviewed/merged commit. That build applies the initial D1 migration and deploys the reviewed Streamarkr Worker.
+6. Verify `/api/health` and D1 migration state with no personal data.
+7. Then continue backend migration and real providers in focused builds: UI repository -> Worker, TMDB, Trakt OAuth/history, streaming availability.
 
 ## Remaining V1 limitations
 - Current PWA still uses IndexedDB + synthetic providers.
