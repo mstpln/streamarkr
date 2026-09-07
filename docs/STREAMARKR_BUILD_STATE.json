@@ -3,7 +3,7 @@
   "appVersion": "0.11.0",
   "cacheVersion": "streamarkr-v0.11.0",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-07T06:58:00Z",
+  "generatedAt": "2026-09-07T07:06:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -56,13 +56,12 @@
       "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
     },
     "v0110": {
-      "lastCompletedReviewedHead": "f21c4d06571cd0fe608e7f8a413d58bae1564393",
-      "pwaBuild": "pass",
-      "workerTypecheck": "pass",
+      "pwaBuild": "pass on reviewed candidate heads",
+      "workerTypecheck": "pass on reviewed candidate heads",
       "logicRepositoryWorkerClientSecurityTests": {"count": 119, "pass": 119, "fail": 0},
       "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
       "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0},
-      "exactHeadCheckout": "CI now explicitly checks out pull_request.head.sha; final head still requires a complete green run before merge readiness"
+      "exactHeadCheckout": "pull-request CI explicitly checks out pull_request.head.sha; merge readiness always requires both CI jobs green on the literal final head"
     },
     "responsive": ["344x792 folded", "873x1000 unfolded"],
     "physicalPixel9ProFold": "not yet run"
@@ -106,7 +105,7 @@
     "baselineMergeCommit": "438997dedc282366339e6507d826441d99a81adc",
     "currentBranch": "feat/worker-d1-foundation-v0110",
     "currentPr": 2,
-    "currentPrStatus": "open; final exact-head validation pending; never merge without explicit user authorization",
+    "currentPrStatus": "open; exact-final-head CI gate required; never merge without explicit user authorization",
     "cloudflareConnected": false
   },
   "absoluteRules": [
