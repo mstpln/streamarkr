@@ -19,7 +19,6 @@ export const STORES = [
   'availability',
   'alerts',
   'sync_state',
-  'backend_outbox',
   'meta'
 ] as const;
 
@@ -39,7 +38,6 @@ const KEY_PATHS: Record<StoreName, string | string[]> = {
   availability: ['titleId', 'serviceKey', 'optionType'],
   alerts: 'id',
   sync_state: 'syncType',
-  backend_outbox: 'id',
   meta: 'key'
 };
 
