@@ -62,12 +62,14 @@ It deliberately does **not** contain the real D1 UUID.
 
 The generated file and Wrangler redirect file live under `.wrangler/`, which is gitignored. The script never prints the UUID. Tests use only a synthetic UUID.
 
-`npm run deploy:cloudflare` first prepares that generated config, then:
-1. applies pending migrations to `DB` with `wrangler d1 migrations apply ... --remote --yes`;
-2. deploys the reviewed Worker source;
-3. explicitly passes `--x-provision=false` and `--x-auto-create=false` to both remote commands.
+`npm run deploy:cloudflare` uses `scripts/deploy-cloudflare.mjs` and performs guarded preflight before any D1 mutation:
+1. prepare the generated account-specific configuration;
+2. query the existing `streamarkr-api` Worker secret names and require `DEVICE_ACCESS_TOKEN` to already exist;
+3. apply pending migrations specifically to the named remote database `streamarkr` with `--remote --yes`;
+4. deploy the reviewed Worker source;
+5. explicitly pass `--x-provision=false` and `--x-auto-create=false` to all Wrangler account operations.
 
-The generated config declares `DEVICE_ACCESS_TOKEN` as required, so deployment fails before activation if that Worker secret has not been configured. Wrangler deployments do not delete existing encrypted secrets, and `keep_vars` preserves dashboard-managed plaintext runtime variables.
+If secret metadata cannot be read or `DEVICE_ACCESS_TOKEN` is absent, the command stops before the D1 migration. Wrangler deployments do not delete existing encrypted secrets, and `keep_vars` preserves dashboard-managed plaintext runtime variables.
 
 ## Workers Builds deployment gate
 Do not connect ordinary `main` merges directly to production deployment. The intended setup is a dedicated production deployment branch that is advanced only after explicit user authorization.
@@ -79,7 +81,10 @@ For the existing `streamarkr-api` Worker, configure Workers Builds with:
 - deploy command `npm run deploy:cloudflare`;
 - non-production branch builds disabled;
 - build secret `STREAMARKR_D1_DATABASE_ID` set in Cloudflare only;
+- build variable `NODE_VERSION=22` so Cloudflare's build runtime matches repository CI;
 - runtime secret `DEVICE_ACCESS_TOKEN` set under Worker Variables & Secrets before first Streamarkr deployment.
+
+Because the deploy command performs a remote D1 migration, the Workers Builds API token must explicitly have **D1 Edit** in addition to permission to deploy Workers. Cloudflare's automatically-created Workers Builds token currently includes Workers Scripts Edit but does not include D1 Edit by default, while Cloudflare requires D1 Edit for D1 writes through the API. Therefore use or edit a user-scoped Workers Builds token for this account with at least the Worker deployment permissions required by Workers Builds plus **D1 Edit**, scoped only to the Streamarkr Cloudflare account as tightly as the dashboard allows. Never put the token value in GitHub, repository files, build logs, or chat.
 
 This keeps normal PR merges reviewable without silently deploying production code. A deployment branch update remains an explicit production action and must not be performed without user authorization.
 
@@ -88,4 +93,4 @@ Two independent local gates protect the initial SQL migration before remote acti
 1. `npm run test:d1` exercises syntax and semantics with Node 22 SQLite, including idempotence, canonical identity, foreign-key data safety, default-service behavior and multi-option availability.
 2. `npm run test:d1:wrangler` applies the same committed migration through the repository-pinned Wrangler local D1 runtime and verifies schema version, seeded services, core table presence and Wrangler migration history.
 
-`npm test` additionally validates the remote-config generator with synthetic identifiers only. No automated test contacts the real Cloudflare account, real D1 database, or BANDMARKR.
+`npm test` additionally validates the remote-config generator and deployment preflight with synthetic identifiers/metadata only. No automated test contacts the real Cloudflare account, real D1 database, or BANDMARKR.
