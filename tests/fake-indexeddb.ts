@@ -55,13 +55,23 @@ class FakeTransaction {
   onerror: (() => void) | null = null;
   onabort: (() => void) | null = null;
   error: any = null;
-  constructor(private db: FakeIDBDatabase) {
-    queueMicrotask(() => queueMicrotask(() => queueMicrotask(() => { this.oncomplete?.(); })));
+  private aborted = false;
+
+  constructor(private db: FakeIDBDatabase, autoComplete = true) {
+    if (autoComplete) {
+      queueMicrotask(() => queueMicrotask(() => queueMicrotask(() => {
+        if (!this.aborted) this.oncomplete?.();
+      })));
+    }
   }
   objectStore(name: string): FakeObjectStore {
     const def = this.db.tables.get(name);
     if (!def) throw new Error(`Missing fake IndexedDB store: ${name}`);
     return new FakeObjectStore(def.data, def.keyPath);
+  }
+  abort(): void {
+    this.aborted = true;
+    queueMicrotask(() => this.onabort?.());
   }
 }
 
@@ -92,6 +102,7 @@ class FakeIDBOpenRequest {
   onerror: (() => void) | null = null;
   onupgradeneeded: ((event: any) => void) | null = null;
   result: FakeIDBDatabase;
+  transaction: FakeTransaction | null = null;
   error: any = null;
   constructor(db: FakeIDBDatabase) { this.result = db; }
 }
@@ -125,8 +136,10 @@ class FakeIDBFactory {
     const req = new FakeIDBOpenRequest(db);
     queueMicrotask(() => {
       if (version > oldVersion) {
+        req.transaction = new FakeTransaction(db!, false);
         req.onupgradeneeded?.({ oldVersion, newVersion: version });
         db!.version = version;
+        req.transaction = null;
       }
       req.onsuccess?.();
     });
