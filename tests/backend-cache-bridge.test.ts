@@ -32,6 +32,23 @@ function snapshot(): BackendSnapshot {
   };
 }
 
+function clientWith(getSnapshot: BackendClient['getSnapshot']): BackendClient {
+  return {
+    getSnapshot,
+    async addToLibrary() {},
+    async removeFromLibrary() {},
+    async setRating() {},
+    async clearRating() {},
+    async setWatchedService() {},
+    async setMovieOverride() {},
+    async setEpisodeOverride() {},
+    async setSeasonOverride() { return { affectedEpisodes: 0 }; },
+    async setServiceSelected() {},
+    async addCustomService() { return { serviceKey: 'synthetic' }; },
+    async markAlertsSeen() {}
+  };
+}
+
 async function hydrateFreshBackendCache(): Promise<void> {
   await db.clearAll();
   await repo.applyBackendSnapshot(snapshot());
@@ -69,8 +86,6 @@ test('legacy non-empty cache without provenance marker cannot be mistaken for an
   await repo.ensureSeeded();
   const beforeTitles = (await repo.allTitles()).map((title) => title.id);
   const beforeLibrary = await repo.allLibrary();
-  // Simulate a v0.13-or-older installed cache, which had real local rows and seeded_v1 but no
-  // data_source marker introduced by this bridge build.
   await db.del('meta', 'data_source');
   assert.equal(await db.get('meta', 'data_source'), undefined);
   assert.equal(await db.hasAnyData(), true);
@@ -88,10 +103,7 @@ test('legacy non-empty cache without provenance marker cannot be mistaken for an
 test('Worker refresh uses the backend client seam and hydrates an empty cache only after fetch succeeds', async () => {
   await db.clearAll();
   let calls = 0;
-  const client: BackendClient = {
-    async getSnapshot() { calls += 1; return snapshot(); },
-    async addToLibrary() {}, async removeFromLibrary() {}, async setRating() {}, async clearRating() {}, async markAlertsSeen() {}
-  };
+  const client = clientWith(async () => { calls += 1; return snapshot(); });
   const result = await refreshBackendCache(client);
   assert.equal(calls, 1);
   assert.equal(result.generatedAt, snapshot().generatedAt);
@@ -100,10 +112,7 @@ test('Worker refresh uses the backend client seam and hydrates an empty cache on
 
 test('failed Worker refresh leaves the existing offline cache untouched', async () => {
   await hydrateFreshBackendCache();
-  const client: BackendClient = {
-    async getSnapshot() { throw new Error('synthetic network unavailable'); },
-    async addToLibrary() {}, async removeFromLibrary() {}, async setRating() {}, async clearRating() {}, async markAlertsSeen() {}
-  };
+  const client = clientWith(async () => { throw new Error('synthetic network unavailable'); });
   await assert.rejects(() => refreshBackendCache(client), /synthetic network unavailable/);
   assert.deepEqual((await repo.allTitles()).map((title) => title.id), ['movie-42']);
   assert.deepEqual(await repo.backendCacheInfo(), { active: true, generatedAt: snapshot().generatedAt });
