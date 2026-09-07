@@ -48,16 +48,14 @@ export function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    let availabilityCacheInvalidated = false;
     req.onupgradeneeded = (event) => {
       const db = req.result;
       const oldVersion = (event as IDBVersionChangeEvent).oldVersion;
+      let availabilityCacheInvalidated = false;
 
       // v1 used [titleId, serviceKey], which could not retain simultaneous subscription/rent/buy
       // rows. Availability is provider-owned cache data, so deleting/recreating only this store is
-      // the safe migration; user-owned stores are preserved intact. Persist an invalidation marker
-      // after upgrade so synthetic mode can refill this cache exactly once instead of silently
-      // losing availability while the old seeded_v1 flag remains true.
+      // the safe migration; user-owned stores are preserved intact.
       if (oldVersion > 0 && oldVersion < 2 && db.objectStoreNames.contains('availability')) {
         db.deleteObjectStore('availability');
         availabilityCacheInvalidated = true;
@@ -68,18 +66,17 @@ export function openDb(): Promise<IDBDatabase> {
           db.createObjectStore(name, { keyPath: KEY_PATHS[name] as any });
         }
       }
-    };
-    req.onsuccess = () => {
-      if (!availabilityCacheInvalidated) {
-        resolve(req.result);
-        return;
+
+      // Record invalidation inside the same versionchange transaction as the store recreation.
+      // If this write cannot commit, the schema upgrade itself rolls back instead of leaving a v2
+      // database with an empty availability cache and no marker telling synthetic mode to refill it.
+      if (availabilityCacheInvalidated) {
+        const upgradeTransaction = req.transaction;
+        if (!upgradeTransaction) throw new Error('IndexedDB upgrade transaction unavailable');
+        upgradeTransaction.objectStore('meta').put({ key: AVAILABILITY_CACHE_INVALIDATED_KEY, value: true });
       }
-      const t = req.result.transaction(['meta'], 'readwrite');
-      t.objectStore('meta').put({ key: AVAILABILITY_CACHE_INVALIDATED_KEY, value: true });
-      t.oncomplete = () => resolve(req.result);
-      t.onerror = () => reject(t.error);
-      t.onabort = () => reject(t.error ?? new Error('IndexedDB availability migration marker aborted'));
     };
+    req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
