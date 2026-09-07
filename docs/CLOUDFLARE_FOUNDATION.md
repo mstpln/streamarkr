@@ -66,7 +66,7 @@ The generated file and Wrangler redirect file live under `.wrangler/`, which is 
 1. validate the build-supplied D1 UUID and prepare the generated account-specific configuration;
 2. query D1 by the literal name `streamarkr` using the account-neutral Wrangler config and require Cloudflare's authoritative UUID for that named database to match `STREAMARKR_D1_DATABASE_ID`;
 3. query the existing `streamarkr-api` Worker secret names and require `DEVICE_ACCESS_TOKEN` to already exist;
-4. apply pending migrations specifically to the named remote database `streamarkr` with `--remote --yes`;
+4. apply pending migrations specifically to the named remote database `streamarkr` with `--remote`; Wrangler 4.129.0 skips the confirmation prompt automatically in CI/non-interactive environments and does not accept `--yes` for this command;
 5. deploy the reviewed Worker source;
 6. explicitly pass `--x-provision=false` and `--x-auto-create=false` to all Wrangler account operations.
 
