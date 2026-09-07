@@ -65,15 +65,17 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         <div class="card-row"><span><span class="status-dot ok"></span>Streaming Availability</span><span>Fake adapter active</span></div>
         <div class="card-row"><span><span class="status-dot ${cache.active ? 'ok' : 'off'}"></span>Data storage</span><span>${cache.active ? 'Worker/D1 snapshot cached in IndexedDB' : 'Local IndexedDB fixtures (Worker cache bridge ready, not connected)'}</span></div>
       </div>
-      <button class="action-btn primary" id="sync-now" style="width:100%;justify-content:center;">Sync now</button>
-      <div id="sync-status" class="section-empty-hint" style="margin-top:8px;" aria-live="polite"></div>
+      <button class="action-btn primary" id="sync-now" style="width:100%;justify-content:center;" ${cache.active ? 'disabled aria-disabled="true"' : ''}>${cache.active ? 'Synthetic sync disabled for backend cache' : 'Sync now'}</button>
+      <div id="sync-status" class="section-empty-hint" style="margin-top:8px;" aria-live="polite">${cache.active ? 'A Worker/D1 cache must be refreshed through the backend client, never with fake provider data.' : ''}</div>
     `;
-    body.querySelector('#sync-now')?.addEventListener('click', async () => {
-      const status = body.querySelector('#sync-status')!;
-      status.textContent = 'Syncing…';
-      const result = await repo.syncNow();
-      status.textContent = `Synced. ${result.historyEvents} history events checked, ${result.alertsCreated} new alert(s).`;
-    });
+    if (!cache.active) {
+      body.querySelector('#sync-now')?.addEventListener('click', async () => {
+        const status = body.querySelector('#sync-status')!;
+        status.textContent = 'Syncing…';
+        const result = await repo.syncNow();
+        status.textContent = `Synced. ${result.historyEvents} history events checked, ${result.alertsCreated} new alert(s).`;
+      });
+    }
   } else {
     body.innerHTML = `
       <div class="card">
