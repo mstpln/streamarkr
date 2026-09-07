@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { installFakeIndexedDB } from './fake-indexeddb.js';
 import type { BackendSnapshot } from '../src/lib/backend-contract.js';
+import type { BackendClient } from '../src/lib/backend-client.js';
 
 installFakeIndexedDB();
 const repo = await import('../src/lib/repo.js');
+const { refreshBackendCache } = await import('../src/lib/backend-cache.js');
 
 function snapshot(): BackendSnapshot {
   return {
@@ -41,6 +43,29 @@ test('backend snapshot hydration replaces fixture cache and keeps multi-option a
   assert.equal((await repo.allAvailability()).length, 2);
   assert.deepEqual(new Set((await repo.allAvailability()).map((row) => row.optionType)), new Set(['subscription', 'rent']));
   assert.deepEqual(await repo.backendCacheInfo(), { active: true, generatedAt: '2026-09-07T16:30:00.000Z' });
+});
+
+test('Worker refresh uses the backend client seam and hydrates the cache only after fetch succeeds', async () => {
+  let calls = 0;
+  const client: BackendClient = {
+    async getSnapshot() { calls += 1; return snapshot(); },
+    async addToLibrary() {}, async removeFromLibrary() {}, async setRating() {}, async clearRating() {}, async markAlertsSeen() {}
+  };
+  const result = await refreshBackendCache(client);
+  assert.equal(calls, 1);
+  assert.equal(result.generatedAt, snapshot().generatedAt);
+  assert.deepEqual((await repo.allTitles()).map((title) => title.id), ['movie-42']);
+});
+
+test('failed Worker refresh leaves the existing offline cache untouched', async () => {
+  await repo.applyBackendSnapshot(snapshot());
+  const client: BackendClient = {
+    async getSnapshot() { throw new Error('synthetic network unavailable'); },
+    async addToLibrary() {}, async removeFromLibrary() {}, async setRating() {}, async clearRating() {}, async markAlertsSeen() {}
+  };
+  await assert.rejects(() => refreshBackendCache(client), /synthetic network unavailable/);
+  assert.deepEqual((await repo.allTitles()).map((title) => title.id), ['movie-42']);
+  assert.deepEqual(await repo.backendCacheInfo(), { active: true, generatedAt: snapshot().generatedAt });
 });
 
 test('ensureSeeded never overwrites a hydrated backend cache while offline', async () => {
