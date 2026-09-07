@@ -77,7 +77,9 @@
     "buildToken": "Workers Builds token with Worker deployment permissions plus D1 Edit, scoped to the Streamarkr account",
     "runtimeSecret": "DEVICE_ACCESS_TOKEN stored only in Cloudflare Worker Variables & Secrets",
     "deployOrder": ["validate build-supplied D1 UUID", "independently resolve named remote D1 streamarkr and require UUID match", "prepare generated config", "verify DEVICE_ACCESS_TOKEN exists", "apply pending migrations to named remote D1 streamarkr", "deploy reviewed Worker source"],
-    "firstRealDeploymentAuthorized": true,
+    "firstRealDeploymentCompleted": true,
+    "firstRealDeploymentAuthorizationConsumed": true,
+    "futureProductionDeploymentsRequireFreshExplicitAuthorization": true,
     "firstRealDeploymentCommit": "0c62c574a2680a01ae06dde2c1362e2ec1b5369a",
     "deployedReviewedMainCommit": "73359c56825ea7d9b6bfa1245f513d23c9e08e30"
   },
