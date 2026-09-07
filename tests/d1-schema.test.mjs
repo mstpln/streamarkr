@@ -14,11 +14,13 @@ test('initial D1 migration applies cleanly and is idempotent', () => {
   db.close();
 });
 
-test('canonical title identity enforces media type plus TMDB id uniqueness', () => {
+test('canonical title identity enforces media type plus TMDB id uniqueness and key format', () => {
   const db = openMigratedDb();
-  db.prepare("INSERT INTO titles(id, media_type, tmdb_id, title, year) VALUES (?, ?, ?, ?, ?)").run('series-101', 'series', 101, 'Example', 2026);
-  assert.throws(() => db.prepare("INSERT INTO titles(id, media_type, tmdb_id, title, year) VALUES (?, ?, ?, ?, ?)").run('series-duplicate', 'series', 101, 'Duplicate', 2026));
-  db.prepare("INSERT INTO titles(id, media_type, tmdb_id, title, year) VALUES (?, ?, ?, ?, ?)").run('movie-101', 'movie', 101, 'Movie Example', 2026);
+  const insert = db.prepare("INSERT INTO titles(id, media_type, tmdb_id, title, year) VALUES (?, ?, ?, ?, ?)");
+  insert.run('series-101', 'series', 101, 'Example', 2026);
+  assert.throws(() => insert.run('series-duplicate', 'series', 101, 'Duplicate', 2026));
+  assert.throws(() => insert.run('series-999', 'series', 102, 'Mismatched canonical id', 2026));
+  insert.run('movie-101', 'movie', 101, 'Movie Example', 2026);
   db.close();
 });
 
