@@ -29,11 +29,20 @@ const SEED_FLAG = 'seeded_v1';
 const DATA_SOURCE_KEY = 'data_source';
 const BACKEND_SNAPSHOT_AT_KEY = 'backend_snapshot_generated_at';
 
+async function currentDataSource(): Promise<string | undefined> {
+  return (await db.get<{ key: string; value: string }>('meta', DATA_SOURCE_KEY))?.value;
+}
+
+async function assertLocalMutationAllowed(): Promise<void> {
+  if ((await currentDataSource()) === 'backend') {
+    throw new Error('Local-only mutation is disabled while a Worker/D1 snapshot cache is active. Use a Worker-backed mutation.');
+  }
+}
+
 export async function ensureSeeded(): Promise<void> {
-  const source = await db.get<{ key: string; value: string }>('meta', DATA_SOURCE_KEY);
   // A previously hydrated Worker snapshot is a valid offline cache. Never overwrite it with demo
   // fixtures just because the app starts while the Worker is unavailable.
-  if (source?.value === 'backend') return;
+  if ((await currentDataSource()) === 'backend') return;
 
   const [flag, availabilityInvalidated] = await Promise.all([
     db.get<{ key: string; value: boolean }>('meta', SEED_FLAG),
@@ -69,13 +78,19 @@ export async function ensureSeeded(): Promise<void> {
 /** Atomically replace the complete browser cache from one authenticated Worker snapshot.
  * This is intentionally a cache hydration boundary, not a provider refresh. The snapshot already
  * contains both provider-owned and durable user-owned D1 state, so replacing these stores together
- * prevents mixed old/new views. Schema mismatches fail before any local mutation. */
+ * prevents mixed old/new views. Initial takeover of a non-empty fixture/local cache is blocked:
+ * future activation must first migrate or deliberately reset local user-owned state. */
 export async function applyBackendSnapshot(snapshot: BackendSnapshot): Promise<void> {
   if (snapshot.schemaVersion !== 1) {
     throw new Error(`Unsupported Streamarkr backend schema version: ${snapshot.schemaVersion}`);
   }
   if (!snapshot.generatedAt || Number.isNaN(Date.parse(snapshot.generatedAt))) {
     throw new Error('Invalid Streamarkr backend snapshot timestamp');
+  }
+
+  const source = await currentDataSource();
+  if (source && source !== 'backend') {
+    throw new Error('Initial Worker/D1 cache activation is blocked until local user data has been migrated or explicitly reset.');
   }
 
   await db.replaceStores([
@@ -101,10 +116,10 @@ export async function applyBackendSnapshot(snapshot: BackendSnapshot): Promise<v
 
 export async function backendCacheInfo(): Promise<{ active: boolean; generatedAt: string | null }> {
   const [source, generatedAt] = await Promise.all([
-    db.get<{ key: string; value: string }>('meta', DATA_SOURCE_KEY),
+    currentDataSource(),
     db.get<{ key: string; value: string }>('meta', BACKEND_SNAPSHOT_AT_KEY)
   ]);
-  return { active: source?.value === 'backend', generatedAt: generatedAt?.value ?? null };
+  return { active: source === 'backend', generatedAt: generatedAt?.value ?? null };
 }
 
 export async function resetToFixtures(): Promise<void> {
@@ -191,6 +206,7 @@ export async function getTitleBundle(id: string): Promise<TitleBundle | undefine
 // Future real-search flow: persist canonical title/crosswalk + metadata/season/availability data
 // before adding membership. This precondition prevents dangling Library rows.
 export async function addToLibrary(titleId: string): Promise<void> {
+  await assertLocalMutationAllowed();
   const existing = await db.get<LibraryItem>('library_items', titleId);
   if (existing) return;
   const title = await getTitle(titleId);
@@ -204,6 +220,8 @@ export async function addToLibrary(titleId: string): Promise<void> {
 }
 
 export async function removeFromLibrary(titleId: string): Promise<void> {
+  await assertLocalMutationAllowed();
+  // Only removes tracking membership. History, ratings, watched_service and overrides are untouched.
   await db.del('library_items', titleId);
 }
 
@@ -212,14 +230,17 @@ export async function isInLibrary(titleId: string): Promise<boolean> {
 }
 
 export async function setRating(titleId: string, stars: 1 | 2 | 3 | 4 | 5): Promise<void> {
+  await assertLocalMutationAllowed();
   await db.put('ratings', { titleId, stars, ratedAt: new Date().toISOString() } satisfies Rating);
 }
 
 export async function clearRating(titleId: string): Promise<void> {
+  await assertLocalMutationAllowed();
   await db.del('ratings', titleId);
 }
 
 export async function setWatchedService(titleId: string, serviceKey: string | null): Promise<void> {
+  await assertLocalMutationAllowed();
   if (serviceKey === null) {
     await db.del('watched_service', titleId);
     return;
@@ -229,6 +250,7 @@ export async function setWatchedService(titleId: string, serviceKey: string | nu
 
 let overrideSeq = 1;
 export async function setEpisodeOverride(titleId: string, seasonNumber: number, episodeNumber: number, state: 'watched' | 'unwatched'): Promise<void> {
+  await assertLocalMutationAllowed();
   const all = await db.getAll<WatchOverride>('watch_overrides');
   const existing = all.find((o) => o.scopeType === 'episode' && o.titleId === titleId && o.seasonNumber === seasonNumber && o.episodeNumber === episodeNumber);
   const rec: WatchOverride = { id: existing?.id ?? `ov-ui-${Date.now()}-${overrideSeq++}`, scopeType: 'episode', titleId, seasonNumber, episodeNumber, state, changedAt: new Date().toISOString() };
@@ -238,6 +260,7 @@ export async function setEpisodeOverride(titleId: string, seasonNumber: number, 
 /** Apply a season bulk action only to episodes that are already released and known at the
  * moment of the action. Future episodes must not inherit an old bulk decision. */
 export async function setSeasonOverride(titleId: string, seasonNumber: number, state: 'watched' | 'unwatched'): Promise<void> {
+  await assertLocalMutationAllowed();
   const now = new Date();
   const [episodes, overrides] = await Promise.all([allEpisodes(), allOverrides()]);
   for (const override of overrides) {
@@ -257,6 +280,7 @@ export async function setSeasonOverride(titleId: string, seasonNumber: number, s
 }
 
 export async function setMovieOverride(titleId: string, state: 'watched' | 'unwatched'): Promise<void> {
+  await assertLocalMutationAllowed();
   const all = await db.getAll<WatchOverride>('watch_overrides');
   const existing = all.find((o) => o.scopeType === 'movie' && o.titleId === titleId);
   const rec: WatchOverride = { id: existing?.id ?? `ov-ui-${Date.now()}-${overrideSeq++}`, scopeType: 'movie', titleId, state, changedAt: new Date().toISOString() };
@@ -264,12 +288,14 @@ export async function setMovieOverride(titleId: string, state: 'watched' | 'unwa
 }
 
 export async function setServiceSelected(serviceKey: string, selected: boolean): Promise<void> {
+  await assertLocalMutationAllowed();
   const svc = await db.get<ServiceDef>('services', serviceKey);
   if (!svc) return;
   await db.put('services', { ...svc, userSelected: selected });
 }
 
 export async function addCustomService(displayName: string): Promise<void> {
+  await assertLocalMutationAllowed();
   const key = displayName.trim().toLowerCase().replace(/\s+/g, '-');
   if (!key) return;
   const existing = await db.get<ServiceDef>('services', key);
@@ -279,6 +305,7 @@ export async function addCustomService(displayName: string): Promise<void> {
 
 // --- Alerts ---------------------------------------------------------------------------------
 export async function markAlertsSeen(ids: string[]): Promise<void> {
+  await assertLocalMutationAllowed();
   const now = new Date().toISOString();
   for (const id of ids) {
     const a = await db.get<AlertRecord>('alerts', id);
@@ -349,6 +376,8 @@ export async function syncNow(): Promise<{ historyEvents: number; alertsCreated:
 }
 
 // --- Data export -----------------------------------------------------------------------------
+// Provider-cache metadata/availability are re-fetchable and excluded, but stable external
+// identity crosswalks are preserved so exported user-owned state can be reconnected safely.
 export interface ExportPayload {
   exportedAt: string;
   titles: ExportTitleIdentity[];
@@ -378,4 +407,4 @@ export async function buildExportPayload(): Promise<ExportPayload> {
   };
 }
 
-export { TmdbAdapter, AvailabilityAdapter };
+export { TmdbAdapter, AvailabilityAdapter, computeNewSeasonEntry, isFullyWatchedForRating, buildHistoryRow, sortRecentlyWatched };
