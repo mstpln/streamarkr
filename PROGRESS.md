@@ -8,17 +8,29 @@ Updated: 2026-09-07.
 - PR #2 established the reviewed v0.11.0 Worker + D1 source foundation and merged at `65fba889597a22f7703b3337833fc1f0ca3c5cb1`.
 - PR #3 established the reviewed v0.12.0 Wrangler-local D1 validation layer and merged at `02238c00150b059e9f73cb768e87a62a0d8b25e9`.
 - PR #4 established the reviewed v0.13.0 guarded Cloudflare activation configuration and merged at `bb1b59427eaa906c5ae3e85a7daba9bdf2601770`.
-- Final reviewed PR #4 head: `f885a664d48646927940b178aaa47756bcff611b`; CI run #78 passed on that exact head.
-- No real Streamarkr Worker source or D1 migration has yet been deployed remotely.
-- No live provider credentials, API keys, OAuth tokens, personal viewing data, or BANDMARKR resources are used.
+- PR #6 fixed the Wrangler 4.129.0 remote migration invocation and merged at `73359c56825ea7d9b6bfa1245f513d23c9e08e30`; its exact final reviewed head `6020bb2c595d14328d3220226e997b3bbaf1471c` passed CI #83.
+- The first real Streamarkr Worker + D1 activation is now deployed and manually verified.
+- No live provider credentials, personal viewing data, or BANDMARKR resources were used.
 
-## Cloudflare account-level setup completed manually
-With explicit user approval, these dedicated resources now exist:
+## Cloudflare account-level setup and activation completed
+Dedicated Streamarkr resources now exist and are active:
 - D1 database `streamarkr` with EU jurisdiction;
 - Worker `streamarkr-api`;
-- D1 binding `DB` -> `streamarkr`.
+- D1 binding `DB` -> `streamarkr`;
+- runtime secret `DEVICE_ACCESS_TOKEN` stored only in Cloudflare;
+- Workers Builds connected to `mstpln/streamarkr` using `deploy/production` as the production branch;
+- non-production builds disabled;
+- `NODE_VERSION=22` configured;
+- `STREAMARKR_D1_DATABASE_ID` stored only as a masked build secret;
+- Workers Builds token granted D1 Edit in addition to its deployment permissions.
 
-The Worker currently serves only Cloudflare's temporary Hello World starter. The D1 database has not received the Streamarkr schema or personal data.
+With explicit user authorization, deployment commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed the reviewed tree from `main` merge commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. The Cloudflare build completed successfully.
+
+Manual production verification confirmed:
+- `/api/health` => `ok: true`, `service: streamarkr-worker`, `schemaVersion: 1`, `authConfigured: true`;
+- remote D1 `app_meta` has `schema_version = 1`;
+- `services` count is exactly 8;
+- expected application tables plus `d1_migrations` are present.
 
 ## v0.10.2 reviewed baseline
 The baseline remains the product-behavior safety net while infrastructure is migrated. It includes the full synthetic PWA experience and the hardened status, History, Library, Search, Detail, Discover, Alerts, export, offline and responsive behavior documented in `docs/STREAMARKR_STATE.md` and `docs/STREAMARKR_DECISIONS.md`.
@@ -46,18 +58,16 @@ Final PR #2 validation:
 PR #3 added repository-pinned Wrangler 4.129.0, local-only Wrangler config, isolated Wrangler local D1 migration validation, CI gating, v0.12.0 version/cache synchronization and continuity updates. It merged only after exact-final-head review/CI passed.
 
 ## v0.13.0 — guarded Cloudflare activation
-PR #4 is merged. It added:
-- app/cache version v0.13.0 / `streamarkr-v0.13.0`;
-- account-neutral committed `wrangler.jsonc` with exact Worker name `streamarkr-api`, source entrypoint, `keep_vars: true`, and required secret declaration for `DEVICE_ACCESS_TOKEN`;
-- no real D1 UUID or secret value in repository source;
-- `scripts/prepare-cloudflare-deploy.mjs` to validate build-only `STREAMARKR_D1_DATABASE_ID` and generate the account-specific `DB` -> `streamarkr` binding only under ignored `.wrangler/deploy/` state;
-- independent remote D1 identity verification: resolve literal database name `streamarkr` through Cloudflare and require the authoritative UUID to match the build-supplied UUID before any mutation;
-- guarded deployment preflight requiring `DEVICE_ACCESS_TOKEN` before D1 migration or Worker deploy;
-- remote migrations targeting named database `streamarkr` with `--remote --yes`, followed by Worker deploy, while Wrangler automatic provisioning and auto-create are disabled;
-- deterministic deployment-config tests using only synthetic UUIDs;
-- deployment policy preventing normal `main` merges from becoming production deployments.
+PR #4 added the guarded deployment architecture and PR #6 corrected the discovered Wrangler migration CLI incompatibility. The final deployment path:
+- keeps the committed Wrangler config account-neutral;
+- validates the build-only D1 UUID and independently resolves the literal remote database name `streamarkr` before mutation;
+- verifies `DEVICE_ACCESS_TOKEN` exists;
+- applies pending migrations with `--remote`;
+- deploys only `streamarkr-api`;
+- disables Wrangler auto-provisioning and auto-create;
+- keeps normal `main` merges separate from production deploys through `deploy/production`.
 
-Final PR #4 validation on exact head `f885a664d48646927940b178aaa47756bcff611b`, CI #78:
+Final PR #6 validation on exact head `6020bb2c595d14328d3220226e997b3bbaf1471c`, CI #83:
 - PWA build PASS;
 - Worker TypeScript build/type-check PASS;
 - **126/126** logic/repository/Worker/client/security/deployment-config tests PASS;
@@ -67,21 +77,16 @@ Final PR #4 validation on exact head `f885a664d48646927940b178aaa47756bcff611b`,
 - folded 344×792 and unfolded 873×1000 PASS;
 - zero smoke-journey console/page errors.
 
-Merging v0.13.0 did **not** authorize or trigger a production deployment. The first real Streamarkr deployment remains a separate explicit action after Cloudflare runtime/build secrets and the dedicated deployment branch are configured.
-
 ## Next work
-1. Configure `DEVICE_ACCESS_TOKEN` as a Worker runtime secret in Cloudflare.
-2. Connect the existing `streamarkr-api` Worker to `mstpln/streamarkr` using a dedicated production deployment branch, not `main`.
-3. Disable non-production branch builds, set build variable `NODE_VERSION=22`, and set masked build secret `STREAMARKR_D1_DATABASE_ID` to the dedicated `streamarkr` database UUID.
-4. Use a user-scoped Workers Builds token with Worker deployment permission plus **D1 Edit**, scoped to the Streamarkr account as tightly as Cloudflare permits.
-5. With explicit user authorization, advance the deployment branch to the reviewed/merged source. That build applies the initial D1 migration and deploys the reviewed Streamarkr Worker.
-6. Verify `/api/health` and D1 migration state with no personal data.
-7. Then continue backend migration and real providers in focused builds: UI repository -> Worker, TMDB, Trakt OAuth/history, streaming availability.
+1. Keep production deployment gated behind explicit authorization and `deploy/production`.
+2. Set `APP_ORIGIN` once the real PWA hosting origin is known.
+3. Move the frontend repository/data calls to the Worker backend while retaining IndexedDB as cache/offline support.
+4. Add real TMDB metadata/search, then Trakt OAuth/history, then streaming availability in focused reviewed builds.
+5. Replace placeholder service badges with properly sourced/licensed assets and complete physical Pixel 9 Pro Fold QA before V1.
 
 ## Remaining V1 limitations
-- Current PWA still uses IndexedDB + synthetic providers.
-- Reviewed Streamarkr Worker not yet deployed.
-- Real D1 schema not yet migrated remotely.
+- Current PWA UI still uses IndexedDB + synthetic providers.
+- `APP_ORIGIN` is not yet configured because the final PWA hosting origin is not established.
 - No live provider integration yet.
 - Streaming-service marks remain placeholders pending properly sourced/licensed assets.
 - Physical Pixel 9 Pro Fold QA remains required before V1 release.
