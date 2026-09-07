@@ -5,6 +5,7 @@ import type { BackendSnapshot } from '../src/lib/backend-contract.js';
 import type { BackendClient } from '../src/lib/backend-client.js';
 
 installFakeIndexedDB();
+const db = await import('../src/lib/db.js');
 const repo = await import('../src/lib/repo.js');
 const { refreshBackendCache } = await import('../src/lib/backend-cache.js');
 
@@ -31,11 +32,13 @@ function snapshot(): BackendSnapshot {
   };
 }
 
-test('backend snapshot hydration replaces fixture cache and keeps multi-option availability', async () => {
-  await repo.ensureSeeded();
-  assert.notEqual((await repo.allTitles()).length, 0);
-
+async function hydrateFreshBackendCache(): Promise<void> {
+  await db.clearAll();
   await repo.applyBackendSnapshot(snapshot());
+}
+
+test('backend snapshot hydration fills an empty cache and keeps multi-option availability', async () => {
+  await hydrateFreshBackendCache();
 
   assert.deepEqual((await repo.allTitles()).map((title) => title.id), ['movie-42']);
   assert.equal((await repo.allLibrary()).length, 1);
@@ -45,7 +48,24 @@ test('backend snapshot hydration replaces fixture cache and keeps multi-option a
   assert.deepEqual(await repo.backendCacheInfo(), { active: true, generatedAt: '2026-09-07T16:30:00.000Z' });
 });
 
-test('Worker refresh uses the backend client seam and hydrates the cache only after fetch succeeds', async () => {
+test('initial backend takeover refuses to overwrite an existing fixture/local cache', async () => {
+  await db.clearAll();
+  await repo.ensureSeeded();
+  const beforeTitles = (await repo.allTitles()).map((title) => title.id);
+  const beforeLibrary = await repo.allLibrary();
+
+  await assert.rejects(
+    () => repo.applyBackendSnapshot(snapshot()),
+    /Initial Worker\/D1 cache activation is blocked/
+  );
+
+  assert.deepEqual((await repo.allTitles()).map((title) => title.id), beforeTitles);
+  assert.deepEqual(await repo.allLibrary(), beforeLibrary);
+  assert.equal((await repo.backendCacheInfo()).active, false);
+});
+
+test('Worker refresh uses the backend client seam and hydrates an empty cache only after fetch succeeds', async () => {
+  await db.clearAll();
   let calls = 0;
   const client: BackendClient = {
     async getSnapshot() { calls += 1; return snapshot(); },
@@ -58,7 +78,7 @@ test('Worker refresh uses the backend client seam and hydrates the cache only af
 });
 
 test('failed Worker refresh leaves the existing offline cache untouched', async () => {
-  await repo.applyBackendSnapshot(snapshot());
+  await hydrateFreshBackendCache();
   const client: BackendClient = {
     async getSnapshot() { throw new Error('synthetic network unavailable'); },
     async addToLibrary() {}, async removeFromLibrary() {}, async setRating() {}, async clearRating() {}, async markAlertsSeen() {}
@@ -69,20 +89,30 @@ test('failed Worker refresh leaves the existing offline cache untouched', async 
 });
 
 test('synthetic provider sync cannot mutate a hydrated Worker/D1 cache', async () => {
-  await repo.applyBackendSnapshot(snapshot());
+  await hydrateFreshBackendCache();
   await assert.rejects(() => repo.syncNow(), /Synthetic provider sync is disabled/);
   assert.deepEqual((await repo.allTitles()).map((title) => title.id), ['movie-42']);
   assert.equal((await repo.allAvailability()).length, 2);
 });
 
+test('local-only user mutations are blocked while Worker/D1 cache mode is active', async () => {
+  await hydrateFreshBackendCache();
+  await assert.rejects(() => repo.setRating('movie-42', 4), /Local-only mutation is disabled/);
+  await assert.rejects(() => repo.removeFromLibrary('movie-42'), /Local-only mutation is disabled/);
+  await assert.rejects(() => repo.setWatchedService('movie-42', 'netflix'), /Local-only mutation is disabled/);
+  await assert.rejects(() => repo.setMovieOverride('movie-42', 'watched'), /Local-only mutation is disabled/);
+  assert.equal((await repo.allRatings())[0]?.stars, 5);
+  assert.equal((await repo.allLibrary()).length, 1);
+});
+
 test('ensureSeeded never overwrites a hydrated backend cache while offline', async () => {
-  await repo.applyBackendSnapshot(snapshot());
+  await hydrateFreshBackendCache();
   await repo.ensureSeeded();
   assert.deepEqual((await repo.allTitles()).map((title) => title.id), ['movie-42']);
 });
 
 test('unsupported backend schema is rejected before replacing cached data', async () => {
-  await repo.applyBackendSnapshot(snapshot());
+  await hydrateFreshBackendCache();
   const invalid = { ...snapshot(), schemaVersion: 2 };
   await assert.rejects(() => repo.applyBackendSnapshot(invalid), /Unsupported Streamarkr backend schema version/);
   assert.deepEqual((await repo.allTitles()).map((title) => title.id), ['movie-42']);
