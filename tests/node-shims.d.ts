@@ -1,4 +1,5 @@
 declare module 'node:test' {
+  export const test: any;
   export const describe: any;
   export const it: any;
   export const before: any;
