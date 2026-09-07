@@ -33,9 +33,9 @@ Result: **PASS**. This compiles `worker/**/*.ts` plus the shared backend/domain 
 ```bash
 npm test
 ```
-Result: **117/117 PASS**, 0 failures.
+Result: **118/118 PASS**, 0 failures.
 
-This is the merged 101-test baseline plus 16 Worker/auth/backend-client/backend-repository tests. New coverage includes:
+This is the merged 101-test baseline plus 17 backend/security tests. New coverage includes:
 - bearer device-token authentication accepts only the exact expected value;
 - protected routes reject invalid credentials before touching D1;
 - protected routes fail closed when the Worker authentication secret is unconfigured;
@@ -46,7 +46,8 @@ This is the merged 101-test baseline plus 16 Worker/auth/backend-client/backend-
 - Library writes require a canonical title record;
 - provider title upserts stay in provider-owned storage and do not mutate user-owned tables;
 - availability replacement uses one D1 batch and preserves multiple option types per title/service;
-- `WorkerBackendClient` sends bearer auth, URL-encodes IDs, sends JSON mutations and does not expose its token in surfaced errors.
+- `WorkerBackendClient` sends bearer auth, URL-encodes IDs, sends JSON mutations and does not expose its token in surfaced errors;
+- the service worker bypasses Cache Storage for `/api/`, cross-origin, and authenticated requests so future personal API snapshots cannot enter the app-shell cache.
 
 ### D1 migration semantics
 ```bash
@@ -69,7 +70,7 @@ npm run build
 npm run serve
 npm run qa:browser
 ```
-Result: **27/27 PASS** in GitHub Actions Playwright Chromium.
+Result: **27/27 PASS** in GitHub Actions Playwright Chromium on the reviewed v0.11.0 code head; the final documentation head must receive the same gate before merge readiness is declared.
 
 The unchanged synthetic browser journey verifies Home, Library, History, Search, Discover, Settings, Alerts and Detail behavior; Alerts NEW lifecycle; Discover heart behavior; Settings re-entry; semantic ratings; detail progress/trailer/episodes/history/streaming; folded 344×792 and unfolded 873×1000 layouts; and zero smoke-journey console/page errors.
 
@@ -78,12 +79,12 @@ The unchanged synthetic browser journey verifies Home, Library, History, Search,
 1. `npm ci --no-audit --no-fund`
 2. PWA build
 3. Worker type-check/build
-4. 117 logic/repository/Worker/client tests
+4. 118 logic/repository/Worker/client/security tests
 5. 5 D1 migration tests
 6. Playwright Chromium install
 7. PWA browser/responsive QA
 
-The complete gate passed after the final code/security review changes. Any documentation-only finishing commit must still receive the same green CI before PR #2 is called ready, because the exact final PR head is authoritative.
+The exact final PR head remains authoritative. PR #2 is not ready until both CI jobs are green on that head.
 
 ## Manual limitation
 A physical **Pixel 9 Pro Fold** has not yet been tested. Browser viewport QA covers representative folded/unfolded dimensions, but physical-device validation remains required before V1 release.
