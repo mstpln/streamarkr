@@ -10,22 +10,27 @@ The **authoritative target architecture** from that build plan is:
 - Vite + TypeScript for the PWA build
 - a Cloudflare Worker as the backend
 - Cloudflare D1 as primary storage (optional R2 for larger assets)
+- IndexedDB as the browser cache/offline layer
 - real provider adapters (Trakt, TMDB, a streaming-availability API)
 - GitHub for source control and CI/QA
 
-**What exists in this repository right now is a reviewed synthetic/local stand-in for that target architecture**,
-because the original Cowork build environment had no npm registry access — every `npm install`
-attempt there returned `403 host_not_allowed`. That originally blocked Vite, Vitest, and
-vite-plugin-pwa, so the current baseline compiles plain TypeScript straight to ES modules,
-tests compile through `tsconfig.tests.json` and run as JavaScript on Node's built-in `node:test`
-runner, `sw.js`/`manifest.webmanifest` are hand-written instead of `vite-plugin-pwa`-generated,
-and IndexedDB stands in for D1 with fake provider adapters standing in for
-Trakt/TMDB/Streaming Availability.
+The project began as a reviewed synthetic/local stand-in because the original Cowork build
+environment had no npm registry access — every `npm install` attempt there returned
+`403 host_not_allowed`. That originally blocked Vite, Vitest, and vite-plugin-pwa, so the current
+PWA still compiles plain TypeScript straight to ES modules, tests compile through
+`tsconfig.tests.json` and run on Node's built-in `node:test` runner, and
+`sw.js`/`manifest.webmanifest` remain hand-written.
 
-**This is a temporary, environment-driven substitution, not a permanent architectural decision.**
-Migrating to the plan's real Vite + Cloudflare Worker + D1 + real-provider architecture is
-expected future work, not something to avoid or need special permission to propose. Nothing in
-this file should be read as "keep it this way forever."
+The backend foundation is no longer hypothetical: the dedicated Streamarkr Cloudflare Worker and
+D1 database exist and have been activated. The active browser runtime still deliberately uses
+fake provider adapters until the real PWA origin/authentication and complete Worker mutation
+surface are ready. IndexedDB must now be treated as the browser cache/offline layer, not as a
+permanent second source of truth parallel to D1.
+
+**The remaining local/synthetic pieces are temporary migration boundaries, not permanent
+architectural decisions.** Migrating to the build plan's complete real-provider architecture is
+expected work, not something to avoid or need special permission to propose. Nothing in this file
+should be read as "keep the temporary piece forever."
 
 ## Build / run / test commands (current baseline)
 ```
@@ -36,21 +41,32 @@ npm test           # compile tests with tsc, then run Node's built-in node:test 
 npm run qa:browser # Playwright smoke + responsive QA (requires the server running)
 ```
 The **app runtime** intentionally has no third-party runtime dependencies in this baseline. The
-build/test toolchain is repository-declared: `typescript` and `playwright` are pinned in
-`devDependencies`, `package-lock.json` is committed, and GitHub CI uses Node 22 plus `npm ci`
+build/test toolchain is repository-declared: `typescript`, `playwright`, and pinned Wrangler are
+in `devDependencies`, `package-lock.json` is committed, and GitHub CI uses Node 22 plus `npm ci`
 before build/test/browser QA. Keep the lockfile synchronized with any dependency change; do not
 switch CI back to `npm install` unless there is a specific, documented reason.
 
 ## Architecture boundaries — do not blur these
-- `src/lib/*` is pure domain logic (status engine, alerts, discover ranking, season selection,
-  resolve, history). It must stay UI-framework-free and provider-adapter-free except through the
-  explicit `providers.ts` interface. Never import from `src/ui/*` into `src/lib/*`.
+- `src/lib/*` is pure domain/data-boundary logic (status engine, alerts, discover ranking, season
+  selection, resolve, history, browser repository/cache bridge). It must stay UI-framework-free.
+  Provider access is allowed only through explicit provider/backend interfaces; never import from
+  `src/ui/*` into `src/lib/*`.
+- `src/lib/backend-contract.ts` is the shared Worker/browser snapshot contract;
+  `src/lib/backend-client.ts` is the browser transport seam; `src/lib/backend-cache.ts` is the
+  Worker-snapshot-to-IndexedDB cache bridge. UI code must not call Worker endpoints directly.
+- A complete authenticated `BackendSnapshot` may atomically replace the related IndexedDB cache
+  because it represents one D1 source-of-truth snapshot. This is distinct from a provider refresh:
+  provider refresh code must still never touch user-owned state.
+- A failed backend fetch must leave the existing IndexedDB cache untouched. Never clear valid
+  offline data before a replacement snapshot has been fetched and validated.
+- A cache marked as backend-hydrated must never be overwritten by synthetic fixture seeding on a
+  later offline startup.
 - `src/ui/screens/*.ts` are the only place fake provider adapters (`TmdbAdapter`, `TraktAdapter`,
   `AvailabilityAdapter`) may be called directly from outside `repo.ts`/`alerts.ts` — e.g. Search's
   live-typeahead. Never let a fake-provider call leak into `src/lib/status.ts`, `alerts.ts`,
   `discover.ts`, or `season-select.ts` — those must only see already-fetched snapshots passed in
-  as plain data, so they stay deterministic and unit-testable. This boundary is exactly the seam
-  where real provider adapters will later be swapped in for the fake ones.
+  as plain data, so they stay deterministic and unit-testable. This is the provider seam that real
+  adapters replace later.
 - `src/lib/season-select.ts` is the single source of truth for "which season is relevant /
   engaged right now." Both the status engine (`status.ts`) and the UI (Home cards, Detail
   Episodes tab) must call into it rather than re-deriving season logic locally. If you need a new
@@ -59,23 +75,39 @@ switch CI back to `npm install` unless there is a specific, documented reason.
   shows a streaming-service badge must call `serviceLogoHtml()` — never re-implement a glyph
   badge inline. See "Streaming-service logos" below — these are placeholders, not final assets.
 - **Library membership integrity**: `repo.addToLibrary()` refuses to create a `library_items` row
-  for a `titleId` with no corresponding `titles` record — see the comment above it in `repo.ts`
-  for the full real-search-integration flow this boundary is meant to support (search result ->
-  persist canonical title/crosswalk -> metadata -> seasons -> availability -> library membership).
-  Never bypass this by writing to `library_items` directly from anywhere but that function.
+  for a `titleId` with no corresponding `titles` record. Never bypass this by writing directly to
+  `library_items` from UI code.
 
 ## User-owned data vs provider-owned data
-User-owned (never overwritten by a provider refresh, always authoritative over provider state):
+User-owned (never overwritten by a **provider refresh**, always authoritative over provider state):
 library membership, ratings, manual watch overrides (episode/season/movie), watched-service
 ("where I watched it"), alert seen-state, selected streaming services.
-Provider-owned (safe to fully reconcile — upsert current rows AND remove rows the latest provider
-snapshot no longer contains — on every sync): title/season/episode metadata, availability
-snapshots (see `repo.reconcileAvailability()`), watch *events* (Trakt history — note events are
-provider data, but overrides always take precedence when resolving actual watched state — see
-`resolve.ts`).
-Never write a `syncNow()`-style refresh path that touches a user-owned store. Never let UI code
-write directly to `db.ts` — always go through `repo.ts`'s named mutation functions so this
-boundary stays enforced in one place.
+
+Provider-owned (safe to fully reconcile on provider sync): title/season/episode metadata,
+availability snapshots, watch *events* (Trakt history — overrides still win when resolving watched
+state).
+
+A full D1 `BackendSnapshot` is different from provider reconciliation: once backend mode is
+activated, D1 is the durable authority for both user-owned and provider-owned rows, so one complete
+validated snapshot may replace the corresponding browser cache stores atomically. Do not confuse
+that operation with `syncNow()`/provider refresh semantics.
+
+Never write a provider-refresh path that touches a user-owned store. Never let UI code write
+directly to `db.ts` — always go through `repo.ts`'s named mutation functions so ownership stays
+enforced in one place. Before enabling production backend mode, every user-facing mutation that
+can change durable state must either have a Worker-backed path or be deliberately disabled; do not
+allow local-only edits that will silently disappear on the next D1 snapshot refresh.
+
+## Browser cache schema / migration safety
+- IndexedDB is disposable only for provider-owned/cache-only rows. User-owned rows must survive
+  IndexedDB version migrations unless a separately reviewed data migration intentionally transforms
+  them.
+- Browser availability identity must match D1 semantics: `(titleId, serviceKey, optionType)`. A
+  title may have subscription and rent/buy options on the same service simultaneously.
+- The v1 -> v2 IndexedDB migration is allowed to recreate only `availability`, because it is
+  provider-owned cache data and its key changed. Do not broaden that deletion to user-owned stores.
+- Cache schema/version migrations need deterministic regression tests that explicitly prove
+  user-owned rows survive.
 
 ## Manual override precedence — and what it is NOT authoritative for
 `resolve.ts` (`resolveEpisode`, `resolveMovie`) is the only place "is this actually watched"
@@ -125,20 +157,19 @@ alerts for that title/service pair. Leaving-soon fires only when entering the co
 when the provider supplies a genuinely new leaving date.
 
 ## Testing rules
-- Every new piece of domain logic needs a `node:test` test in `tests/`, using
-  `tests/expect-shim.ts` (a tiny vitest-`expect`-compatible shim over `node:assert/strict` — see
-  the toolchain honesty note above: this exists because the original build environment could not
-  install a real test framework, not because it's a preferred approach going forward).
+- Every new piece of domain/data-boundary logic needs a `node:test` test in `tests/`, using
+  `tests/expect-shim.ts` where its vitest-like helpers are useful.
 - `tests/fake-indexeddb.ts` is a minimal in-memory IndexedDB polyfill covering only the narrow
-  usage pattern `src/lib/db.ts` actually needs (get/getAll/put/putAll/delete/clear per store, no
-  cursors/indexes). `tests/repo-integration.test.ts` uses it to run real integration tests
-  against `repo.ts` + `db.ts`. Extend this polyfill rather than casually introducing a dependency
-  just for convenience; if the test architecture is deliberately modernized later, do it as a
-  focused change and retire the polyfill cleanly.
+  usage pattern `src/lib/db.ts` actually needs, including versioned upgrade/delete-store behavior
+  required for cache-migration tests. Extend this polyfill rather than casually introducing a
+  dependency just for convenience; if the test architecture is deliberately modernized later, do
+  it as a focused change and retire the polyfill cleanly.
 - Never use live network calls, real API credentials, or personal/real data in any test or
   fixture — including after real provider adapters are introduced. Provider-integration tests
   must run against sandboxed/synthetic accounts or recorded fixtures, never production credentials
   or a real person's account data.
+- Backend cache bridge tests must use synthetic `BackendClient`/snapshot data and must never call
+  the real Worker or real D1.
 - `browser-qa.mjs` is the committed Playwright smoke + responsive QA script. Keep it deterministic
   (synthetic fixtures only) and keep it passing before calling any UI change done.
 
@@ -162,11 +193,21 @@ colored-badge placeholders indefinitely. Do not download unverified logo image f
 internet as a shortcut for this — get real assets through a proper, license-checked source.
 
 ## Security / secrets
-Never introduce a real API key, OAuth client secret, or credential of any kind into this
-repository, even as a placeholder default. Never add code that calls a live external API from
-this synthetic baseline. When real provider integration begins, credentials belong in
-environment variables / a secrets manager, never committed, and any live-provider test must use
+Never introduce a real API key, OAuth client secret, credential, production device token, or real
+D1 identifier into this repository. The production PWA must not embed `DEVICE_ACCESS_TOKEN` in
+public source, generated JS, HTML, service-worker caches, logs, or committed configuration. A safe
+browser authentication/bootstrap design is required before the real Worker-backed browser mode is
+enabled. Provider credentials remain Worker-side secrets. Any live-provider test must use
 sandboxed/synthetic test accounts — never production credentials or real personal data.
+
+## Cloudflare production safety
+- Streamarkr production resources are Worker `streamarkr-api` and D1 `streamarkr`; never access,
+  bind, inspect, reuse, migrate or modify BANDMARKR resources.
+- Normal `main` merges do not deploy production. `deploy/production` is the only Workers Builds
+  production trigger and may be advanced only after fresh explicit user authorization.
+- A previous deployment authorization is consumed by the deployment it authorized and must never
+  be reused for a later commit.
+- `APP_ORIGIN` stays unset until the actual PWA hosting origin is known; do not invent one.
 
 ## Accessibility / responsive targets
 - Interactive controls need an effective touch target of at least 44×44 CSS px — achieved via
@@ -187,11 +228,12 @@ sandboxed/synthetic test accounts — never production credentials or real perso
 
 ## Do not
 - Do not add a bundler, a UI framework, or a runtime npm dependency to the shipped app without an
-  explicit decision to do so — but DO expect and plan for the eventual Vite/Cloudflare migration
-  described at the top of this file; that migration is allowed and anticipated, not forbidden.
+  explicit decision to do so — but DO expect and plan for the eventual Vite migration described at
+  the top of this file; that migration is allowed and anticipated, not forbidden.
 - Do not replace synthetic fixtures with real personal data, even temporarily "for testing."
+- Do not enable production backend browser mode while durable user mutations still exist only in
+  IndexedDB; they would be at risk of being overwritten by the next D1 snapshot refresh.
 - Do not update a test's expectation to match incorrect behavior — fix the behavior.
 - Do not reach into BANDMARKR or any other unrelated project folder from here.
-- Do not present a locally-adapted stopgap (no-bundler build, colored-badge logos,
-  IndexedDB-as-D1) as a permanent design choice in any documentation — always say what it stands
-  in for and why it's temporary, per the sections above.
+- Do not present remaining local stopgaps (no-bundler build, colored-badge logos, fake providers)
+  as permanent design choices; document what they stand in for and why they're temporary.
