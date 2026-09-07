@@ -14,7 +14,9 @@
     "test:d1:wrangler": "node scripts/validate-wrangler-d1.mjs",
     "qa:browser": "node browser-qa.mjs"
   },
-  "engines": {"node": ">=22"},
+  "engines": {
+    "node": ">=22"
+  },
   "devDependencies": {
     "playwright": "1.55.0",
     "typescript": "5.9.2",
