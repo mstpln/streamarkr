@@ -1,6 +1,6 @@
 # Streamarkr current state
 
-Updated: 2026-09-07. Current build: **v0.14.0** / service-worker cache **streamarkr-v0.14.0**.
+Updated: 2026-09-07. Current build: **v0.15.0** / service-worker cache **streamarkr-v0.15.0**.
 
 ## Repository baseline
 - Public repo: `mstpln/streamarkr`.
@@ -10,6 +10,8 @@ Updated: 2026-09-07. Current build: **v0.14.0** / service-worker cache **streama
 - PR #4 merged at `bb1b59427eaa906c5ae3e85a7daba9bdf2601770` and established the reviewed v0.13.0 guarded Cloudflare activation configuration.
 - PR #6 merged at `73359c56825ea7d9b6bfa1245f513d23c9e08e30` and fixed the Wrangler 4.129.0 remote migration invocation discovered by the first safe production attempt.
 - PR #7 merged at `d9dc0cda4cf57f2e9322739241ff65f4d09bbafb` and synchronized continuity documentation after the verified Cloudflare activation.
+- PR #8 merged at `f6e6d4a04aa011e91036a773655e9572e2c6ded6` and established the reviewed v0.14.0 backend snapshot cache bridge. Exact final head `469235cc3e7ffe0df614b612bc73480cf4fd6da1` passed CI #123.
+- PR #9 is the active v0.15.0 backend user-state build. It does not enable production browser backend mode and does not authorize a production deployment.
 
 ## Cloudflare account state
 The user explicitly created and activated dedicated Streamarkr Cloudflare resources on 2026-09-07:
@@ -20,20 +22,14 @@ The user explicitly created and activated dedicated Streamarkr Cloudflare resour
 - Workers Builds connected to `mstpln/streamarkr` with production branch `deploy/production`, non-production builds disabled, `NODE_VERSION=22`, and masked build secret `STREAMARKR_D1_DATABASE_ID`;
 - Workers Builds token extended with D1 Edit so the guarded deployment can apply migrations.
 
-With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed the reviewed `main` tree from merge commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. The Cloudflare build completed successfully.
-
-Manual production verification confirmed:
-- `/api/health` returned `ok: true`, `service: streamarkr-worker`, `schemaVersion: 1`, and `authConfigured: true`;
-- remote D1 `app_meta` contains `schema_version = 1`;
-- `services` contains exactly eight seeded service rows;
-- the expected schema tables are present, including `titles`, `title_metadata`, `seasons`, `episodes`, `watch_events`, `watch_overrides`, `library_items`, `ratings`, `services`, `watched_service`, `availability`, `alerts`, `provider_connections`, `sync_state`, `recommendation_cache`, `app_meta`, plus Wrangler's `d1_migrations` table.
+With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed the reviewed `main` tree from merge commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed healthy Worker/D1 connectivity, schema version 1, eight seeded services and the expected tables.
 
 No personal Streamarkr viewing data, live provider credentials/calls, or BANDMARKR resources were used during activation. `APP_ORIGIN` remains intentionally unset until the real PWA hosting origin is established. The authorization used for that first deployment is consumed; every future production deployment requires fresh explicit user authorization.
 
 ## Validated PWA behavior preserved
 - Installable PWA with Home, Discover, My Library, History, Search, Alerts, Settings, and universal movie/series detail pages.
-- The active browser runtime remains deliberately synthetic/fake-provider mode until production PWA origin/auth bootstrap is configured.
-- IndexedDB is now explicitly the browser cache/offline layer; D1 is the target durable source of truth once backend mode is activated.
+- The active browser runtime remains deliberately synthetic/fake-provider mode until production PWA origin/auth bootstrap and local-state migration are complete.
+- IndexedDB is the browser cache/offline layer; D1 is the target durable source of truth once backend mode is activated.
 - User-owned Library membership, 1-5 star ratings, manual watched/unwatched overrides, selected streaming services, historical watched-service, and alert seen state retain their established ownership boundaries.
 - Status engine: To Watch, Watching, On Hold, Caught Up, Finished. Finished requires provider series status `Ended`; untouched newer seasons do not break Caught Up; On Hold uses real provider watch timestamps only.
 - Season bulk corrections affect only currently known/released episodes, never future episodes.
@@ -65,26 +61,36 @@ No personal Streamarkr viewing data, live provider credentials/calls, or BANDMAR
 - Committed `wrangler.jsonc` remains account-neutral and contains no real D1 UUID or secret value.
 - Remote deployment validates the build-only D1 UUID against Cloudflare's named `streamarkr` database, requires `DEVICE_ACCESS_TOKEN`, applies pending migrations with `--remote`, and disables automatic provisioning/auto-create.
 - Normal `main` merges do not deploy production. Workers Builds watches only `deploy/production`, advanced after fresh explicit user authorization.
-- Exact final PR #6 head `6020bb2c595d14328d3220226e997b3bbaf1471c` passed CI #83 with 126/126 logic/repository/Worker/client/security/deployment tests, 5/5 D1 semantics checks, Wrangler-local validation, and 27/27 browser/responsive QA.
+- Exact final PR #6 head `6020bb2c595d14328d3220226e997b3bbaf1471c` passed CI #83 with 126/126 tests, D1 5/5, Wrangler-local validation and 27/27 browser/responsive QA.
 
-## v0.14.0 backend cache bridge
-- App/cache version is v0.14.0 / `streamarkr-v0.14.0`.
-- IndexedDB schema is version 2. Its availability key is now `(titleId, serviceKey, optionType)`, matching D1 and allowing subscription/rent/buy rows for one title/service to coexist.
-- The v1 -> v2 browser migration recreates only the provider-owned `availability` cache, persists an invalidation marker, refills synthetic availability once on the next seed check, and preserves user-owned IndexedDB stores.
-- `db.replaceStores()` validates cache key fields before mutation and uses one IndexedDB transaction for complete related-store replacement; scheduling/request failure aborts the transaction rather than committing a partial snapshot.
-- `repo.applyBackendSnapshot()` validates backend schema version/timestamp and atomically hydrates titles, metadata, seasons, episodes, watch state, Library, ratings, watched-service, services, availability, alerts and sync state from one authenticated `BackendSnapshot`.
-- Initial backend takeover is deliberately blocked when a fixture/local cache already exists. A later activation build must first migrate or explicitly reconcile/reset existing local user-owned state rather than silently replacing it with D1 contents.
-- A hydrated backend cache is marked in browser-only metadata and is not overwritten by synthetic fixtures on a later offline startup.
-- `refreshBackendCache()` fetches through the existing `BackendClient` seam and only starts local replacement after a successful snapshot fetch; a network failure leaves the prior offline cache intact.
-- Local-only user mutations and synthetic provider sync are blocked while a Worker/D1 snapshot cache is active, preventing local edits from being silently lost on the next server snapshot.
-- The production browser runtime is **not activated by this build**. No Worker URL/token is embedded, `APP_ORIGIN` remains unset, and the normal UI remains on its current synthetic/local path until a later focused activation build provides local-state migration, secure browser authentication and all required Worker mutation endpoints.
-- Settings can distinguish fixture storage from a hydrated Worker/D1 snapshot cache without exposing credentials.
+## v0.14.0 backend cache bridge — merged
+- IndexedDB schema is version 2 and availability identity is `(titleId, serviceKey, optionType)`.
+- The v1 -> v2 migration recreates only provider-owned availability, records invalidation atomically and preserves user-owned stores.
+- `db.replaceStores()` validates cache key fields before mutation and replaces related stores in one IndexedDB transaction.
+- `repo.applyBackendSnapshot()` validates schema/timestamp and atomically hydrates the complete browser cache from one authenticated snapshot.
+- Initial backend takeover is blocked for non-empty fixture/local/legacy caches until explicit migration or reset exists.
+- Backend-hydrated caches survive offline fixture seeding and failed Worker refreshes preserve the prior cache.
+- Local-only user mutations and synthetic provider sync are blocked while backend-cache mode is active.
+- Exact final PR #8 head `469235cc3e7ffe0df614b612bc73480cf4fd6da1` passed CI #123: 137/137 tests, D1 5/5, Wrangler-local PASS, browser QA 27/27 and zero smoke-pass console errors.
+
+## v0.15.0 durable user-state mutation surface — PR #9 active
+- `WorkerBackendClient` now has explicit methods for watched-service, movie/episode/season watch corrections, service selection and custom service creation in addition to existing snapshot/Library/rating/alert methods.
+- Worker routes persist watched-service selections in D1 and validate both canonical title and service existence.
+- Movie and episode correction routes validate watched/unwatched state; wrong movie/series API scope is rejected before D1 access.
+- Episode corrections require an existing episode. Season number 0 is supported for specials.
+- Season bulk corrections are computed server-side from episodes that are already known and released at action time, remove legacy season wildcards, and materialize only episode-level overrides in one D1 batch. Future episodes therefore never inherit an old bulk action.
+- Streaming-service preference changes require an existing service. Custom services are durable selected `unsupported` rows with normalized route-safe keys.
+- Request payloads remain bounded and unexpected backend errors remain sanitized.
+- The browser UI is **not yet switched to these methods**. The production browser runtime remains synthetic/local until authentication, local-state migration/reconciliation and explicit backend activation are completed.
+- No Worker URL or credential is embedded in frontend source. `APP_ORIGIN` remains unset. No v0.15.0 deployment is authorized.
+- Initial PR #9 implementation passed CI #125; final exact-head validation is required after review hardening and continuity changes.
 
 ## Still pending
+- Complete exact-head PR #9 review, tests and browser/responsive QA; merge only after explicit user authorization.
+- Design the safe single-user browser authentication/bootstrap path without committing or exposing `DEVICE_ACCESS_TOKEN` in public source/generated assets.
 - Migrate/reconcile existing local user-owned state into D1, or deliberately reset it, before first real browser backend activation.
 - Decide/establish the real PWA hosting origin and then configure exact `APP_ORIGIN`.
-- Design the safe single-user browser authentication/bootstrap path without committing or exposing the device secret in public source.
-- Route supported user mutations through `BackendClient` and add the remaining Worker mutation endpoints needed for watched-service, manual overrides and service preferences before enabling backend mode for real use.
+- Route active UI mutations through `BackendClient` and activate backend mode only after safe authentication/state migration are complete.
 - Add real TMDB search/metadata, Trakt OAuth/history, and streaming-availability adapters in focused builds.
 - Replace placeholder service badges with properly sourced/licensed service logos.
 - Run physical Pixel 9 Pro Fold QA before V1 release.
