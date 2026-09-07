@@ -20,7 +20,7 @@ type Row = Record<string, unknown>;
 
 export class MissingCanonicalTitleError extends Error {
   constructor(titleId: string) {
-    super(`Canonical title record ${titleId} does not exist`);
+    super(`Missing canonical title record: ${titleId}`);
     this.name = 'MissingCanonicalTitleError';
   }
 }
