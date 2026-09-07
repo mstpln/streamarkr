@@ -3,7 +3,7 @@
   "appVersion": "0.11.0",
   "cacheVersion": "streamarkr-v0.11.0",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-07T05:31:00Z",
+  "generatedAt": "2026-09-07T05:35:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -28,7 +28,8 @@
     "serviceWorker": "sw.js",
     "serviceWorkerManifest": "sw-manifest.json",
     "storage": "IndexedDB temporary runtime persistence/cache",
-    "providerMode": "fake-adapters-only"
+    "providerMode": "fake-adapters-only",
+    "cacheBoundary": "same-origin unauthenticated app assets only; /api, cross-origin, and Authorization-bearing requests bypass Cache Storage"
   },
   "backendFoundation": {
     "workerSource": "worker/index.ts",
@@ -56,7 +57,7 @@
     "v0110": {
       "pwaBuild": "pass",
       "workerTypecheck": "pass",
-      "logicRepositoryWorkerClientTests": {"count": 117, "pass": 117, "fail": 0},
+      "logicRepositoryWorkerClientSecurityTests": {"count": 118, "pass": 118, "fail": 0},
       "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
       "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
     },
@@ -77,6 +78,7 @@
     "D1 availability represents multiple option types for one title/service",
     "Worker personal routes fail closed without configured auth",
     "unexpected Worker failures do not return raw internal error messages",
+    "service worker never app-shell caches personal API, cross-origin, or Authorization-bearing responses",
     "History and Library preserve their distinct streaming-service semantics",
     "Alerts remain NEW during first visit and are marked seen on page exit"
   ],
@@ -107,6 +109,7 @@
     "No deploy or Cloudflare production action without explicit authorization",
     "No real/personal data in fixtures or automated QA",
     "Never overwrite user-owned data from provider refresh",
+    "Never cache personal API responses in the app-shell service-worker cache",
     "Never commit API keys, OAuth secrets/tokens, Cloudflare credentials, personal data, or BANDMARKR data",
     "Never reuse or modify BANDMARKR Cloudflare resources for Streamarkr"
   ]
