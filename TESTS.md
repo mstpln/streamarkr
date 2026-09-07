@@ -24,14 +24,7 @@ PR #2 merged after exact-head validation:
 - smoke-journey console/page errors: **0**.
 
 ## v0.12.0 merged Wrangler-local D1 validation
-PR #3 added a second migration gate through Cloudflare's local D1 runtime with pinned Wrangler **4.129.0**. The merged exact head passed:
-- `npm ci`;
-- PWA + Worker builds;
-- **120/120** logic/repository/Worker/client/security tests;
-- **5/5** deterministic SQLite D1 tests;
-- Wrangler-local migration validation;
-- **27/27** browser/responsive checks;
-- zero console/page errors.
+PR #3 added a second migration gate through Cloudflare's local D1 runtime with pinned Wrangler **4.129.0**. The merged exact head passed `npm ci`, PWA + Worker builds, 120/120 logic/repository/Worker/client/security tests, 5/5 deterministic SQLite D1 tests, Wrangler-local migration validation, 27/27 browser/responsive checks and zero console/page errors.
 
 ### Deterministic SQLite semantics
 ```bash
@@ -50,7 +43,7 @@ Coverage:
 ```bash
 npm run test:d1:wrangler
 ```
-The validator invokes repository-pinned Wrangler **4.129.0** and uses only `wrangler.local.jsonc` plus ignored `.wrangler/test-d1` state. It must apply committed migrations with `--local`, verify schema version 1, eight seeded services, the `titles` table and Wrangler's `d1_migrations` table, and explicitly disable automatic resource provisioning.
+The validator invokes repository-pinned Wrangler **4.129.0** and uses only `wrangler.local.jsonc` plus ignored `.wrangler/test-d1` state. It applies committed migrations with `--local`, verifies schema version 1, eight seeded services, the `titles` table and Wrangler's `d1_migrations` table, and explicitly disables automatic resource provisioning.
 
 This command must never use `--remote`, a real Cloudflare database identifier, production credentials, personal data, or BANDMARKR resources.
 
@@ -69,31 +62,32 @@ Final results on that exact head:
 - unfolded 873×1000: PASS;
 - smoke-journey console/page errors: **0**.
 
-`npm test` includes `tests/cloudflare-deploy-config.test.mjs`. Using only synthetic identifiers, it verifies:
-- missing, malformed and all-zero D1 identifiers are rejected;
-- generated Worker name is exactly `streamarkr-api`;
-- generated D1 binding is exactly `DB` -> database name `streamarkr`;
-- the remote deploy guard independently checks Cloudflare's authoritative `streamarkr` UUID against the build-supplied UUID before mutation;
-- mismatched D1 name/UUID metadata is rejected;
-- `DEVICE_ACCESS_TOKEN` is declared and required before migration/deployment;
-- `keep_vars` remains enabled;
-- generated config contains no BANDMARKR reference;
-- account-specific generated configuration is written only to ignored/temporary state;
-- remote migration uses `--remote` and does not pass unsupported `--yes`.
+`npm test` includes `tests/cloudflare-deploy-config.test.mjs`. Using only synthetic identifiers, it verifies malformed/placeholder D1 identifiers are rejected, exact Streamarkr Worker/database/binding identity, D1 UUID preflight, required `DEVICE_ACCESS_TOKEN`, `keep_vars`, BANDMARKR isolation, temporary generated config, and the corrected remote migration invocation.
 
 Automated tests must not execute `npm run deploy:cloudflare`, because that command intentionally performs remote D1 migration and Worker deployment when valid Cloudflare build credentials/configuration are present.
 
-## Manual Cloudflare production validation — completed
+## v0.14.0 backend cache bridge validation
+PR #8 adds deterministic browser-cache migration and Worker-snapshot bridge coverage while remaining fully synthetic. The exact final PR head must pass the full normal CI suite before merge.
+
+New regression coverage includes:
+- authenticated `BackendSnapshot` data can atomically replace the related IndexedDB cache stores;
+- simultaneous subscription + rent availability survives in IndexedDB because the v2 cache key includes `optionType`;
+- backend cache metadata records the snapshot timestamp/source;
+- a later offline `ensureSeeded()` call does not overwrite a hydrated backend cache with demo fixtures;
+- unsupported backend schema versions are rejected before any cache replacement;
+- `refreshBackendCache()` uses the existing `BackendClient` seam;
+- failed Worker fetches leave the existing offline cache untouched;
+- IndexedDB v1 -> v2 migration preserves synthetic user-owned Library/rating rows while discarding only the provider-owned availability cache that requires a key change;
+- the recreated v2 availability store accepts multiple option types for the same title/service.
+
+The v0.14.0 browser QA remains synthetic; no test is allowed to set `APP_ORIGIN`, use the production Worker token, fetch the real Worker, or operate on real D1/personal data.
+
+## Manual Cloudflare production validation — completed for v0.13.0
 With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed the reviewed `main` tree from merge commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`.
 
-Manual verification confirmed:
-- Cloudflare build/deploy completed successfully;
-- `/api/health` returned `ok: true`, `service: streamarkr-worker`, `schemaVersion: 1`, `authConfigured: true`;
-- remote D1 `app_meta` returned `schema_version = 1`;
-- remote D1 `services` count returned `8`;
-- `/tables` showed all expected application tables plus Wrangler's `d1_migrations` table.
+Manual verification confirmed successful build/deploy, healthy `/api/health`, D1 schema version 1, eight services and all expected application tables plus `d1_migrations`. This activation used no personal viewing data, live provider credentials/calls, or BANDMARKR resources.
 
-This activation used no personal viewing data, no live provider credentials or calls, and no BANDMARKR resources.
+No v0.14.0 production deployment is authorized by PR #8; a future production deploy requires a fresh explicit user instruction after merge/review.
 
 ## Manual limitation
 A physical **Pixel 9 Pro Fold** has not yet been tested. Browser viewport QA covers representative folded/unfolded dimensions, but physical-device validation remains required before V1 release.
