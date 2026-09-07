@@ -293,6 +293,10 @@ export async function reconcileAvailability(current: AvailabilityEntry[]): Promi
 }
 
 export async function syncNow(): Promise<{ historyEvents: number; alertsCreated: number }> {
+  if ((await backendCacheInfo()).active) {
+    throw new Error('Synthetic provider sync is disabled while a Worker/D1 snapshot cache is active.');
+  }
+
   const now = new Date();
   await db.put('sync_state', { syncType: 'trakt', lastAttemptAt: now.toISOString(), lastSuccessAt: now.toISOString() });
   const events = await TraktAdapter.getHistory();
@@ -361,4 +365,4 @@ export async function buildExportPayload(): Promise<ExportPayload> {
   };
 }
 
-export { TmdbAdapter, AvailabilityAdapter, computeNewSeasonEntry, isFullyWatchedForRating, buildHistoryRow, sortRecentlyWatched };
+export { TmdbAdapter, AvailabilityAdapter };
