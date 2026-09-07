@@ -40,9 +40,10 @@ async function assertLocalMutationAllowed(): Promise<void> {
 }
 
 export async function ensureSeeded(): Promise<void> {
+  const source = await currentDataSource();
   // A previously hydrated Worker snapshot is a valid offline cache. Never overwrite it with demo
   // fixtures just because the app starts while the Worker is unavailable.
-  if ((await currentDataSource()) === 'backend') return;
+  if (source === 'backend') return;
 
   const [flag, availabilityInvalidated] = await Promise.all([
     db.get<{ key: string; value: boolean }>('meta', SEED_FLAG),
@@ -56,6 +57,10 @@ export async function ensureSeeded(): Promise<void> {
       await db.putAll('availability', F.AVAILABILITY);
       await db.del('meta', db.AVAILABILITY_CACHE_INVALIDATED_KEY);
     }
+    // v0.13 and older IndexedDB caches predate this provenance marker. Tag them as fixtures during
+    // the normal upgrade/startup path so future backend activation can never mistake legacy data
+    // for a genuinely empty cache.
+    if (!source) await db.put('meta', { key: DATA_SOURCE_KEY, value: 'fixtures' });
     return;
   }
 
@@ -89,7 +94,9 @@ export async function applyBackendSnapshot(snapshot: BackendSnapshot): Promise<v
   }
 
   const source = await currentDataSource();
-  if (source && source !== 'backend') {
+  // Older installed caches may not have DATA_SOURCE_KEY at all. Never treat a missing provenance
+  // marker as proof that the cache is empty; inspect the actual data stores before first takeover.
+  if (source !== 'backend' && (source !== undefined || await db.hasAnyData())) {
     throw new Error('Initial Worker/D1 cache activation is blocked until local user data has been migrated or explicitly reset.');
   }
 
