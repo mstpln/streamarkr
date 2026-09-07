@@ -32,7 +32,7 @@ class FakeDb implements D1Database {
   failReads = false;
   knownTitles = new Set(['movie-1', 'series-1']);
   knownServices = new Set(['netflix', 'hbo-max']);
-  knownEpisodes = new Set(['series-1:2:3']);
+  knownEpisodes = new Set(['series-1:2:3', 'series-1:0:1']);
   releasedEpisodeNumbers = [1, 2, 3];
   writes: { sql: string; values: D1Primitive[] }[] = [];
   batches: { sql: string; values: D1Primitive[] }[][] = [];
@@ -145,6 +145,35 @@ test('movie and episode override routes validate scope and persist durable corre
   assert.deepEqual(db.writes.at(-1)?.values.slice(1, 6), ['episode', 'series-1', 2, 3, 'unwatched']);
 });
 
+test('override routes reject media-type scope mismatches before touching D1', async () => {
+  const movieAsSeries = new FakeDb();
+  const movieResponse = await handleRequest(new Request('https://worker.example/api/overrides/movie/series-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ state: 'watched' })
+  }), env(movieAsSeries));
+  assert.equal(movieResponse.status, 400);
+  assert.equal((await movieResponse.json() as any).error, 'invalid_override_scope');
+  assert.equal(movieAsSeries.touched, 0);
+
+  const episodeAsMovie = new FakeDb();
+  const episodeResponse = await handleRequest(new Request('https://worker.example/api/overrides/episode/movie-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ seasonNumber: 1, episodeNumber: 1, state: 'watched' })
+  }), env(episodeAsMovie));
+  assert.equal(episodeResponse.status, 400);
+  assert.equal((await episodeResponse.json() as any).error, 'invalid_override_scope');
+  assert.equal(episodeAsMovie.touched, 0);
+});
+
+test('episode override supports season zero specials', async () => {
+  const db = new FakeDb();
+  const response = await handleRequest(new Request('https://worker.example/api/overrides/episode/series-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ seasonNumber: 0, episodeNumber: 1, state: 'watched' })
+  }), env(db));
+  assert.equal(response.status, 200);
+  assert.deepEqual(db.writes.at(-1)?.values.slice(1, 6), ['episode', 'series-1', 0, 1, 'watched']);
+});
+
 test('episode override rejects an episode that does not exist', async () => {
   const db = new FakeDb();
   const response = await handleRequest(new Request('https://worker.example/api/overrides/episode/series-1', {
@@ -168,6 +197,18 @@ test('season override materializes only server-known released episodes and repor
   assert.equal(db.batches[0].filter((entry) => /INSERT INTO watch_overrides/.test(entry.sql)).length, 3);
 });
 
+test('season bulk override accepts season zero specials', async () => {
+  const db = new FakeDb();
+  db.releasedEpisodeNumbers = [1];
+  const response = await handleRequest(new Request('https://worker.example/api/overrides/season/series-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ seasonNumber: 0, state: 'watched' })
+  }), env(db));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json() as any).affectedEpisodes, 1);
+  assert.deepEqual(db.batches[0][1].values.slice(1, 6), ['episode', 'series-1', 0, 1, 'watched']);
+});
+
 test('service preference and custom-service routes persist through D1', async () => {
   const db = new FakeDb();
   const selected = await handleRequest(new Request('https://worker.example/api/services/hbo-max/selected', {
@@ -177,10 +218,10 @@ test('service preference and custom-service routes persist through D1', async ()
   assert.match(db.writes.at(-1)?.sql ?? '', /UPDATE services SET user_selected/);
 
   const custom = await handleRequest(new Request('https://worker.example/api/services/custom', {
-    method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ displayName: 'Criterion Channel' })
+    method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ displayName: 'MUBI + More' })
   }), env(db));
   assert.equal(custom.status, 200);
-  assert.equal((await custom.json() as any).serviceKey, 'criterion-channel');
+  assert.equal((await custom.json() as any).serviceKey, 'mubi-more');
   assert.match(db.writes.at(-1)?.sql ?? '', /INSERT INTO services/);
 });
 
