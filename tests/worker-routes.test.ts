@@ -13,11 +13,16 @@ class Statement implements D1PreparedStatement {
     if (this.sql.includes('SELECT id FROM titles')) return { id: String(this.values[0]) } as T;
     return null;
   }
-  async all<T>(): Promise<D1Result<T>> { this.db.touched += 1; return { success: true, results: [] }; }
+  async all<T>(): Promise<D1Result<T>> {
+    this.db.touched += 1;
+    if (this.db.failReads) throw new Error('synthetic-sensitive-database-detail');
+    return { success: true, results: [] };
+  }
   async run<T>(): Promise<D1Result<T>> { this.db.touched += 1; this.db.writes.push({ sql: this.sql, values: this.values }); return { success: true, results: [] }; }
 }
 class FakeDb implements D1Database {
   touched = 0;
+  failReads = false;
   writes: { sql: string; values: D1Primitive[] }[] = [];
   prepare(query: string): D1PreparedStatement { return new Statement(query, this); }
   async batch<T>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> { this.touched += statements.length; return statements.map(() => ({ success: true, results: [] })); }
@@ -28,9 +33,10 @@ function env(db = new FakeDb(), overrides: Partial<Env> = {}): Env {
 }
 function authHeaders(extra: Record<string, string> = {}) { return { authorization: 'Bearer synthetic-test-token', ...extra }; }
 
-test('health is public but reports whether auth is configured', async () => {
+test('health is public but reports whether auth is configured and returns a request id', async () => {
   const response = await handleRequest(new Request('https://worker.example/api/health'), env());
   assert.equal(response.status, 200);
+  assert.match(response.headers.get('x-request-id') ?? '', /^[0-9a-f-]{36}$/i);
   const payload = await response.json() as any;
   assert.equal(payload.ok, true);
   assert.equal(payload.schemaVersion, 1);
@@ -73,4 +79,23 @@ test('CORS is emitted only for the configured exact app origin', async () => {
   assert.equal(allowed.headers.get('access-control-allow-origin'), 'https://app.example');
   const denied = await handleRequest(new Request('https://worker.example/api/health', { headers: { origin: 'https://evil.example' } }), env());
   assert.equal(denied.headers.get('access-control-allow-origin'), null);
+});
+
+test('unexpected backend errors do not expose internal database details', async () => {
+  const db = new FakeDb();
+  db.failReads = true;
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const response = await handleRequest(new Request('https://worker.example/api/snapshot', { headers: authHeaders() }), env(db));
+    assert.equal(response.status, 500);
+    const payload = await response.json() as any;
+    assert.equal(payload.error, 'request_failed');
+    assert.equal(typeof payload.requestId, 'string');
+    assert.equal(payload.message, undefined);
+    assert.equal(JSON.stringify(payload).includes('synthetic-sensitive-database-detail'), false);
+    assert.equal(response.headers.get('x-request-id'), payload.requestId);
+  } finally {
+    console.error = originalError;
+  }
 });
