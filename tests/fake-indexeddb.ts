@@ -1,8 +1,6 @@
-// Correction 15: a minimal, test-owned in-memory polyfill for the narrow slice of IndexedDB that
-// src/lib/db.ts actually uses (open/upgrade with keyPaths, get/getAll/put/delete/clear per store,
-// no cursors, no indexes, no range queries). This lets us run a real integration test against the
-// actual repo.ts + db.ts code path without depending on any external package (the previously
-// blocked `fake-indexeddb` npm package is unavailable in this offline environment).
+// Minimal, test-owned in-memory polyfill for the narrow slice of IndexedDB that src/lib/db.ts
+// uses: versioned open/upgrade, keyPath stores, get/getAll/put/delete/clear, store deletion and
+// transactions. No cursors, indexes or range queries.
 type KeyPath = string | string[];
 
 function extractKey(keyPath: KeyPath, value: any): string {
@@ -57,24 +55,26 @@ class FakeTransaction {
   onerror: (() => void) | null = null;
   error: any = null;
   constructor(private db: FakeIDBDatabase) {
-    // Real IndexedDB transactions auto-commit once the current task (and its microtasks) finish
-    // with no further requests queued. db.ts only ever issues its request(s) synchronously right
-    // after creating the transaction, so a couple of microtask turns is a faithful-enough model.
     queueMicrotask(() => queueMicrotask(() => queueMicrotask(() => { this.oncomplete?.(); })));
   }
   objectStore(name: string): FakeObjectStore {
-    const def = this.db.tables.get(name)!;
+    const def = this.db.tables.get(name);
+    if (!def) throw new Error(`Missing fake IndexedDB store: ${name}`);
     return new FakeObjectStore(def.data, def.keyPath);
   }
 }
 
 class FakeIDBDatabase {
+  version = 0;
   tables = new Map<string, { keyPath: KeyPath; data: Map<string, any> }>();
   get objectStoreNames() {
     return { contains: (name: string) => this.tables.has(name) };
   }
   createObjectStore(name: string, opts: { keyPath: KeyPath }) {
     this.tables.set(name, { keyPath: opts.keyPath, data: new Map() });
+  }
+  deleteObjectStore(name: string) {
+    this.tables.delete(name);
   }
   transaction(_names: string[], _mode: string): FakeTransaction {
     return new FakeTransaction(this);
@@ -84,7 +84,7 @@ class FakeIDBDatabase {
 class FakeIDBOpenRequest {
   onsuccess: (() => void) | null = null;
   onerror: (() => void) | null = null;
-  onupgradeneeded: (() => void) | null = null;
+  onupgradeneeded: ((event: any) => void) | null = null;
   result: FakeIDBDatabase;
   error: any = null;
   constructor(db: FakeIDBDatabase) { this.result = db; }
@@ -92,13 +92,16 @@ class FakeIDBOpenRequest {
 
 class FakeIDBFactory {
   private dbs = new Map<string, FakeIDBDatabase>();
-  open(name: string, _version: number): FakeIDBOpenRequest {
-    let isNew = false;
+  open(name: string, version: number): FakeIDBOpenRequest {
     let db = this.dbs.get(name);
-    if (!db) { db = new FakeIDBDatabase(); this.dbs.set(name, db); isNew = true; }
+    if (!db) { db = new FakeIDBDatabase(); this.dbs.set(name, db); }
+    const oldVersion = db.version;
     const req = new FakeIDBOpenRequest(db);
     queueMicrotask(() => {
-      if (isNew) req.onupgradeneeded?.();
+      if (version > oldVersion) {
+        req.onupgradeneeded?.({ oldVersion, newVersion: version });
+        db!.version = version;
+      }
       req.onsuccess?.();
     });
     return req;
@@ -106,7 +109,7 @@ class FakeIDBFactory {
 }
 
 /** Installs a fresh fake indexedDB global. Call before importing/using src/lib/db.ts's cached
- * connection in a given test — pair with resetting db.ts's module-level cache (see repo.test.ts). */
+ * connection in a given test process. */
 export function installFakeIndexedDB(): void {
   (globalThis as any).indexedDB = new FakeIDBFactory();
 }
