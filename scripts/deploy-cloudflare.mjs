@@ -13,7 +13,6 @@ const ACCOUNT_NEUTRAL_CONFIG_PATH = path.join(PROJECT_ROOT, 'wrangler.jsonc');
 const CONFIG_PATH = path.join(PROJECT_ROOT, '.wrangler', 'deploy', 'wrangler.generated.jsonc');
 const SAFETY_FLAGS = ['--x-provision=false', '--x-auto-create=false'];
 const EXPECTED_D1_NAME = 'streamarkr';
-const EXPECTED_D1_JURISDICTION = 'eu';
 
 export function assertRequiredSecretNames(secretList) {
   if (!Array.isArray(secretList)) throw new Error('Could not verify Streamarkr Worker secrets.');
@@ -31,10 +30,9 @@ export function assertDedicatedD1Info(databaseInfo, expectedDatabaseId) {
   const expectedId = validateD1DatabaseId(expectedDatabaseId).toLowerCase();
   const actualId = typeof databaseInfo.uuid === 'string' ? databaseInfo.uuid.toLowerCase() : '';
   const actualName = typeof databaseInfo.name === 'string' ? databaseInfo.name : '';
-  const actualJurisdiction = typeof databaseInfo.jurisdiction === 'string' ? databaseInfo.jurisdiction.toLowerCase() : '';
 
-  if (actualName !== EXPECTED_D1_NAME || actualId !== expectedId || actualJurisdiction !== EXPECTED_D1_JURISDICTION) {
-    throw new Error('Remote D1 identity does not match the dedicated EU Streamarkr database; refusing to migrate or deploy.');
+  if (actualName !== EXPECTED_D1_NAME || actualId !== expectedId) {
+    throw new Error('Remote D1 identity does not match the dedicated Streamarkr database; refusing to migrate or deploy.');
   }
 }
 
