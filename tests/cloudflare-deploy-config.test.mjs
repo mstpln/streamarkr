@@ -56,7 +56,7 @@ test('committed Wrangler config is account-neutral and deployment is guarded', a
   assert.equal(packageJson.scripts['deploy:cloudflare'], 'node scripts/deploy-cloudflare.mjs');
 
   assert.match(deployScript, /secret', 'list'/);
-  assert.match(deployScript, /'d1', 'migrations', 'apply', 'DB'/);
+  assert.match(deployScript, /'d1', 'migrations', 'apply', 'streamarkr'/);
   assert.match(deployScript, /'--remote', '--yes'/);
   assert.match(deployScript, /'deploy'/);
   assert.match(deployScript, /--x-provision=false/);
