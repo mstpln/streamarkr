@@ -9,7 +9,14 @@ const PERSIST_DIR = '.wrangler/test-d1';
 function runWrangler(args, { json = false } = {}) {
   const result = spawnSync(
     'npx',
-    ['--yes', `wrangler@${WRANGLER_VERSION}`, ...args, '--config', CONFIG],
+    [
+      '--yes',
+      `wrangler@${WRANGLER_VERSION}`,
+      ...args,
+      '--config', CONFIG,
+      '--x-provision=false',
+      '--x-auto-create=false'
+    ],
     {
       encoding: 'utf8',
       env: { ...process.env, CI: '1', NO_D1_WARNING: 'true' }
