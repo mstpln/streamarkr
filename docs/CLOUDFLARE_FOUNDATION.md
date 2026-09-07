@@ -32,7 +32,7 @@ CORS is deny-by-default for cross-origin requests. `APP_ORIGIN` must exactly mat
 - `preview_database_id` is a local identifier;
 - no credentials or real account-level resource IDs are present.
 
-`scripts/validate-wrangler-d1.mjs` invokes exactly Wrangler **4.129.0** through `npx`, uses ignored `.wrangler/test-d1` state, and always passes `--local`. It applies the committed migrations and verifies schema/seed state afterward. CI runs this check after the deterministic Node SQLite migration tests.
+`scripts/validate-wrangler-d1.mjs` invokes exactly Wrangler **4.129.0** through `npx`, uses ignored `.wrangler/test-d1` state, always passes `--local`, and explicitly disables Wrangler's automatic resource provisioning and draft-resource auto-creation flags. It applies the committed migrations and verifies schema/seed state afterward. CI runs this check after the deterministic Node SQLite migration tests.
 
 The local validator must never be changed to `--remote`, given a real database ID, or pointed at any BANDMARKR resource merely to make CI pass.
 
