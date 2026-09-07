@@ -1,26 +1,28 @@
 {
-  "_readMeFirst": "v0.11.0 adds the source-level Worker + D1 backend foundation while the current PWA UI intentionally remains on IndexedDB/fake providers until a later focused migration. No Cloudflare resource is created or deployed by this build.",
-  "appVersion": "0.11.0",
-  "cacheVersion": "streamarkr-v0.11.0",
+  "_readMeFirst": "v0.12.0 adds pinned Wrangler-local D1 migration validation on top of the merged v0.11.0 Worker + D1 source foundation. The PWA UI still intentionally uses IndexedDB/fake providers. No remote Cloudflare resource is created or deployed by this build.",
+  "appVersion": "0.12.0",
+  "cacheVersion": "streamarkr-v0.12.0",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-07T07:10:00Z",
+  "generatedAt": "2026-09-07T07:47:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
     "primaryStorage": "Cloudflare D1",
     "optionalStorage": "Cloudflare R2",
     "providers": "real Trakt/TMDB/Streaming Availability adapters",
-    "status": "Worker/D1 source foundation implemented; Cloudflare activation and live providers still pending"
+    "status": "Worker/D1 source foundation implemented and local D1 runtime validation staged; remote Cloudflare activation and live providers still pending"
   },
   "currentToolchain": {
     "node": 22,
     "typescript": "5.9.2",
     "playwright": "1.55.0",
+    "wranglerLocalValidation": "4.129.0 exact CLI pin",
     "dependencyInstall": "npm ci --no-audit --no-fund",
     "build": "npm run build",
     "workerTypecheck": "npm run build:worker",
     "tests": "npm test",
     "d1SchemaTests": "npm run test:d1",
+    "d1WranglerLocal": "npm run test:d1:wrangler",
     "browserQa": "npm run qa:browser"
   },
   "pwa": {
@@ -45,6 +47,8 @@
     "auth": "Bearer device token from Worker DEVICE_ACCESS_TOKEN secret; fail closed if unconfigured",
     "cors": "exact APP_ORIGIN only",
     "requestTracing": "x-request-id on responses; sanitized structured server errors",
+    "localWranglerConfig": "wrangler.local.jsonc; local-only placeholder database ID plus preview ID",
+    "localWranglerValidation": "scripts/validate-wrangler-d1.mjs applies migrations with --local and verifies schema_version=1, 8 services, titles table, and d1_migrations table",
     "cloudflareResourcesCreated": false,
     "deployed": false,
     "liveProviders": false
@@ -57,12 +61,21 @@
       "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
     },
     "v0110": {
-      "pwaBuild": "pass on reviewed candidate heads",
-      "workerTypecheck": "pass on reviewed candidate heads",
-      "logicRepositoryWorkerClientSecurityTests": {"count": 120, "requiredPass": 120, "failAllowed": 0},
-      "d1SchemaTests": {"count": 5, "requiredPass": 5, "failAllowed": 0},
-      "browserQa": {"checks": 27, "requiredPass": 27, "failAllowed": 0, "consoleOrPageErrorsAllowed": 0},
-      "exactHeadCheckout": "pull-request CI explicitly checks out pull_request.head.sha; merge readiness always requires both CI jobs green on the literal final head"
+      "mergeCommit": "65fba889597a22f7703b3337833fc1f0ca3c5cb1",
+      "pwaBuild": "pass",
+      "workerTypecheck": "pass",
+      "logicRepositoryWorkerClientSecurityTests": {"count": 120, "pass": 120, "fail": 0},
+      "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
+      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0},
+      "exactHeadCheckout": "pull-request CI explicitly checks out pull_request.head.sha"
+    },
+    "v0120": {
+      "requiredLogicRepositoryWorkerClientSecurityTests": 120,
+      "requiredD1SchemaTests": 5,
+      "requiredWranglerLocalD1": "pass with Wrangler 4.129.0 on literal final PR head",
+      "requiredBrowserQa": 27,
+      "requiredConsoleOrPageErrors": 0,
+      "exactHeadCheckout": "required"
     },
     "responsive": ["344x792 folded", "873x1000 unfolded"],
     "physicalPixel9ProFold": "not yet run"
@@ -84,12 +97,13 @@
     "unexpected Worker failures do not return raw internal error messages",
     "service worker never app-shell caches personal API, cross-origin, or Authorization-bearing responses",
     "pull-request CI validates the literal PR head SHA rather than relying only on GitHub's synthetic merge ref",
+    "D1 migration is validated in both Node SQLite and Wrangler local D1 before any remote activation",
     "History and Library preserve their distinct streaming-service semantics",
     "Alerts remain NEW during first visit and are marked seen on page exit"
   ],
   "pendingIntegrations": [
-    "Create/approve separate Streamarkr Cloudflare Worker and D1 resources",
-    "Pin and validate Wrangler/local D1 runtime before any remote migration",
+    "Explicitly approve and create separate Streamarkr Cloudflare Worker and D1 resources",
+    "Activate a real Streamarkr Wrangler config without committing real identifiers or secrets",
     "Migrate frontend repository calls to Worker while retaining IndexedDB caching/offline behavior",
     "Real Trakt OAuth + history sync",
     "Real TMDB metadata/search/trailer API",
@@ -104,9 +118,12 @@
     "baselinePr": 1,
     "baselinePrStatus": "merged",
     "baselineMergeCommit": "438997dedc282366339e6507d826441d99a81adc",
-    "currentBranch": "feat/worker-d1-foundation-v0110",
-    "currentPr": 2,
-    "currentPrStatus": "open; exact-final-head CI gate required; never merge without explicit user authorization",
+    "backendFoundationPr": 2,
+    "backendFoundationPrStatus": "merged",
+    "backendFoundationMergeCommit": "65fba889597a22f7703b3337833fc1f0ca3c5cb1",
+    "currentBranch": "feat/wrangler-local-d1-v0120",
+    "currentPr": 3,
+    "currentPrStatus": "open; exact-final-head CI and review required before merge readiness; never merge without explicit user authorization",
     "cloudflareConnected": false
   },
   "absoluteRules": [

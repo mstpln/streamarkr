@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "streamarkr-api-local",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-07",
+  "vars": {
+    "APP_ENV": "local",
+    "APP_ORIGIN": "http://localhost:8787"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "streamarkr-local",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "preview_database_id": "streamarkr-local",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

@@ -14,48 +14,25 @@ PR #1 was validated on Node 22 with the committed lockfile and reproducible `npm
 - Folded proxy 344×792: PASS.
 - Unfolded proxy 873×1000: PASS.
 
-## v0.11.0 — PR #2 validation
-The Worker + D1 foundation adds validation layers without replacing the existing baseline tests.
+## v0.11.0 merged backend-foundation validation
+PR #2 merged after exact-head validation:
+- PWA build: PASS.
+- Worker type-check/build: PASS.
+- logic/repository/Worker/client/security tests: **120/120 PASS**.
+- Node SQLite D1 migration semantics: **5/5 PASS**.
+- Playwright browser/responsive QA: **27/27 PASS**.
+- smoke-journey console/page errors: **0**.
 
-### PWA build
-```bash
-npm run build
-```
-Reviewed candidate heads: **PASS**.
+The 120-test suite includes Worker auth/CORS/error-safety, canonical-title mutation preconditions, stable crosswalk preservation, D1 repository behavior, browser client behavior, service-worker API-cache safety, and the preserved application/domain regression suite.
 
-### Worker type-check/build
-```bash
-npm run build:worker
-```
-Reviewed candidate heads: **PASS**. This compiles `worker/**/*.ts` plus the shared backend/domain contracts without requiring live Cloudflare resources or credentials.
+## v0.12.0 — Wrangler-local D1 runtime validation
+The current build adds a second migration gate using Cloudflare's local D1 runtime rather than relying on generic SQLite semantics alone.
 
-### Logic / repository / Worker / client tests
-```bash
-npm test
-```
-Expected final suite after the latest review fix: **120 tests**. The exact final PR head must report **120/120 PASS** before merge readiness is declared.
-
-This is the merged 101-test baseline plus 19 backend/security tests. New coverage includes:
-- bearer device-token authentication accepts only the exact expected value;
-- protected routes reject invalid credentials before touching D1;
-- protected routes fail closed when the Worker authentication secret is unconfigured;
-- exact-origin CORS behavior;
-- request IDs on Worker responses;
-- unexpected backend failures do not expose raw database/internal error messages;
-- rating input validation;
-- Library writes require a canonical title record;
-- rating writes require a canonical title record and return a controlled conflict for an unknown title instead of surfacing a D1 foreign-key failure as a server error;
-- provider title upserts stay in provider-owned storage and do not mutate user-owned tables;
-- provider title upserts preserve already-known Trakt/IMDb/availability crosswalk IDs when a later partial provider payload omits them;
-- availability replacement uses one D1 batch and preserves multiple option types per title/service;
-- `WorkerBackendClient` sends bearer auth, URL-encodes IDs, sends JSON mutations and does not expose its token in surfaced errors;
-- the service worker bypasses Cache Storage for `/api/`, cross-origin, and authenticated requests so future personal API snapshots cannot enter the app-shell cache.
-
-### D1 migration semantics
+### Deterministic SQLite semantics
 ```bash
 npm run test:d1
 ```
-Reviewed candidate heads: **5/5 PASS** using Node 22's built-in SQLite engine against `migrations/0001_initial.sql`.
+Expected: **5/5 PASS** using Node 22's built-in SQLite engine.
 
 Coverage:
 - migration applies cleanly and is idempotent;
@@ -64,7 +41,20 @@ Coverage:
 - restrictive foreign-key behavior prevents provider title deletion from cascading away Library membership;
 - all eight agreed service registry rows exist without silently preselecting personal preferences.
 
-This SQLite check is a deterministic schema safety layer, not a substitute for Wrangler's local D1 runtime. Before any Cloudflare D1 resource is migrated, the same migration must also pass a pinned Wrangler-local D1 check.
+### Wrangler-local D1 runtime
+```bash
+npm run test:d1:wrangler
+```
+The validator invokes exactly Wrangler **4.129.0** and uses only `wrangler.local.jsonc` plus ignored `.wrangler/test-d1` state. It must:
+1. clear only the isolated local test-state directory;
+2. apply committed migrations with `wrangler d1 migrations apply streamarkr-local --local`;
+3. query the same local D1 state with `wrangler d1 execute ... --local --json`;
+4. assert `schema_version = 1`;
+5. assert all **8** seeded services;
+6. assert the `titles` table exists;
+7. assert Wrangler's `d1_migrations` tracking table exists.
+
+This command must never use `--remote`, a real Cloudflare database identifier, production credentials, personal data, or BANDMARKR resources.
 
 ### Browser / responsive QA
 ```bash
@@ -72,22 +62,21 @@ npm run build
 npm run serve
 npm run qa:browser
 ```
-Reviewed candidate heads have passed **27/27** Playwright checks with zero smoke-journey console/page errors. The exact final PR head must receive the same gate before merge readiness is declared.
+The exact final v0.12.0 PR head must preserve **27/27** Playwright checks with zero smoke-journey console/page errors at folded 344×792 and unfolded 873×1000.
 
-The unchanged synthetic browser journey verifies Home, Library, History, Search, Discover, Settings, Alerts and Detail behavior; Alerts NEW lifecycle; Discover heart behavior; Settings re-entry; semantic ratings; detail progress/trailer/episodes/history/streaming; folded 344×792 and unfolded 873×1000 layouts; and zero smoke-journey console/page errors.
-
-## CI gate
+## v0.12.0 CI gate
 `.github/workflows/ci.yml` runs, in order:
-1. explicit checkout of the pull request **head SHA** (not only GitHub's synthetic merge ref) for PR validation;
+1. explicit checkout of the pull request **head SHA** rather than relying only on GitHub's synthetic merge ref;
 2. `npm ci --no-audit --no-fund`;
 3. PWA build;
 4. Worker type-check/build;
-5. 120 logic/repository/Worker/client/security tests;
-6. 5 D1 migration tests;
-7. Playwright Chromium install;
-8. PWA browser/responsive QA.
+5. **120** logic/repository/Worker/client/security tests;
+6. **5** deterministic SQLite D1 migration tests;
+7. pinned Wrangler 4.129.0 local D1 migration/runtime validation;
+8. Playwright Chromium install;
+9. PWA browser/responsive QA.
 
-The exact final PR head is authoritative. PR #2 is not ready until both CI jobs are green on that exact head.
+The literal final PR head is authoritative. Merge readiness requires both CI jobs green on that exact head plus no unresolved blocking review findings.
 
 ## Manual limitation
 A physical **Pixel 9 Pro Fold** has not yet been tested. Browser viewport QA covers representative folded/unfolded dimensions, but physical-device validation remains required before V1 release.

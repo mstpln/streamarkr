@@ -29,6 +29,8 @@ jobs:
         run: npm test
       - name: Validate D1 migration semantics
         run: npm run test:d1
+      - name: Validate migration in Wrangler local D1
+        run: npm run test:d1:wrangler
 
   browser-qa:
     runs-on: ubuntu-latest

@@ -1,7 +1,7 @@
 {
   "name": "streamarkr",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.12.0",
   "type": "module",
   "description": "Streamarkr personal movie and TV tracking PWA.",
   "scripts": {
@@ -11,8 +11,15 @@
     "serve": "node server.mjs",
     "test": "rm -rf test-dist && tsc -p tsconfig.tests.json && node --test test-dist/tests/*.test.js",
     "test:d1": "node --experimental-sqlite --test tests/d1-schema.test.mjs",
+    "test:d1:wrangler": "node scripts/validate-wrangler-d1.mjs",
     "qa:browser": "node browser-qa.mjs"
   },
-  "engines": {"node": ">=22"},
-  "devDependencies": {"playwright": "1.55.0", "typescript": "5.9.2"}
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "playwright": "1.55.0",
+    "typescript": "5.9.2",
+    "wrangler": "4.129.0"
+  }
 }
