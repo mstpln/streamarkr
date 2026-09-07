@@ -164,7 +164,7 @@
     "fullName": "mstpln/streamarkr",
     "visibility": "public",
     "defaultBranch": "main",
-    "mainCommit": "73359c56825ea7d9b6bfa1245f513d23c9e08e30",
+    "lastImplementationMergeCommit": "73359c56825ea7d9b6bfa1245f513d23c9e08e30",
     "baselinePr": 1,
     "baselinePrStatus": "merged",
     "backendFoundationPr": 2,
