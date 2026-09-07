@@ -39,13 +39,14 @@ Implemented on PR #2:
 - Unexpected backend errors are returned as sanitized generic failures; logs include only request ID, route/method and error class, not raw database/provider messages, credentials or tokens.
 - Added initial routes for compact snapshot reads, Library add/remove, rating set/clear and alert seen-state.
 - Added provider interfaces for TMDB, Trakt and availability, but no live provider implementation.
-- Canonical provider upserts now preserve already-known Trakt/IMDb/availability crosswalk IDs when a later partial provider payload omits those optional IDs, preventing loss of stable identity links.
+- Canonical provider upserts preserve already-known Trakt/IMDb/availability crosswalk IDs when a later partial provider payload omits those optional IDs, preventing loss of stable identity links.
+- Library and rating writes both verify that the canonical title exists first. A valid-format but unknown title returns a controlled conflict rather than leaking a database foreign-key failure into a generic server error.
 
 ### Frontend seam and cache safety
 - Added a shared `BackendSnapshot` contract and `WorkerBackendClient`.
 - The current PWA still uses IndexedDB + synthetic adapters so this infrastructure build does not destabilize the working baseline.
 - A later focused build will move current repository calls through the Worker and retain IndexedDB as the cached/offline layer.
-- The service worker now caches only same-origin unauthenticated app assets. `/api/` requests, cross-origin requests, and requests carrying `Authorization` bypass Cache Storage so future personal Worker responses cannot leak into the app-shell cache.
+- The service worker caches only same-origin unauthenticated app assets. `/api/` requests, cross-origin requests, and requests carrying `Authorization` bypass Cache Storage so future personal Worker responses cannot leak into the app-shell cache.
 
 ### Cloudflare activation status
 - `wrangler.example.jsonc` and `.dev.vars.example` are deliberately non-production examples only.
@@ -54,18 +55,20 @@ Implemented on PR #2:
 - Planned isolated names are documented in `docs/CLOUDFLARE_FOUNDATION.md`; Streamarkr must never bind to BANDMARKR resources.
 
 ## v0.11.0 validation
-The previous reviewed head after the crosswalk fix completed the full GitHub CI gate successfully:
-- `npm ci`: PASS
-- PWA build: PASS
-- Worker TypeScript build/type-check: PASS
-- logic/repository/Worker/client/security tests: **119/119 PASS**
-- D1 migration semantics: **5/5 PASS**
-- Playwright browser/responsive QA: **27/27 PASS**
-- Folded proxy 344×792: PASS
-- Unfolded proxy 873×1000: PASS
-- Smoke-journey console/page errors: 0
+Reviewed candidate heads have completed the full GitHub CI gate successfully, including the stable-crosswalk fix and exact-head checkout hardening. The latest API-precondition correction adds one regression test, bringing the expected final logic/repository/Worker/client/security suite to **120 tests**.
 
-A follow-up review also found that GitHub's default PR checkout validates the synthetic merge ref. CI has now been hardened to explicitly check out the pull request **head SHA** for PR runs, so merge readiness is based on the literal final reviewed head as required by this project. The exact final documentation/code head must pass both CI jobs before PR #2 is called ready to merge.
+The final merge gate is:
+- `npm ci`: PASS required
+- PWA build: PASS required
+- Worker TypeScript build/type-check: PASS required
+- logic/repository/Worker/client/security tests: **120/120 PASS** required
+- D1 migration semantics: **5/5 PASS** required
+- Playwright browser/responsive QA: **27/27 PASS** required
+- Folded proxy 344×792: PASS required
+- Unfolded proxy 873×1000: PASS required
+- Smoke-journey console/page errors: 0 required
+
+GitHub's default PR checkout validates a synthetic merge ref. CI is hardened to explicitly check out the pull request **head SHA** for PR runs, so merge readiness is based on the literal final reviewed head as required by this project. The exact final documentation/code head must pass both CI jobs before PR #2 is called ready to merge.
 
 ## Next work after PR #2 is merged
 1. With explicit user approval, create/approve separate Streamarkr Cloudflare Worker and D1 resources.
