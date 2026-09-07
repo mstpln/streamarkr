@@ -70,15 +70,18 @@ No personal Streamarkr viewing data, live provider credentials/calls, or BANDMAR
 ## v0.14.0 backend cache bridge
 - App/cache version is v0.14.0 / `streamarkr-v0.14.0`.
 - IndexedDB schema is version 2. Its availability key is now `(titleId, serviceKey, optionType)`, matching D1 and allowing subscription/rent/buy rows for one title/service to coexist.
-- The v1 -> v2 browser migration recreates only the provider-owned `availability` cache and preserves user-owned IndexedDB stores.
-- `db.replaceStores()` can atomically replace a complete set of browser cache stores in one IndexedDB transaction.
+- The v1 -> v2 browser migration recreates only the provider-owned `availability` cache, persists an invalidation marker, refills synthetic availability once on the next seed check, and preserves user-owned IndexedDB stores.
+- `db.replaceStores()` validates cache key fields before mutation and uses one IndexedDB transaction for complete related-store replacement; scheduling/request failure aborts the transaction rather than committing a partial snapshot.
 - `repo.applyBackendSnapshot()` validates backend schema version/timestamp and atomically hydrates titles, metadata, seasons, episodes, watch state, Library, ratings, watched-service, services, availability, alerts and sync state from one authenticated `BackendSnapshot`.
+- Initial backend takeover is deliberately blocked when a fixture/local cache already exists. A later activation build must first migrate or explicitly reconcile/reset existing local user-owned state rather than silently replacing it with D1 contents.
 - A hydrated backend cache is marked in browser-only metadata and is not overwritten by synthetic fixtures on a later offline startup.
 - `refreshBackendCache()` fetches through the existing `BackendClient` seam and only starts local replacement after a successful snapshot fetch; a network failure leaves the prior offline cache intact.
-- The production browser runtime is **not activated by this build**. No Worker URL/token is embedded, `APP_ORIGIN` remains unset, and existing user mutations still run through the current synthetic/local path until a later focused activation build provides secure browser authentication and the remaining mutation endpoints.
+- Local-only user mutations and synthetic provider sync are blocked while a Worker/D1 snapshot cache is active, preventing local edits from being silently lost on the next server snapshot.
+- The production browser runtime is **not activated by this build**. No Worker URL/token is embedded, `APP_ORIGIN` remains unset, and the normal UI remains on its current synthetic/local path until a later focused activation build provides local-state migration, secure browser authentication and all required Worker mutation endpoints.
 - Settings can distinguish fixture storage from a hydrated Worker/D1 snapshot cache without exposing credentials.
 
 ## Still pending
+- Migrate/reconcile existing local user-owned state into D1, or deliberately reset it, before first real browser backend activation.
 - Decide/establish the real PWA hosting origin and then configure exact `APP_ORIGIN`.
 - Design the safe single-user browser authentication/bootstrap path without committing or exposing the device secret in public source.
 - Route supported user mutations through `BackendClient` and add the remaining Worker mutation endpoints needed for watched-service, manual overrides and service preferences before enabling backend mode for real use.
