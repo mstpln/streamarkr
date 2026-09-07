@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install development tools
+        run: npm ci --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Logic and repository tests
+        run: npm test
+
+  browser-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: verify
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install development tools
+        run: npm ci --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build
+        run: npm run build
+      - name: Start synthetic app
+        run: |
+          node server.mjs 8787 > /tmp/streamarkr-server.log 2>&1 &
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8787/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/streamarkr-server.log
+          exit 1
+      - name: Browser and responsive QA
+        env:
+          QA_BASE_URL: http://127.0.0.1:8787
+        run: npm run qa:browser

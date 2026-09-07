@@ -1,0 +1,92 @@
+{
+  "_readMeFirst": "Current reviewed synthetic/local baseline. Target architecture remains Vite + TypeScript + separate Cloudflare Worker + D1 (+ optional R2) + real provider adapters. IndexedDB/fake providers are temporary.",
+  "appVersion": "0.10.2",
+  "cacheVersion": "streamarkr-v0.10.2",
+  "generatedAt": "2026-09-06T22:35:00Z",
+  "targetArchitecture": {
+    "build": "Vite + TypeScript",
+    "backend": "Cloudflare Worker",
+    "primaryStorage": "Cloudflare D1",
+    "optionalStorage": "Cloudflare R2",
+    "providers": "real Trakt/TMDB/Streaming Availability adapters",
+    "status": "pending after baseline merge"
+  },
+  "currentToolchain": {
+    "node": 22,
+    "typescript": "5.9.2",
+    "playwright": "1.55.0",
+    "dependencyInstall": "npm ci --no-audit --no-fund",
+    "build": "npm run build",
+    "tests": "npm test",
+    "browserQa": "npm run qa:browser"
+  },
+  "compiledOutputDir": "dist",
+  "serviceWorker": "sw.js",
+  "serviceWorkerManifest": "sw-manifest.json",
+  "compiledModuleCount": 29,
+  "providerMode": "fake-adapters-only",
+  "database": {
+    "kind": "IndexedDB",
+    "temporary": true,
+    "standsInFor": "Cloudflare D1",
+    "file": "src/lib/db.ts"
+  },
+  "implementedScreens": ["home", "library", "history", "search", "discover", "detail", "alerts", "settings"],
+  "implementedDomainModules": [
+    "alerts.ts", "db.ts", "discover.ts", "export.ts", "fixtures.ts", "history.ts", "providers.ts", "repo.ts", "resolve.ts", "season-select.ts", "service-options.ts", "status.ts", "streaming.ts", "types.ts", "views.ts"
+  ],
+  "validation": {
+    "build": "pass",
+    "tests": {"count": 101, "suites": 26, "pass": 101, "fail": 0, "skipped": 0, "todo": 0},
+    "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0},
+    "responsive": ["344x792 folded", "873x1000 unfolded"],
+    "physicalPixel9ProFold": "not yet run"
+  },
+  "hardenedBehaviors": [
+    "Caught Up requires no gaps through the engaged season while untouched newer seasons are ignored until started",
+    "On Hold and Watching Now use real watch timestamps, not manual correction changedAt",
+    "Finished series requires provider status Ended",
+    "season bulk overrides are bounded to currently known/released episodes",
+    "New Season supports future seasons before episode records exist",
+    "availability alerts are transition/cycle-aware",
+    "provider-owned availability reconciliation removes stale rows without touching user-owned stores",
+    "Search/Library membership rejects dangling title IDs",
+    "Rate Now stays visible when either media type has eligible titles",
+    "Settings re-entry resets to Preferences",
+    "Detail overview/history/episodes expose required progress, release, synopsis, and manual-correction context",
+    "Discover removes a title after it is added to Library",
+    "stable provider crosswalk IDs are included in user-data export",
+    "Detail primary streaming action prefers selected services but falls back to another actionable subscription service",
+    "History retains deselected historical watched-service values and filters",
+    "Library service filter reflects represented current availability regardless of preference selection",
+    "Alerts remain NEW during first visit and are marked seen on page exit"
+  ],
+  "pendingIntegrations": [
+    "Real Trakt OAuth + history sync",
+    "Real TMDB metadata/search/trailer API",
+    "Real Streaming Availability API",
+    "Cloudflare D1",
+    "Cloudflare Worker",
+    "properly sourced/licensed streaming-service logos",
+    "physical Pixel 9 Pro Fold validation before V1 release"
+  ],
+  "knownSchemaMigrationNotes": [
+    "Current IndexedDB availability key [titleId, serviceKey] cannot represent multiple simultaneous option types for the same service; redesign during D1 migration."
+  ],
+  "repository": {
+    "fullName": "mstpln/streamarkr",
+    "visibility": "public",
+    "defaultBranch": "main",
+    "baselineBranch": "feat/establish-streamarkr-baseline-v0102",
+    "baselinePr": 1,
+    "baselinePrStatus": "open; final review; never merge without explicit user authorization",
+    "cloudflareConnected": false
+  },
+  "absoluteRules": [
+    "No live provider calls from synthetic QA",
+    "No deploy or Cloudflare production action without explicit authorization",
+    "No real/personal data in fixtures or automated QA",
+    "Never overwrite user-owned data from provider refresh",
+    "Never commit API keys, OAuth secrets/tokens, Cloudflare credentials, or other secrets"
+  ]
+}
