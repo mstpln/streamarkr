@@ -20,7 +20,7 @@ type Row = Record<string, unknown>;
 
 export class MissingCanonicalTitleError extends Error {
   constructor(titleId: string) {
-    super(`Cannot add ${titleId} to My Library before its canonical title record exists`);
+    super(`Canonical title record ${titleId} does not exist`);
     this.name = 'MissingCanonicalTitleError';
   }
 }
@@ -151,6 +151,11 @@ async function run(db: D1Database, sql: string, values: D1Primitive[]): Promise<
   if (!result.success) throw new Error('D1 write failed');
 }
 
+async function requireCanonicalTitle(db: D1Database, titleId: string): Promise<void> {
+  const title = await db.prepare('SELECT id FROM titles WHERE id = ?').bind(titleId).first<{ id: string }>();
+  if (!title) throw new MissingCanonicalTitleError(titleId);
+}
+
 export async function upsertTitle(db: D1Database, title: Title): Promise<void> {
   await run(db, `INSERT INTO titles (id, media_type, tmdb_id, trakt_id, imdb_id, availability_id, title, year)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -180,8 +185,7 @@ export async function replaceAvailabilitySnapshot(db: D1Database, entries: Avail
 }
 
 export async function addLibraryItem(db: D1Database, titleId: string, now: string): Promise<void> {
-  const title = await db.prepare('SELECT id FROM titles WHERE id = ?').bind(titleId).first<{ id: string }>();
-  if (!title) throw new MissingCanonicalTitleError(titleId);
+  await requireCanonicalTitle(db, titleId);
   await run(db, `INSERT INTO library_items (title_id, added_at, derived_status, status_computed_at)
     VALUES (?, ?, 'To Watch', ?) ON CONFLICT(title_id) DO NOTHING`, [titleId, now, now]);
 }
@@ -189,6 +193,7 @@ export async function removeLibraryItem(db: D1Database, titleId: string): Promis
   await run(db, 'DELETE FROM library_items WHERE title_id = ?', [titleId]);
 }
 export async function setRating(db: D1Database, titleId: string, stars: Rating['stars'], now: string): Promise<void> {
+  await requireCanonicalTitle(db, titleId);
   await run(db, `INSERT INTO ratings (title_id, stars, rated_at) VALUES (?, ?, ?)
     ON CONFLICT(title_id) DO UPDATE SET stars=excluded.stars, rated_at=excluded.rated_at`, [titleId, stars, now]);
 }
