@@ -14,28 +14,28 @@ PR #1 was validated on Node 22 with the committed lockfile and reproducible `npm
 - Folded proxy 344×792: PASS.
 - Unfolded proxy 873×1000: PASS.
 
-## v0.11.0 candidate — PR #2
+## v0.11.0 — PR #2 validation
 The Worker + D1 foundation adds three validation layers without replacing the existing baseline tests.
 
 ### PWA build
 ```bash
 npm run build
 ```
-Preserves the existing compiled PWA/service-worker manifest path.
+Result: **PASS**.
 
 ### Worker type-check/build
 ```bash
 npm run build:worker
 ```
-Compiles `worker/**/*.ts` plus the shared backend/domain contracts without requiring live Cloudflare resources or credentials.
+Result: **PASS**. This compiles `worker/**/*.ts` plus the shared backend/domain contracts without requiring live Cloudflare resources or credentials.
 
 ### Logic / repository / Worker / client tests
 ```bash
 npm test
 ```
-Candidate total: **117 tests** (the merged 101-test baseline plus 16 Worker/auth/backend-client/backend-repository tests).
+Result: **117/117 PASS**, 0 failures.
 
-New coverage includes:
+This is the merged 101-test baseline plus 16 Worker/auth/backend-client/backend-repository tests. New coverage includes:
 - bearer device-token authentication accepts only the exact expected value;
 - protected routes reject invalid credentials before touching D1;
 - protected routes fail closed when the Worker authentication secret is unconfigured;
@@ -52,11 +52,11 @@ New coverage includes:
 ```bash
 npm run test:d1
 ```
-Candidate total: **5 tests** using Node 22's built-in SQLite engine against `migrations/0001_initial.sql`.
+Result: **5/5 PASS** using Node 22's built-in SQLite engine against `migrations/0001_initial.sql`.
 
 Coverage:
 - migration applies cleanly and is idempotent;
-- canonical `(media_type, tmdb_id)` identity uniqueness;
+- canonical `(media_type, tmdb_id)` uniqueness and `${media_type}-${tmdb_id}` key format;
 - simultaneous subscription + rent availability for one title/service;
 - restrictive foreign-key behavior prevents provider title deletion from cascading away Library membership;
 - all eight agreed service registry rows exist without silently preselecting personal preferences.
@@ -69,7 +69,9 @@ npm run build
 npm run serve
 npm run qa:browser
 ```
-Expected unchanged total: **27 checks**, because the v0.11.0 backend source is not yet activated by the UI. The exact final PR head still must pass the complete existing synthetic browser journey, including folded/unfolded responsive checks and zero smoke-journey console/page errors.
+Result: **27/27 PASS** in GitHub Actions Playwright Chromium.
+
+The unchanged synthetic browser journey verifies Home, Library, History, Search, Discover, Settings, Alerts and Detail behavior; Alerts NEW lifecycle; Discover heart behavior; Settings re-entry; semantic ratings; detail progress/trailer/episodes/history/streaming; folded 344×792 and unfolded 873×1000 layouts; and zero smoke-journey console/page errors.
 
 ## CI gate
 `.github/workflows/ci.yml` runs, in order:
@@ -81,7 +83,7 @@ Expected unchanged total: **27 checks**, because the v0.11.0 backend source is n
 6. Playwright Chromium install
 7. PWA browser/responsive QA
 
-A previous commit in PR #2 already passed the complete non-browser `verify` job after these backend tests were introduced. The **exact final PR head remains authoritative**; do not call PR #2 ready until its final CI run is green after all review/documentation fixes.
+The complete gate passed after the final code/security review changes. Any documentation-only finishing commit must still receive the same green CI before PR #2 is called ready, because the exact final PR head is authoritative.
 
 ## Manual limitation
 A physical **Pixel 9 Pro Fold** has not yet been tested. Browser viewport QA covers representative folded/unfolded dimensions, but physical-device validation remains required before V1 release.
