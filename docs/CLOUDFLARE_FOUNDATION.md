@@ -32,7 +32,7 @@ CORS is deny-by-default for cross-origin requests. `APP_ORIGIN` must exactly mat
 - `preview_database_id` is a local identifier;
 - no credentials or real account-level resource IDs are present.
 
-`scripts/validate-wrangler-d1.mjs` invokes exactly Wrangler **4.129.0** through `npx`, uses ignored `.wrangler/test-d1` state, always passes `--local`, and explicitly disables Wrangler's automatic resource provisioning and draft-resource auto-creation flags. It applies the committed migrations and verifies schema/seed state afterward. CI runs this check after the deterministic Node SQLite migration tests.
+Wrangler **4.129.0** is an exact `devDependency` recorded in `package.json` and `package-lock.json`, so normal `npm ci` installs the same CLI used by CI. `scripts/validate-wrangler-d1.mjs` executes that repository-local binary, verifies its version, uses ignored `.wrangler/test-d1` state, always passes `--local`, and explicitly disables Wrangler's automatic resource provisioning and draft-resource auto-creation flags. It applies the committed migrations and verifies schema/seed state afterward. CI runs this check after the deterministic Node SQLite migration tests.
 
 The local validator must never be changed to `--remote`, given a real database ID, or pointed at any BANDMARKR resource merely to make CI pass.
 
@@ -44,6 +44,6 @@ The local Wrangler validation pin does not itself create, provision, bind, migra
 ## Migration validation
 Two independent gates now protect the initial SQL migration before remote activation:
 1. `npm run test:d1` exercises syntax and semantics with Node 22 SQLite, including idempotence, canonical identity, foreign-key data safety, default-service behavior and multi-option availability.
-2. `npm run test:d1:wrangler` applies the same committed migration through Wrangler's local D1 runtime and verifies schema version, seeded services, core table presence and Wrangler migration history.
+2. `npm run test:d1:wrangler` applies the same committed migration through the repository-pinned Wrangler local D1 runtime and verifies schema version, seeded services, core table presence and Wrangler migration history.
 
 Both checks must pass on the literal final PR head before any remote D1 migration is considered.
