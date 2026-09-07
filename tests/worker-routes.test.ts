@@ -10,7 +10,7 @@ class Statement implements D1PreparedStatement {
   async first<T>(): Promise<T | null> {
     this.db.touched += 1;
     if (this.sql.includes('app_meta')) return { value: '1' } as T;
-    if (this.sql.includes('SELECT id FROM titles')) return { id: String(this.values[0]) } as T;
+    if (this.sql.includes('SELECT id FROM titles') && this.db.knownTitles.has(String(this.values[0]))) return { id: String(this.values[0]) } as T;
     return null;
   }
   async all<T>(): Promise<D1Result<T>> {
@@ -23,6 +23,7 @@ class Statement implements D1PreparedStatement {
 class FakeDb implements D1Database {
   touched = 0;
   failReads = false;
+  knownTitles = new Set(['movie-1']);
   writes: { sql: string; values: D1Primitive[] }[] = [];
   prepare(query: string): D1PreparedStatement { return new Statement(query, this); }
   async batch<T>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> { this.touched += statements.length; return statements.map(() => ({ success: true, results: [] })); }
@@ -63,6 +64,18 @@ test('rating route validates input before writing', async () => {
     method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ stars: 6 })
   }), env(db));
   assert.equal(response.status, 400);
+  assert.equal(db.writes.length, 0);
+});
+
+test('rating an unknown canonical title returns a controlled conflict instead of a backend failure', async () => {
+  const db = new FakeDb();
+  const response = await handleRequest(new Request('https://worker.example/api/ratings/movie-999', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ stars: 5 })
+  }), env(db));
+  assert.equal(response.status, 409);
+  const payload = await response.json() as any;
+  assert.equal(payload.error, 'missing_canonical_title');
+  assert.match(payload.message, /movie-999/);
   assert.equal(db.writes.length, 0);
 });
 
