@@ -3,7 +3,7 @@
   "appVersion": "0.13.0",
   "cacheVersion": "streamarkr-v0.13.0",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-07T10:40:00Z",
+  "generatedAt": "2026-09-07T10:41:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -152,8 +152,8 @@
     "wranglerLocalPr": 3,
     "wranglerLocalPrStatus": "merged",
     "currentBranch": "feat/cloudflare-activation-config-v0130",
-    "currentPr": null,
-    "currentPrStatus": "not yet opened; exact-final-head CI and review required before merge readiness",
+    "currentPr": 4,
+    "currentPrStatus": "open; exact-final-head CI and review required before merge readiness; never merge without explicit user authorization",
     "cloudflareResourcesConnected": true
   },
   "absoluteRules": [
