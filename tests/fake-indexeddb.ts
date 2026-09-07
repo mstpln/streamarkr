@@ -122,10 +122,8 @@ class FakeIDBFactory {
       db.seedStore('availability', ['titleId', 'serviceKey'], [
         { titleId: 'movie-stale', serviceKey: 'netflix', optionType: 'subscription' }
       ]);
-      db.seedStore('meta', 'key', [
-        { key: 'seeded_v1', value: true },
-        { key: 'data_source', value: 'fixtures' }
-      ]);
+      // v0.13 and older caches had the seed flag but no data_source provenance marker.
+      db.seedStore('meta', 'key', [{ key: 'seeded_v1', value: true }]);
       this.dbs.set('streamarkr', db);
     }
   }
@@ -153,9 +151,8 @@ export function installFakeIndexedDB(): void {
   (globalThis as any).indexedDB = new FakeIDBFactory();
 }
 
-/** Installs a synthetic v1 Streamarkr database containing user-owned rows, seeded fixture metadata
- * and stale provider availability. Used to verify the v2 key migration preserves user data while
- * recreating/refilling only the provider-owned availability cache. */
+/** Installs a synthetic legacy v1 Streamarkr database containing user-owned rows, a seed flag and
+ * stale provider availability, but no newer data_source provenance marker. */
 export function installFakeIndexedDBV1(): void {
   (globalThis as any).indexedDB = new FakeIDBFactory(true);
 }
