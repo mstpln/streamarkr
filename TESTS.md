@@ -54,44 +54,36 @@ The validator invokes repository-pinned Wrangler **4.129.0** and uses only `wran
 
 This command must never use `--remote`, a real Cloudflare database identifier, production credentials, personal data, or BANDMARKR resources.
 
-## v0.13.0 — guarded remote deployment configuration
-`npm test` now also runs `tests/cloudflare-deploy-config.test.mjs`.
+## v0.13.0 merged guarded-deployment validation
+PR #4 merged at `bb1b59427eaa906c5ae3e85a7daba9bdf2601770`. Its exact final reviewed head was `f885a664d48646927940b178aaa47756bcff611b`, validated by CI run #78.
 
-The deployment-config tests must verify, using only a synthetic UUID:
+Final results on that exact head:
+- `npm ci --no-audit --no-fund`: PASS;
+- PWA build: PASS;
+- Worker type-check/build: PASS;
+- logic/repository/Worker/client/security/deployment-config tests: **126/126 PASS** across 26 suites;
+- deterministic SQLite D1 migration semantics: **5/5 PASS**;
+- pinned Wrangler **4.129.0** local D1 migration/runtime validation: PASS;
+- Playwright browser/responsive QA: **27/27 PASS**;
+- folded 344×792: PASS;
+- unfolded 873×1000: PASS;
+- smoke-journey console/page errors: **0**.
+
+`npm test` includes `tests/cloudflare-deploy-config.test.mjs`. Using only synthetic identifiers, it verifies:
 - missing, malformed and all-zero D1 identifiers are rejected;
 - generated Worker name is exactly `streamarkr-api`;
 - generated D1 binding is exactly `DB` -> database name `streamarkr`;
-- `DEVICE_ACCESS_TOKEN` is declared as a required secret;
+- the remote deploy guard independently checks Cloudflare's authoritative `streamarkr` UUID against the build-supplied UUID before mutation;
+- mismatched D1 name/UUID metadata is rejected;
+- `DEVICE_ACCESS_TOKEN` is declared and required before migration/deployment;
 - `keep_vars` remains enabled;
 - generated config contains no BANDMARKR reference;
-- account-specific generated configuration is written only to a caller-supplied temporary directory during tests.
+- account-specific generated configuration is written only to ignored/temporary state.
 
 Automated tests must not execute `npm run deploy:cloudflare`, because that command intentionally performs remote D1 migration and Worker deployment when valid Cloudflare build credentials/configuration are present.
 
-## v0.13.0 CI gate
-The exact final PR head must pass:
-1. explicit checkout of the pull request **head SHA**;
-2. `npm ci --no-audit --no-fund`;
-3. PWA build;
-4. Worker type-check/build;
-5. full logic/repository/Worker/client/security/deployment-config suite;
-6. **5/5** deterministic SQLite D1 migration tests;
-7. pinned Wrangler 4.129.0 local D1 migration/runtime validation;
-8. Playwright Chromium install;
-9. **27/27** PWA browser/responsive QA with zero console/page errors.
-
-The final review must additionally inspect the public diff for accidental D1 UUIDs, credentials, personal data, temporary workflows, `.wrangler/` generated files, or BANDMARKR references outside explicit safety assertions/documentation.
-
-### Browser / responsive QA
-```bash
-npm run build
-npm run serve
-npm run qa:browser
-```
-The exact final v0.13.0 PR head must preserve **27/27** Playwright checks with zero smoke-journey console/page errors at folded 344×792 and unfolded 873×1000.
-
-## Manual Cloudflare validation after merge — separate authorization
-Merging v0.13.0 does not itself authorize a production deployment. After Cloudflare runtime/build secrets and the dedicated deployment branch are configured, an explicitly authorized deployment should verify:
+## Manual Cloudflare validation — still pending separate authorization
+Merging v0.13.0 did not authorize a production deployment. After Cloudflare runtime/build secrets and the dedicated deployment branch are configured, an explicitly authorized deployment must verify:
 - initial migration applies to dedicated D1 `streamarkr`;
 - Worker deployment is `streamarkr-api`;
 - `/api/health` returns `ok: true`, `schemaVersion: 1`, and `authConfigured: true`;
