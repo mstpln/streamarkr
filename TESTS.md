@@ -54,8 +54,8 @@ The validator invokes repository-pinned Wrangler **4.129.0** and uses only `wran
 
 This command must never use `--remote`, a real Cloudflare database identifier, production credentials, personal data, or BANDMARKR resources.
 
-## v0.13.0 merged guarded-deployment validation
-PR #4 merged at `bb1b59427eaa906c5ae3e85a7daba9bdf2601770`. Its exact final reviewed head was `f885a664d48646927940b178aaa47756bcff611b`, validated by CI run #78.
+## v0.13.0 guarded-deployment validation
+PR #4 established the guarded activation path. PR #6 fixed the first production-attempt blocker (`--yes` is not accepted by Wrangler 4.129.0 for `d1 migrations apply`) and merged at `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Its exact final reviewed head was `6020bb2c595d14328d3220226e997b3bbaf1471c`, validated by CI run #83.
 
 Final results on that exact head:
 - `npm ci --no-audit --no-fund`: PASS;
@@ -78,17 +78,22 @@ Final results on that exact head:
 - `DEVICE_ACCESS_TOKEN` is declared and required before migration/deployment;
 - `keep_vars` remains enabled;
 - generated config contains no BANDMARKR reference;
-- account-specific generated configuration is written only to ignored/temporary state.
+- account-specific generated configuration is written only to ignored/temporary state;
+- remote migration uses `--remote` and does not pass unsupported `--yes`.
 
 Automated tests must not execute `npm run deploy:cloudflare`, because that command intentionally performs remote D1 migration and Worker deployment when valid Cloudflare build credentials/configuration are present.
 
-## Manual Cloudflare validation — still pending separate authorization
-Merging v0.13.0 did not authorize a production deployment. After Cloudflare runtime/build secrets and the dedicated deployment branch are configured, an explicitly authorized deployment must verify:
-- initial migration applies to dedicated D1 `streamarkr`;
-- Worker deployment is `streamarkr-api`;
-- `/api/health` returns `ok: true`, `schemaVersion: 1`, and `authConfigured: true`;
-- no personal data is introduced during infrastructure validation;
-- no BANDMARKR resource is accessed.
+## Manual Cloudflare production validation — completed
+With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed the reviewed `main` tree from merge commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`.
+
+Manual verification confirmed:
+- Cloudflare build/deploy completed successfully;
+- `/api/health` returned `ok: true`, `service: streamarkr-worker`, `schemaVersion: 1`, `authConfigured: true`;
+- remote D1 `app_meta` returned `schema_version = 1`;
+- remote D1 `services` count returned `8`;
+- `/tables` showed all expected application tables plus Wrangler's `d1_migrations` table.
+
+This activation used no personal viewing data, no live provider credentials or calls, and no BANDMARKR resources.
 
 ## Manual limitation
 A physical **Pixel 9 Pro Fold** has not yet been tested. Browser viewport QA covers representative folded/unfolded dimensions, but physical-device validation remains required before V1 release.
