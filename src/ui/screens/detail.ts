@@ -12,6 +12,10 @@ let tab: Tab = 'overview';
 let activeSeason: number | null = null;
 let currentId = '';
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export async function render(el: HTMLElement, id: string) {
   if (id !== currentId) { tab = 'overview'; activeSeason = null; currentId = id; }
   el.innerHTML = `<div class="skeleton" style="height:400px;border-radius:16px;margin:-14px -14px 0;"></div>`;
@@ -41,7 +45,7 @@ export async function render(el: HTMLElement, id: string) {
     ${primary ? `
     <button type="button" class="primary-stream-action" id="primary-stream-btn">
       ${serviceLogoHtml(primary.serviceKey, primaryService?.displayName ?? primary.serviceKey, 24)}
-      <span>Open in ${primaryService?.displayName ?? primary.serviceKey}</span>
+      <span>Open in ${escapeHtml(primaryService?.displayName ?? primary.serviceKey)}</span>
     </button>` : ''}
     <div class="action-row">
       <button type="button" class="action-btn ${inLibrary ? 'active' : ''}" id="heart-btn" aria-pressed="${inLibrary}" aria-label="${inLibrary ? 'Remove from My Library' : 'Add to My Library'}">♥ ${inLibrary ? 'In Library' : 'Add to Library'}</button>
@@ -138,7 +142,7 @@ function renderTab(
         <span>Where I watched it</span>
         <select id="watched-service-select" aria-label="Where I watched it">
           <option value="">Not set</option>
-          ${services.filter((service) => service.userSelected).map((service) => `<option value="${service.serviceKey}" ${watchedService?.serviceKey === service.serviceKey ? 'selected' : ''}>${service.displayName}</option>`).join('')}
+          ${services.filter((service) => service.userSelected).map((service) => `<option value="${escapeHtml(service.serviceKey)}" ${watchedService?.serviceKey === service.serviceKey ? 'selected' : ''}>${escapeHtml(service.displayName)}</option>`).join('')}
         </select>
       </div>
     `;
@@ -171,7 +175,7 @@ function renderTab(
           return `<div class="row-item static-row">
             ${serviceLogoHtml(entry.serviceKey, service?.displayName ?? entry.serviceKey, 32)}
             <div class="row-body">
-              <div class="row-title">${service?.displayName ?? entry.serviceKey}</div>
+              <div class="row-title">${escapeHtml(service?.displayName ?? entry.serviceKey)}</div>
               <div class="row-meta">${entry.optionType === 'subscription' ? 'Included with subscription' : entry.optionType}${leavingSoon ? ` · Leaving ${formatDate(entry.endsAt)}` : ''}</div>
             </div>
             ${entry.deepLink ? `<a href="${entry.deepLink}" target="_blank" rel="noopener noreferrer" class="action-btn" style="text-decoration:none;">Open</a>` : ''}
