@@ -53,6 +53,13 @@ export class InvalidOverrideScopeError extends Error {
   }
 }
 
+export class ServiceKeyConflictError extends Error {
+  constructor(serviceKey: string) {
+    super(`A different streaming service already uses the normalized key: ${serviceKey}`);
+    this.name = 'ServiceKeyConflictError';
+  }
+}
+
 function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
@@ -336,9 +343,19 @@ export async function addCustomService(db: D1Database, displayName: string): Pro
   const trimmed = displayName.trim();
   const serviceKey = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   if (!serviceKey) throw new Error('Invalid custom service key');
+
+  const existing = await db.prepare('SELECT display_name FROM services WHERE service_key = ?')
+    .bind(serviceKey).first<{ display_name: string }>();
+  if (existing) {
+    if (existing.display_name.trim().toLocaleLowerCase() !== trimmed.toLocaleLowerCase()) {
+      throw new ServiceKeyConflictError(serviceKey);
+    }
+    await run(db, 'UPDATE services SET user_selected = 1 WHERE service_key = ?', [serviceKey]);
+    return serviceKey;
+  }
+
   await run(db, `INSERT INTO services (service_key, display_name, logo_ref, user_selected, availability_source, subscription_catalog_key)
-    VALUES (?, ?, ?, 1, 'unsupported', NULL) ON CONFLICT(service_key) DO NOTHING`,
-  [serviceKey, trimmed, trimmed[0]?.toUpperCase() ?? '?']);
+    VALUES (?, ?, ?, 1, 'unsupported', NULL)`, [serviceKey, trimmed, trimmed[0]?.toUpperCase() ?? '?']);
   return serviceKey;
 }
 
