@@ -67,10 +67,10 @@ With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06
 - Startup remains cached-first: an activated installation renders from IndexedDB while offline and opportunistically refreshes when the authenticated Worker is reachable.
 - Settings now exposes one-time token exchange + migration for inactive installs and secure-session reconnect/refresh for activated installs. Token fields are password-only, not prefilled, and cleared after use.
 - Production activation is still intentionally blocked: `APP_ORIGIN` is unset, final PWA hosting/API topology is not established, and no production deployment or personal-data migration has been authorized.
-- Implementation-validation head `bcaa21ece16c7684972acca84bacaa3789343732`, CI #254: `npm ci` PASS, PWA build PASS, Worker type-check PASS, **195/195 tests across 26 suites**, D1 **5/5**, Wrangler-local PASS, core browser/responsive QA **32/32**, provider/security QA **8/8**, folded/unfolded PASS and zero console/page errors.
+- Continuity-validation head `62306809828321cf930c04a3938f3161b32a0010`, CI #260: `npm ci` PASS, PWA build PASS, Worker type-check PASS, **196/196 tests across 26 suites**, machine-readable build-state/version validation PASS, D1 **5/5**, Wrangler-local PASS, core browser/responsive QA **32/32**, provider/security QA **8/8**, folded/unfolded PASS and zero console/page errors.
 
 ## Still pending
-- Synchronize v0.17.0 continuity documentation, then require the complete normal CI/browser suite to pass on the final unchanged PR #11 head and complete final diff/security/review-thread inspection before merge readiness.
+- Run the complete normal CI/browser suite on the final unchanged continuity-recorded PR #11 head and complete final diff/security/review-thread inspection before merge readiness.
 - Establish the real PWA hosting origin and same-origin/same-site API path where possible; configure exact production `APP_ORIGIN` and validate actual cookie behavior before browser activation.
 - Perform any future production deployment and real local-state migration only after fresh explicit user authorization and a reviewed merged source head.
 - Add real TMDB search/metadata, Trakt OAuth/history, and streaming-availability adapters in focused reviewed builds.
