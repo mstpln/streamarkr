@@ -45,15 +45,9 @@ function json(body: unknown, status = 200, extraHeaders: HeadersInit = {}): Resp
   });
 }
 
-function appOrigin(url: URL, env: Env): string {
-  const configured = env.APP_ORIGIN?.trim();
-  return configured || url.origin;
-}
-
-function corsHeaders(request: Request, url: URL, env: Env): Record<string, string> {
+function corsHeaders(request: Request, url: URL): Record<string, string> {
   const origin = request.headers.get('origin');
-  const expectedOrigin = appOrigin(url, env);
-  if (!origin || origin !== expectedOrigin) return {};
+  if (!origin || origin !== url.origin) return {};
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-credentials': 'true',
@@ -63,11 +57,9 @@ function corsHeaders(request: Request, url: URL, env: Env): Record<string, strin
   };
 }
 
-function matchesAppOrigin(request: Request, url: URL, env: Env): boolean {
-  const expectedOrigin = appOrigin(url, env);
+function matchesServingOrigin(request: Request, url: URL): boolean {
   const origin = request.headers.get('origin');
-  if (origin) return origin === expectedOrigin;
-  return url.origin === expectedOrigin;
+  return !origin || origin === url.origin;
 }
 
 function routeTitleId(pathname: string, prefix: string): string | null {
@@ -119,10 +111,10 @@ function nonNegativeInteger(value: unknown): value is number {
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const requestId = crypto.randomUUID();
-  const responseHeaders = { ...corsHeaders(request, url, env), 'x-request-id': requestId };
+  const responseHeaders = { ...corsHeaders(request, url), 'x-request-id': requestId };
 
   if (request.method === 'OPTIONS') {
-    if (request.headers.get('origin') !== appOrigin(url, env)) {
+    if (request.headers.get('origin') !== url.origin) {
       return new Response(null, { status: 403, headers: { 'x-request-id': requestId } });
     }
     return new Response(null, { status: 204, headers: responseHeaders });
@@ -140,7 +132,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   }
 
   if (request.method === 'DELETE' && url.pathname === '/api/auth/session') {
-    if (!matchesAppOrigin(request, url, env)) return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
+    if (!matchesServingOrigin(request, url)) return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
     return new Response(null, {
       status: 204,
       headers: { ...responseHeaders, 'set-cookie': clearBrowserSessionCookie(), 'cache-control': 'no-store' }
@@ -150,7 +142,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   if (!env.DEVICE_ACCESS_TOKEN) return json({ error: 'server_not_configured' }, 503, responseHeaders);
 
   if (request.method === 'POST' && url.pathname === '/api/auth/session') {
-    if (!matchesAppOrigin(request, url, env)) return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
+    if (!matchesServingOrigin(request, url)) return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
     const body = await bodyJson<{ deviceAccessToken?: unknown }>(request);
     const suppliedToken = body && typeof body.deviceAccessToken === 'string' ? body.deviceAccessToken : null;
     const authorized = await isDeviceTokenValueAuthorized(suppliedToken, env.DEVICE_ACCESS_TOKEN)
@@ -173,10 +165,10 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   if (!auth) return json({ error: 'unauthorized' }, 401, responseHeaders);
 
   const suppliedOrigin = request.headers.get('origin');
-  if (suppliedOrigin && suppliedOrigin !== appOrigin(url, env)) {
+  if (suppliedOrigin && suppliedOrigin !== url.origin) {
     return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
   }
-  if (auth === 'browser-session' && !matchesAppOrigin(request, url, env)) {
+  if (auth === 'browser-session' && !matchesServingOrigin(request, url)) {
     return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
   }
 
