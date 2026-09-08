@@ -42,11 +42,12 @@ PR #11 combines the remaining closely coupled takeover work into one guarded mil
 
 The implementation/review cycle caught and fixed strict Worker typing, stale cache-mode regression expectations, test typing, incomplete migration row validation, provider sync-state promotion, incomplete service-preference verification, expired-session recovery, an outdated browser-QA expectation, and a corrupted lockfile integrity entry. The lockfile was regenerated from `package.json`, and the normal read-only CI workflow was restored before validation.
 
-Implementation-validation head `bcaa21ece16c7684972acca84bacaa3789343732`, CI #254:
+Continuity-validation head `62306809828321cf930c04a3938f3161b32a0010`, CI #260:
 - `npm ci --no-audit --no-fund`: PASS;
 - PWA build: PASS, v0.17.0;
 - Worker build/type-check: PASS;
-- **195/195 tests across 26 suites**;
+- **196/196 tests across 26 suites**;
+- machine-readable build-state JSON/version synchronization: PASS;
 - deterministic D1 semantics **5/5**;
 - pinned Wrangler **4.129.0** local-D1 validation PASS;
 - core browser/responsive QA **32/32**;
@@ -57,7 +58,7 @@ Implementation-validation head `bcaa21ece16c7684972acca84bacaa3789343732`, CI #2
 No production Worker/D1, live provider, personal data, or BANDMARKR resource was used by this validation.
 
 ## Next work
-1. Finish v0.17.0 continuity synchronization and run the complete exact-head CI/browser suite again on the resulting unchanged PR #11 head.
+1. Complete the final continuity record for CI #260, then require the complete normal CI/browser suite to pass once more on the resulting unchanged PR #11 head.
 2. Perform final PR diff, review-thread, secrets/personal-data and security inspection; only then mark PR #11 ready to merge. Merge still requires explicit user authorization.
 3. After a reviewed merge, establish the real PWA hosting/API topology, configure exact `APP_ORIGIN`, and validate actual browser cookie behavior. Prefer same-origin/same-site routing.
 4. Any production deployment or migration of real browser state requires fresh explicit user authorization and must remain separate from merge authorization.
