@@ -25,13 +25,21 @@ The same-origin PWA is live on the existing Streamarkr Workers.dev origin. Manua
 ## Production secure-storage activation status
 After PR #15 was deployed, the live browser still produced `Could not create the secure browser session. Local data is unchanged.` The failure remains before cookie verification and before D1 migration. No personal state has been migrated; local IndexedDB remains authoritative until guarded migration succeeds.
 
-## PR #16 — use the actual serving origin
+## PR #16 — serving-origin activation plus final hardening
 The same Worker serves both Streamarkr's PWA and `/api/*`. PR #16 therefore makes the actual request URL origin the browser-origin authority instead of allowing `APP_ORIGIN` configuration to override it.
 
-The change covers browser CORS, session bootstrap/logout, cookie-session verification and authenticated browser-origin checks. A stale or mismatched `APP_ORIGIN` can no longer reject a genuinely same-origin Streamarkr browser. Cross-origin requests remain rejected. Current JSON-body bootstrap and cached-client bearer bootstrap remain supported; token comparison and signed HttpOnly/Secure session-cookie behavior are unchanged. Operational bearer clients without a browser Origin remain supported.
+The change covers browser CORS, session bootstrap/logout, cookie-session verification and authenticated browser-origin checks. A stale or mismatched `APP_ORIGIN` can no longer reject a genuinely same-origin Streamarkr browser. Cross-origin requests remain rejected. Current JSON-body bootstrap and cached-client bearer bootstrap remain supported; operational bearer clients without a browser Origin remain supported.
+
+A final review found one additional authentication edge: browser-entered token whitespace was normalized, but the configured Worker secret itself was not. PR #16 now normalizes surrounding whitespace on both sides before constant-time token comparison and uses the same normalized secret for session HMAC creation/verification. This protects against accidental newline/space padding in the runtime secret without changing interior token content or storing the token.
+
+The same review also found that existing browser QA used `server.mjs` and therefore did not test Worker static hosting, Worker-first `/api/*` routing and real browser cookie reuse together. CI now runs a dedicated `qa:worker-auth` topology test against pinned Wrangler and real Chromium before the normal synthetic UI QA.
 
 ## Validation
-The first PR #16 CI exposed three tests that still encoded the superseded configured-origin contract. They were corrected to the serving-origin contract. Implementation head `a50066847fc2f566d2c7ccd11327e6c2d0aaccdd` then passed build, logic/Worker/client tests, D1 schema tests and Wrangler-local D1 validation. A complete exact-final-head CI/browser cycle remains required after continuity synchronization.
+The earlier PR #16 implementation exposed three tests that still encoded the superseded configured-origin contract. They were corrected to the serving-origin contract rather than weakening the Worker.
+
+Hardening head `c575fabe4e750896af0025c2f9fb45c25b267aae` passed CI #340 / run `34255403504`: **208/208** logic/Worker/client tests, D1 **5/5**, Wrangler-local D1 PASS, same-origin Worker auth topology **4/4**, browser/responsive **32/32**, provider/security **8/8**, folded/unfolded PASS and zero console/page errors. The topology pass specifically proved stale `APP_ORIGIN` does not block the real serving origin, padded synthetic runtime-secret whitespace is tolerated consistently, Chromium retains/reuses the issued HttpOnly/Secure cookie, wrong tokens fail 401 and foreign origins fail 403.
+
+A final exact-head CI/browser cycle is required after continuity synchronization before merge readiness.
 
 ## Production safety boundary
 - PR #16 does not deploy production.
