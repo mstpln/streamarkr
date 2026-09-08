@@ -1,5 +1,5 @@
 import type { BackendSnapshot } from './backend-contract.js';
-import type { Rating } from './types.js';
+import type { Rating, WatchOverride } from './types.js';
 
 export interface BackendClient {
   getSnapshot(): Promise<BackendSnapshot>;
@@ -7,6 +7,12 @@ export interface BackendClient {
   removeFromLibrary(titleId: string): Promise<void>;
   setRating(titleId: string, stars: Rating['stars']): Promise<void>;
   clearRating(titleId: string): Promise<void>;
+  setWatchedService(titleId: string, serviceKey: string | null): Promise<void>;
+  setMovieOverride(titleId: string, state: WatchOverride['state']): Promise<void>;
+  setEpisodeOverride(titleId: string, seasonNumber: number, episodeNumber: number, state: WatchOverride['state']): Promise<void>;
+  setSeasonOverride(titleId: string, seasonNumber: number, state: WatchOverride['state']): Promise<{ affectedEpisodes: number }>;
+  setServiceSelected(serviceKey: string, selected: boolean): Promise<void>;
+  addCustomService(displayName: string): Promise<{ serviceKey: string }>;
   markAlertsSeen(ids: string[]): Promise<void>;
 }
 
@@ -56,6 +62,33 @@ export class WorkerBackendClient implements BackendClient {
   }
   async clearRating(titleId: string): Promise<void> {
     await this.request(`/api/ratings/${encodeURIComponent(titleId)}`, { method: 'DELETE' });
+  }
+  async setWatchedService(titleId: string, serviceKey: string | null): Promise<void> {
+    const path = `/api/watched-service/${encodeURIComponent(titleId)}`;
+    if (serviceKey === null) {
+      await this.request(path, { method: 'DELETE' });
+      return;
+    }
+    await this.request(path, { method: 'PUT', body: JSON.stringify({ serviceKey }) });
+  }
+  async setMovieOverride(titleId: string, state: WatchOverride['state']): Promise<void> {
+    await this.request(`/api/overrides/movie/${encodeURIComponent(titleId)}`, { method: 'PUT', body: JSON.stringify({ state }) });
+  }
+  async setEpisodeOverride(titleId: string, seasonNumber: number, episodeNumber: number, state: WatchOverride['state']): Promise<void> {
+    await this.request(`/api/overrides/episode/${encodeURIComponent(titleId)}`, {
+      method: 'PUT', body: JSON.stringify({ seasonNumber, episodeNumber, state })
+    });
+  }
+  setSeasonOverride(titleId: string, seasonNumber: number, state: WatchOverride['state']): Promise<{ affectedEpisodes: number }> {
+    return this.request(`/api/overrides/season/${encodeURIComponent(titleId)}`, {
+      method: 'PUT', body: JSON.stringify({ seasonNumber, state })
+    });
+  }
+  async setServiceSelected(serviceKey: string, selected: boolean): Promise<void> {
+    await this.request(`/api/services/${encodeURIComponent(serviceKey)}/selected`, { method: 'PUT', body: JSON.stringify({ selected }) });
+  }
+  addCustomService(displayName: string): Promise<{ serviceKey: string }> {
+    return this.request('/api/services/custom', { method: 'POST', body: JSON.stringify({ displayName }) });
   }
   async markAlertsSeen(ids: string[]): Promise<void> {
     await this.request('/api/alerts/seen', { method: 'POST', body: JSON.stringify({ ids }) });

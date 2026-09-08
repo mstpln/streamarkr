@@ -1,15 +1,29 @@
 import { isAuthorized } from './auth.js';
 import {
+  addCustomService,
   addLibraryItem,
   clearRating,
+  InvalidCustomServiceNameError,
+  InvalidOverrideScopeError,
   loadSnapshot,
   markAlertsSeen,
   MissingCanonicalTitleError,
+  MissingEpisodeError,
+  MissingSeasonError,
+  MissingServiceError,
   removeLibraryItem,
   schemaVersion,
-  setRating
+  ServiceKeyConflictError,
+  setEpisodeOverride,
+  setMovieOverride,
+  setRating,
+  setSeasonOverride,
+  setServiceSelected,
+  setWatchedService,
+  UnselectedServiceError
 } from './repository.js';
 import type { Env } from './types.js';
+import type { WatchOverride } from '../src/lib/types.js';
 
 function json(body: unknown, status = 200, extraHeaders: HeadersInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -41,12 +55,38 @@ function routeTitleId(pathname: string, prefix: string): string | null {
   }
 }
 
+function routeServiceSelectedKey(pathname: string): string | null {
+  const prefix = '/api/services/';
+  const suffix = '/selected';
+  if (!pathname.startsWith(prefix) || !pathname.endsWith(suffix)) return null;
+  const raw = pathname.slice(prefix.length, -suffix.length);
+  if (!raw || raw.includes('/')) return null;
+  try {
+    const decoded = decodeURIComponent(raw);
+    return /^[a-z0-9][a-z0-9-]{0,79}$/.test(decoded) ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
 async function bodyJson<T>(request: Request): Promise<T | null> {
   try {
     return await request.json() as T;
   } catch {
     return null;
   }
+}
+
+function validOverrideState(value: unknown): value is WatchOverride['state'] {
+  return value === 'watched' || value === 'unwatched';
+}
+
+function positiveInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) > 0;
+}
+
+function nonNegativeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) >= 0;
 }
 
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
@@ -102,9 +142,71 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return new Response(null, { status: 204, headers: responseHeaders });
     }
 
+    const watchedServiceTitleId = routeTitleId(url.pathname, '/api/watched-service/');
+    if (watchedServiceTitleId && request.method === 'PUT') {
+      const body = await bodyJson<{ serviceKey?: unknown }>(request);
+      if (!body || typeof body.serviceKey !== 'string' || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(body.serviceKey)) {
+        return json({ error: 'invalid_service_key' }, 400, responseHeaders);
+      }
+      await setWatchedService(env.DB, watchedServiceTitleId, body.serviceKey, new Date().toISOString());
+      return json({ ok: true }, 200, responseHeaders);
+    }
+    if (watchedServiceTitleId && request.method === 'DELETE') {
+      await setWatchedService(env.DB, watchedServiceTitleId, null, new Date().toISOString());
+      return new Response(null, { status: 204, headers: responseHeaders });
+    }
+
+    const movieOverrideTitleId = routeTitleId(url.pathname, '/api/overrides/movie/');
+    if (movieOverrideTitleId && request.method === 'PUT') {
+      if (!movieOverrideTitleId.startsWith('movie-')) return json({ error: 'invalid_override_scope' }, 400, responseHeaders);
+      const body = await bodyJson<{ state?: unknown }>(request);
+      if (!body || !validOverrideState(body.state)) return json({ error: 'invalid_override_state' }, 400, responseHeaders);
+      await setMovieOverride(env.DB, movieOverrideTitleId, body.state, new Date().toISOString());
+      return json({ ok: true }, 200, responseHeaders);
+    }
+
+    const episodeOverrideTitleId = routeTitleId(url.pathname, '/api/overrides/episode/');
+    if (episodeOverrideTitleId && request.method === 'PUT') {
+      if (!episodeOverrideTitleId.startsWith('series-')) return json({ error: 'invalid_override_scope' }, 400, responseHeaders);
+      const body = await bodyJson<{ seasonNumber?: unknown; episodeNumber?: unknown; state?: unknown }>(request);
+      if (!body || !nonNegativeInteger(body.seasonNumber) || !positiveInteger(body.episodeNumber) || !validOverrideState(body.state)) {
+        return json({ error: 'invalid_episode_override' }, 400, responseHeaders);
+      }
+      await setEpisodeOverride(env.DB, episodeOverrideTitleId, body.seasonNumber, body.episodeNumber, body.state, new Date().toISOString());
+      return json({ ok: true }, 200, responseHeaders);
+    }
+
+    const seasonOverrideTitleId = routeTitleId(url.pathname, '/api/overrides/season/');
+    if (seasonOverrideTitleId && request.method === 'PUT') {
+      if (!seasonOverrideTitleId.startsWith('series-')) return json({ error: 'invalid_override_scope' }, 400, responseHeaders);
+      const body = await bodyJson<{ seasonNumber?: unknown; state?: unknown }>(request);
+      if (!body || !nonNegativeInteger(body.seasonNumber) || !validOverrideState(body.state)) {
+        return json({ error: 'invalid_season_override' }, 400, responseHeaders);
+      }
+      const affectedEpisodes = await setSeasonOverride(env.DB, seasonOverrideTitleId, body.seasonNumber, body.state, new Date().toISOString());
+      return json({ ok: true, affectedEpisodes }, 200, responseHeaders);
+    }
+
+    const serviceSelectedKey = routeServiceSelectedKey(url.pathname);
+    if (serviceSelectedKey && request.method === 'PUT') {
+      const body = await bodyJson<{ selected?: unknown }>(request);
+      if (!body || typeof body.selected !== 'boolean') return json({ error: 'invalid_service_selection' }, 400, responseHeaders);
+      await setServiceSelected(env.DB, serviceSelectedKey, body.selected);
+      return json({ ok: true }, 200, responseHeaders);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/services/custom') {
+      const body = await bodyJson<{ displayName?: unknown }>(request);
+      if (!body || typeof body.displayName !== 'string') return json({ error: 'invalid_service_name' }, 400, responseHeaders);
+      const displayName = body.displayName.trim();
+      if (!displayName || displayName.length > 80 || !/[a-z0-9]/i.test(displayName)) return json({ error: 'invalid_service_name' }, 400, responseHeaders);
+      const serviceKey = await addCustomService(env.DB, displayName);
+      return json({ ok: true, serviceKey }, 200, responseHeaders);
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/alerts/seen') {
       const body = await bodyJson<{ ids?: unknown }>(request);
-      if (!body || !Array.isArray(body.ids) || body.ids.length > 30 || !body.ids.every((id) => typeof id === 'string')) {
+      if (!body || !Array.isArray(body.ids) || body.ids.length > 30 || !body.ids.every((id) => typeof id === 'string' && id.length > 0 && id.length <= 200)) {
         return json({ error: 'invalid_alert_ids' }, 400, responseHeaders);
       }
       await markAlertsSeen(env.DB, body.ids, new Date().toISOString());
@@ -113,6 +215,27 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   } catch (error) {
     if (error instanceof MissingCanonicalTitleError) {
       return json({ error: 'missing_canonical_title', message: error.message }, 409, responseHeaders);
+    }
+    if (error instanceof MissingServiceError) {
+      return json({ error: 'missing_service', message: error.message }, 409, responseHeaders);
+    }
+    if (error instanceof UnselectedServiceError) {
+      return json({ error: 'service_not_selected', message: error.message }, 409, responseHeaders);
+    }
+    if (error instanceof InvalidCustomServiceNameError) {
+      return json({ error: 'invalid_service_name' }, 400, responseHeaders);
+    }
+    if (error instanceof MissingEpisodeError) {
+      return json({ error: 'missing_episode', message: error.message }, 409, responseHeaders);
+    }
+    if (error instanceof MissingSeasonError) {
+      return json({ error: 'missing_season', message: error.message }, 409, responseHeaders);
+    }
+    if (error instanceof InvalidOverrideScopeError) {
+      return json({ error: 'invalid_override_scope', message: error.message }, 409, responseHeaders);
+    }
+    if (error instanceof ServiceKeyConflictError) {
+      return json({ error: 'service_key_conflict', message: error.message }, 409, responseHeaders);
     }
     console.error(JSON.stringify({
       level: 'error',

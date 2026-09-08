@@ -4,6 +4,10 @@ import { navigate } from '../router.js';
 
 let currentVisitUnseenIds: string[] = [];
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export async function render(el: HTMLElement) {
   el.innerHTML = `<div class="skeleton" style="height:300px;border-radius:16px;"></div>`;
   const alerts = (await repo.allAlerts()).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 30);
@@ -17,7 +21,7 @@ export async function render(el: HTMLElement) {
         <button type="button" class="row-item row-button" data-open="${a.titleId}">
           <div class="row-thumb small" style="${posterStyle(a.titleId)}"></div>
           <div class="row-body">
-            <div class="row-alert-text">${a.message}</div>
+            <div class="row-alert-text">${escapeHtml(a.message)}</div>
             <div class="row-meta">${new Date(a.createdAt).toLocaleDateString()}</div>
           </div>
           ${!a.seenAt ? '<span class="new-dot" aria-label="New alert"></span>' : ''}

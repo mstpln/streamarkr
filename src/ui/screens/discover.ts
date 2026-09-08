@@ -12,6 +12,10 @@ let mediaType: 'series' | 'movie' = 'series';
 let similarSeed = '';
 let genre = '';
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export async function render(el: HTMLElement) {
   el.innerHTML = `<div class="skeleton" style="height:300px;border-radius:16px;"></div>`;
   const snap = await loadSnapshot();
@@ -42,12 +46,12 @@ export async function render(el: HTMLElement) {
     ${view === 'similar' ? `
       <label class="sr-only" for="seed-select">Similar to</label>
       <select class="pill" id="seed-select" style="margin-bottom:14px;width:100%;">
-        ${libraryTitles.map((t) => `<option value="${t.id}" ${t.id === similarSeed ? 'selected' : ''}>${t.title}</option>`).join('') || '<option>Add titles to My Library first</option>'}
+        ${libraryTitles.map((t) => `<option value="${t.id}" ${t.id === similarSeed ? 'selected' : ''}>${escapeHtml(t.title)}</option>`).join('') || '<option>Add titles to My Library first</option>'}
       </select>` : ''}
     ${view === 'genre' ? `
       <label class="sr-only" for="genre-select">Genre</label>
       <select class="pill" id="genre-select" style="margin-bottom:14px;width:100%;">
-        ${genres.map((g) => `<option value="${g}" ${g === genre ? 'selected' : ''}>${g}</option>`).join('') || '<option>No genres yet</option>'}
+        ${genres.map((g) => `<option value="${escapeHtml(g)}" ${g === genre ? 'selected' : ''}>${escapeHtml(g)}</option>`).join('') || '<option>No genres yet</option>'}
       </select>` : ''}
     ${cards.length === 0 ? '<div class="empty-state">No eligible recommendations yet — add more titles to My Library or select more streaming services in Preferences.</div>' : `
     <div class="poster-grid">
@@ -56,15 +60,15 @@ export async function render(el: HTMLElement) {
           .sort((a, b) => (selectedKeys.has(a.serviceKey) ? 0 : 1) - (selectedKeys.has(b.serviceKey) ? 0 : 1))
           .slice(0, 3);
         return `
-        <div class="poster-card" data-open="${c.title.id}" role="link" tabindex="0" aria-label="Open ${c.title.title}">
+        <div class="poster-card" data-open="${c.title.id}" role="link" tabindex="0" aria-label="Open ${escapeHtml(c.title.title)}">
           <div class="poster" style="${posterStyle(c.title.id)}">
             <button class="heart-btn" data-heart="${c.title.id}" aria-label="Add to My Library" aria-pressed="false">♥</button>
             ${subs.length ? `<div class="poster-availability">${subs.map((a) => serviceLogoHtml(a.serviceKey, snap.services.find((s) => s.serviceKey === a.serviceKey)?.displayName ?? a.serviceKey, 20)).join('')}</div>` : ''}
             ${c.trailerKey ? `<button class="icon-btn" data-trailer="${c.title.id}" aria-label="Watch trailer" style="position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,0.55);">▶</button>` : ''}
           </div>
-          <div class="card-title">${c.title.title}</div>
-          <div class="card-sub">${c.mediaType === 'series' ? 'Series' : 'Movie'} · ${c.genres[0] ?? '—'} · ${c.year}</div>
-          <div class="card-sub" style="opacity:0.75;">${c.why}</div>
+          <div class="card-title">${escapeHtml(c.title.title)}</div>
+          <div class="card-sub">${c.mediaType === 'series' ? 'Series' : 'Movie'} · ${escapeHtml(c.genres[0] ?? '—')} · ${c.year}</div>
+          <div class="card-sub" style="opacity:0.75;">${escapeHtml(c.why)}</div>
         </div>
       `;
       }).join('')}

@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { addLibraryItem, replaceAvailabilitySnapshot, upsertTitle } from '../worker/repository.js';
+import {
+  addCustomService,
+  addLibraryItem,
+  replaceAvailabilitySnapshot,
+  setEpisodeOverride,
+  setMovieOverride,
+  setSeasonOverride,
+  setServiceSelected,
+  setWatchedService,
+  upsertTitle
+} from '../worker/repository.js';
 import type { AvailabilityEntry, Title } from '../src/lib/types.js';
 import type { D1Database, D1PreparedStatement, D1Primitive, D1Result } from '../worker/types.js';
 
@@ -10,14 +20,47 @@ class Statement implements D1PreparedStatement {
   bind(...values: D1Primitive[]): D1PreparedStatement { const next = new Statement(this.sql, this.db); next.values = values; return next; }
   async first<T>(): Promise<T | null> {
     this.db.reads.push({ sql: this.sql, values: this.values });
-    if (this.sql.includes('SELECT id FROM titles') && this.db.knownTitles.has(String(this.values[0]))) return { id: String(this.values[0]) } as T;
+    const titleId = String(this.values[0]);
+    if (this.sql.includes('SELECT id FROM titles') && this.db.knownTitleTypes.has(titleId)) return { id: titleId } as T;
+    if (this.sql.includes('SELECT media_type FROM titles')) {
+      const mediaType = this.db.knownTitleTypes.get(titleId);
+      return mediaType ? { media_type: mediaType } as T : null;
+    }
+    if (this.sql.includes('SELECT display_name FROM services')) {
+      const displayName = this.db.knownServiceNames.get(String(this.values[0]));
+      return displayName ? { display_name: displayName } as T : null;
+    }
+    if (this.sql.includes('SELECT user_selected FROM services')) {
+      const serviceKey = String(this.values[0]);
+      if (!this.db.knownServices.has(serviceKey)) return null;
+      return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
+    }
+    if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
+    if (this.sql.includes('SELECT season_number FROM seasons') && this.db.knownSeasons.has(`${this.values[0]}:${this.values[1]}`)) {
+      return { season_number: Number(this.values[1]) } as T;
+    }
+    if (this.sql.includes('SELECT episode_number FROM episodes') && this.db.knownEpisodes.has(`${this.values[0]}:${this.values[1]}:${this.values[2]}`)) {
+      return { episode_number: Number(this.values[2]) } as T;
+    }
     return null;
   }
-  async all<T>(): Promise<D1Result<T>> { return { success: true, results: [] }; }
+  async all<T>(): Promise<D1Result<T>> {
+    this.db.reads.push({ sql: this.sql, values: this.values });
+    if (this.sql.includes('SELECT episode_number FROM episodes')) {
+      return { success: true, results: this.db.releasedEpisodeNumbers.map((episode_number) => ({ episode_number } as T)) };
+    }
+    return { success: true, results: [] };
+  }
   async run<T>(): Promise<D1Result<T>> { this.db.writes.push({ sql: this.sql, values: this.values }); return { success: true, results: [] }; }
 }
 class RecordingDb implements D1Database {
-  knownTitles = new Set<string>();
+  knownTitleTypes = new Map<string, Title['mediaType']>();
+  knownServices = new Set<string>();
+  selectedServices = new Set<string>();
+  knownServiceNames = new Map<string, string>();
+  knownSeasons = new Set<string>();
+  knownEpisodes = new Set<string>();
+  releasedEpisodeNumbers: number[] = [];
   reads: { sql: string; values: D1Primitive[] }[] = [];
   writes: { sql: string; values: D1Primitive[] }[] = [];
   batches: { sql: string; values: D1Primitive[] }[][] = [];
@@ -59,7 +102,7 @@ test('Library membership refuses dangling title ids', async () => {
 
 test('Library membership is allowed after canonical identity exists', async () => {
   const db = new RecordingDb();
-  db.knownTitles.add('movie-1');
+  db.knownTitleTypes.set('movie-1', 'movie');
   await addLibraryItem(db, 'movie-1', '2026-09-07T00:00:00Z');
   assert.equal(db.writes.length, 1);
   assert.match(db.writes[0].sql, /library_items/);
@@ -78,4 +121,118 @@ test('availability replacement is one transactional batch and supports multiple 
   assert.equal(db.batches[0][1].values[2], 'subscription');
   assert.equal(db.batches[0][2].values[2], 'rent');
   assert.equal(db.batches[0].some((entry) => /library_items|ratings|watch_overrides|watched_service/.test(entry.sql)), false);
+});
+
+test('watched-service mutation requires both canonical title and known service', async () => {
+  const db = new RecordingDb();
+  db.knownTitleTypes.set('movie-1', 'movie');
+  await assert.rejects(() => setWatchedService(db, 'movie-1', 'missing', '2026-09-07T00:00:00Z'), /streaming service record/);
+  assert.equal(db.writes.length, 0);
+
+  db.knownServices.add('netflix');
+  await assert.rejects(() => setWatchedService(db, 'movie-1', 'netflix', '2026-09-07T00:00:00Z'), /not selected/);
+  assert.equal(db.writes.length, 0);
+  db.selectedServices.add('netflix');
+  await setWatchedService(db, 'movie-1', 'netflix', '2026-09-07T00:00:00Z');
+  assert.match(db.writes[0].sql, /INSERT INTO watched_service/);
+  assert.deepEqual(db.writes[0].values.slice(0, 2), ['movie-1', 'netflix']);
+});
+
+test('override repository enforces movie/series media scope before writing', async () => {
+  const db = new RecordingDb();
+  db.knownTitleTypes.set('movie-1', 'movie');
+  db.knownTitleTypes.set('series-1', 'series');
+
+  await assert.rejects(
+    () => setMovieOverride(db, 'series-1', 'watched', '2026-09-07T00:00:00Z', 'ov-movie'),
+    /must be a movie/
+  );
+  await assert.rejects(
+    () => setEpisodeOverride(db, 'movie-1', 1, 1, 'watched', '2026-09-07T00:00:00Z', 'ov-episode'),
+    /must be a series/
+  );
+  assert.equal(db.writes.length, 0);
+});
+
+test('episode correction refuses unknown episodes before writing', async () => {
+  const db = new RecordingDb();
+  db.knownTitleTypes.set('series-1', 'series');
+  await assert.rejects(() => setEpisodeOverride(db, 'series-1', 2, 3, 'watched', '2026-09-07T00:00:00Z', 'ov-test'), /Missing episode record/);
+  assert.equal(db.writes.length, 0);
+
+  db.knownEpisodes.add('series-1:2:3');
+  await setEpisodeOverride(db, 'series-1', 2, 3, 'watched', '2026-09-07T00:00:00Z', 'ov-test');
+  assert.match(db.writes[0].sql, /INSERT INTO watch_overrides/);
+  assert.deepEqual(db.writes[0].values, ['ov-test', 'episode', 'series-1', 2, 3, 'watched', '2026-09-07T00:00:00Z']);
+});
+
+test('season correction refuses a missing season before batching writes', async () => {
+  const db = new RecordingDb();
+  db.knownTitleTypes.set('series-1', 'series');
+  await assert.rejects(() => setSeasonOverride(db, 'series-1', 7, 'watched', '2026-09-07T12:00:00Z'), /Missing season record/);
+  assert.equal(db.batches.length, 0);
+});
+
+test('season correction materializes only released episodes in one transactional batch', async () => {
+  const db = new RecordingDb();
+  db.knownTitleTypes.set('series-1', 'series');
+  db.knownSeasons.add('series-1:3');
+  db.releasedEpisodeNumbers = [1, 2, 4];
+  const affected = await setSeasonOverride(db, 'series-1', 3, 'unwatched', '2026-09-07T12:00:00Z');
+  assert.equal(affected, 3);
+  assert.equal(db.batches.length, 1);
+  assert.match(db.batches[0][0].sql, /scope_type = 'season'/);
+  assert.deepEqual(db.batches[0].slice(1).map((entry) => entry.values.slice(1, 6)), [
+    ['episode', 'series-1', 3, 1, 'unwatched'],
+    ['episode', 'series-1', 3, 2, 'unwatched'],
+    ['episode', 'series-1', 3, 4, 'unwatched']
+  ]);
+  const releasedQuery = db.reads.find((entry) => entry.sql.includes('air_date <= ?'));
+  assert.deepEqual(releasedQuery?.values, ['series-1', 3, '2026-09-07']);
+});
+
+test('season zero remains a valid bounded bulk correction scope', async () => {
+  const db = new RecordingDb();
+  db.knownTitleTypes.set('series-1', 'series');
+  db.knownSeasons.add('series-1:0');
+  db.releasedEpisodeNumbers = [1];
+  const affected = await setSeasonOverride(db, 'series-1', 0, 'watched', '2026-09-07T12:00:00Z');
+  assert.equal(affected, 1);
+  assert.deepEqual(db.batches[0][1].values.slice(1, 6), ['episode', 'series-1', 0, 1, 'watched']);
+});
+
+test('service preferences validate existence and custom services normalize durable unsupported keys', async () => {
+  const db = new RecordingDb();
+  await assert.rejects(() => setServiceSelected(db, 'missing', true), /streaming service record/);
+  db.knownServices.add('netflix');
+  await setServiceSelected(db, 'netflix', true);
+  assert.match(db.writes[0].sql, /UPDATE services SET user_selected/);
+  assert.deepEqual(db.writes[0].values, [1, 'netflix']);
+
+  const key = await addCustomService(db, 'MUBI + More');
+  assert.equal(key, 'mubi-more');
+  assert.match(db.writes[1].sql, /availability_source/);
+  assert.deepEqual(db.writes[1].values.slice(0, 2), ['mubi-more', 'MUBI + More']);
+});
+
+test('custom-service repository refuses unaddressable or oversized names', async () => {
+  const db = new RecordingDb();
+  await assert.rejects(() => addCustomService(db, 'A'.repeat(81)), /Invalid custom streaming service name/);
+  await assert.rejects(() => addCustomService(db, '!!!'), /Invalid custom streaming service name/);
+  assert.equal(db.writes.length, 0);
+});
+
+test('adding the same normalized service reselects it but a different-name collision is rejected', async () => {
+  const same = new RecordingDb();
+  same.knownServiceNames.set('netflix', 'Netflix');
+  const sameKey = await addCustomService(same, 'netflix');
+  assert.equal(sameKey, 'netflix');
+  assert.equal(same.writes.length, 1);
+  assert.match(same.writes[0].sql, /UPDATE services SET user_selected = 1/);
+  assert.deepEqual(same.writes[0].values, ['netflix']);
+
+  const collision = new RecordingDb();
+  collision.knownServiceNames.set('mubi-more', 'MUBI + More');
+  await assert.rejects(() => addCustomService(collision, 'MUBI More'), /different streaming service/);
+  assert.equal(collision.writes.length, 0);
 });

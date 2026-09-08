@@ -5,6 +5,10 @@ import { navigate } from '../router.js';
 let watchTab: 'watching' | 'onhold' = 'watching';
 let rateTab: 'series' | 'movie' = 'series';
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export async function render(el: HTMLElement) {
   el.innerHTML = `<div class="skeleton" style="height:220px;border-radius:16px;"></div>`;
   const snap = await loadSnapshot();
@@ -67,13 +71,13 @@ function renderWatchingSection(items: ReturnType<typeof import('../../lib/views'
   }
   return `<div class="hscroll">
     ${items.map((c) => `
-      <button type="button" class="poster-card poster-card-button" data-open="${c.title.id}" aria-label="Open ${c.title.title}">
+      <button type="button" class="poster-card poster-card-button" data-open="${c.title.id}" aria-label="Open ${escapeHtml(c.title.title)}">
         <div class="poster" style="${posterStyle(c.title.id)}">
           <div class="poster-overlay">S${c.seasonNumber} · E${c.watchedInSeason} of ${c.totalInSeason}</div>
           <div class="poster-progress"><div style="width:${c.totalInSeason ? Math.round((c.watchedInSeason / c.totalInSeason) * 100) : 0}%"></div></div>
         </div>
-        <div class="card-title">${c.title.title}</div>
-        <div class="card-sub"><span class="status-tag status-${c.status.replace(' ', '-')}">${c.status}</span></div>
+        <div class="card-title">${escapeHtml(c.title.title)}</div>
+        <div class="card-sub"><span class="status-tag status-${c.status.replace(' ', '-')}">${escapeHtml(c.status)}</span></div>
       </button>
     `).join('')}
   </div>`;
@@ -81,10 +85,10 @@ function renderWatchingSection(items: ReturnType<typeof import('../../lib/views'
 
 function posterCard(id: string, title: string, sub: string) {
   return `
-    <button type="button" class="poster-card poster-card-button" data-open="${id}" aria-label="Open ${title}">
+    <button type="button" class="poster-card poster-card-button" data-open="${id}" aria-label="Open ${escapeHtml(title)}">
       <div class="poster" style="${posterStyle(id)}"></div>
-      <div class="card-title">${title}</div>
-      ${sub ? `<div class="card-sub">${sub}</div>` : ''}
+      <div class="card-title">${escapeHtml(title)}</div>
+      ${sub ? `<div class="card-sub">${escapeHtml(sub)}</div>` : ''}
     </button>
   `;
 }

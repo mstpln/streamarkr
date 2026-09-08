@@ -12,6 +12,20 @@ let tab: Tab = 'overview';
 let activeSeason: number | null = null;
 let currentId = '';
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function safeExternalUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value, window.location.origin);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function render(el: HTMLElement, id: string) {
   if (id !== currentId) { tab = 'overview'; activeSeason = null; currentId = id; }
   el.innerHTML = `<div class="skeleton" style="height:400px;border-radius:16px;margin:-14px -14px 0;"></div>`;
@@ -27,6 +41,7 @@ export async function render(el: HTMLElement, id: string) {
 
   const tabs: Tab[] = title.mediaType === 'series' ? ['overview', 'episodes', 'streaming', 'history'] : ['overview', 'streaming', 'history'];
   const primary = choosePrimaryStreamingAction(availability, services);
+  const primaryUrl = safeExternalUrl(primary?.deepLink);
   const primaryService: ServiceDef | undefined = primary ? services.find((service) => service.serviceKey === primary.serviceKey) : undefined;
 
   el.innerHTML = `
@@ -34,14 +49,14 @@ export async function render(el: HTMLElement, id: string) {
     <div class="detail-head">
       <div class="detail-poster" style="${posterStyle(id)}"></div>
       <div style="padding-top:70px;">
-        <div class="detail-title">${title.title}</div>
-        <div class="detail-meta">${title.mediaType === 'series' ? 'Series' : 'Movie'} · ${title.year} · <span class="status-tag status-${status.replace(' ', '-')}">${status}</span></div>
+        <div class="detail-title">${escapeHtml(title.title)}</div>
+        <div class="detail-meta">${title.mediaType === 'series' ? 'Series' : 'Movie'} · ${title.year} · <span class="status-tag status-${status.replace(' ', '-')}">${escapeHtml(status)}</span></div>
       </div>
     </div>
-    ${primary ? `
+    ${primary && primaryUrl ? `
     <button type="button" class="primary-stream-action" id="primary-stream-btn">
       ${serviceLogoHtml(primary.serviceKey, primaryService?.displayName ?? primary.serviceKey, 24)}
-      <span>Open in ${primaryService?.displayName ?? primary.serviceKey}</span>
+      <span>Open in ${escapeHtml(primaryService?.displayName ?? primary.serviceKey)}</span>
     </button>` : ''}
     <div class="action-row">
       <button type="button" class="action-btn ${inLibrary ? 'active' : ''}" id="heart-btn" aria-pressed="${inLibrary}" aria-label="${inLibrary ? 'Remove from My Library' : 'Add to My Library'}">♥ ${inLibrary ? 'In Library' : 'Add to Library'}</button>
@@ -66,7 +81,7 @@ export async function render(el: HTMLElement, id: string) {
   });
   el.querySelector('#trailer-btn')?.addEventListener('click', () => openTrailer(metadata?.trailerKey, title.title));
   el.querySelector('#primary-stream-btn')?.addEventListener('click', () => {
-    if (primary?.deepLink) window.open(primary.deepLink, '_blank', 'noopener,noreferrer');
+    if (primaryUrl) window.open(primaryUrl, '_blank', 'noopener,noreferrer');
   });
   el.querySelector('#movie-watched-btn')?.addEventListener('click', async () => {
     await repo.setMovieOverride(id, status === 'Finished' ? 'unwatched' : 'watched');
@@ -121,7 +136,7 @@ function renderTab(
 
       progressRows = `
         <div class="card-row"><span>Progress</span><span>${watchedReleased.length} of ${released.length} released episodes watched</span></div>
-        ${nextAvailable ? `<div class="card-row"><span>Next available</span><span>S${nextAvailable.seasonNumber} E${nextAvailable.episodeNumber} · ${nextAvailable.name}</span></div>` : ''}
+        ${nextAvailable ? `<div class="card-row"><span>Next available</span><span>S${nextAvailable.seasonNumber} E${nextAvailable.episodeNumber} · ${escapeHtml(nextAvailable.name)}</span></div>` : ''}
         ${nextUpcoming ? `<div class="card-row"><span>Next upcoming</span><span>S${nextUpcoming.seasonNumber} E${nextUpcoming.episodeNumber} · ${formatDate(nextUpcoming.airDate)}</span></div>` : ''}
         ${futureSeason ? `<div class="card-row"><span>Future season</span><span>Season ${futureSeason.seasonNumber}${futureSeason.airDate ? ` · ${formatDate(futureSeason.airDate)}` : ' · Date TBA'}</span></div>` : ''}
       `;
@@ -130,15 +145,19 @@ function renderTab(
     }
 
     body.innerHTML = `
-      <p class="detail-overview">${metadata?.overview ?? 'No synopsis available.'}</p>
-      <div class="card-row"><span>Genres</span><span>${(metadata?.genres ?? []).join(', ') || '—'}</span></div>
-      ${title.mediaType === 'series' ? `<div class="card-row"><span>Series status</span><span>${metadata?.status ?? 'Unknown'}</span></div>` : ''}
+      <p class="detail-overview">${escapeHtml(metadata?.overview ?? 'No synopsis available.')}</p>
+      <div class="card-row"><span>Genres</span><span>${escapeHtml((metadata?.genres ?? []).join(', ') || '—')}</span></div>
+      ${title.mediaType === 'series' ? `<div class="card-row"><span>Series status</span><span>${escapeHtml(metadata?.status ?? 'Unknown')}</span></div>` : ''}
       ${progressRows}
       <div class="card-row">
         <span>Where I watched it</span>
         <select id="watched-service-select" aria-label="Where I watched it">
           <option value="">Not set</option>
-          ${services.filter((service) => service.userSelected).map((service) => `<option value="${service.serviceKey}" ${watchedService?.serviceKey === service.serviceKey ? 'selected' : ''}>${service.displayName}</option>`).join('')}
+          ${services.filter((service) => service.userSelected || watchedService?.serviceKey === service.serviceKey).map((service) => {
+            const historicalOnly = watchedService?.serviceKey === service.serviceKey && !service.userSelected;
+            return `<option value="${escapeHtml(service.serviceKey)}" ${watchedService?.serviceKey === service.serviceKey ? 'selected' : ''} ${historicalOnly ? 'disabled' : ''}>${escapeHtml(service.displayName)}${historicalOnly ? ' · Not currently selected' : ''}</option>`;
+          }).join('')}
+          ${watchedService && !services.some((service) => service.serviceKey === watchedService.serviceKey) ? `<option value="${escapeHtml(watchedService.serviceKey)}" selected disabled>${escapeHtml(watchedService.serviceKey)} · Historical service</option>` : ''}
         </select>
       </div>
     `;
@@ -149,7 +168,7 @@ function renderTab(
   } else if (tab === 'episodes' && title.mediaType === 'series') {
     body.innerHTML = `
       <div class="pill-row season-pills" role="tablist" aria-label="Seasons">
-        ${[...seasons].sort((a, b) => a.seasonNumber - b.seasonNumber).map((season) => `<button type="button" class="pill ${activeSeason === season.seasonNumber ? 'active' : ''}" data-season="${season.seasonNumber}" role="tab" aria-selected="${activeSeason === season.seasonNumber}">${season.name}</button>`).join('')}
+        ${[...seasons].sort((a, b) => a.seasonNumber - b.seasonNumber).map((season) => `<button type="button" class="pill ${activeSeason === season.seasonNumber ? 'active' : ''}" data-season="${season.seasonNumber}" role="tab" aria-selected="${activeSeason === season.seasonNumber}">${escapeHtml(season.name)}</button>`).join('')}
       </div>
       <div id="episode-list"></div>
     `;
@@ -168,13 +187,14 @@ function renderTab(
           const service = services.find((item) => item.serviceKey === entry.serviceKey);
           const daysLeft = entry.endsAt ? (new Date(entry.endsAt).getTime() - Date.now()) / 86400000 : null;
           const leavingSoon = daysLeft !== null && daysLeft > 0 && daysLeft <= 30;
+          const deepLink = safeExternalUrl(entry.deepLink);
           return `<div class="row-item static-row">
             ${serviceLogoHtml(entry.serviceKey, service?.displayName ?? entry.serviceKey, 32)}
             <div class="row-body">
-              <div class="row-title">${service?.displayName ?? entry.serviceKey}</div>
-              <div class="row-meta">${entry.optionType === 'subscription' ? 'Included with subscription' : entry.optionType}${leavingSoon ? ` · Leaving ${formatDate(entry.endsAt)}` : ''}</div>
+              <div class="row-title">${escapeHtml(service?.displayName ?? entry.serviceKey)}</div>
+              <div class="row-meta">${entry.optionType === 'subscription' ? 'Included with subscription' : escapeHtml(entry.optionType)}${leavingSoon ? ` · Leaving ${formatDate(entry.endsAt)}` : ''}</div>
             </div>
-            ${entry.deepLink ? `<a href="${entry.deepLink}" target="_blank" rel="noopener noreferrer" class="action-btn" style="text-decoration:none;">Open</a>` : ''}
+            ${deepLink ? `<a href="${escapeHtml(deepLink)}" target="_blank" rel="noopener noreferrer" class="action-btn" style="text-decoration:none;">Open</a>` : ''}
           </div>`;
         }).join('')}
       </div>`;
@@ -234,10 +254,10 @@ function renderEpisodeList(body: Element, titleId: string, episodes: Episode[], 
           <button type="button" class="episode-check ${state}" data-ep="${episode.episodeNumber}" ${state === 'upcoming' ? 'disabled aria-disabled="true"' : ''} aria-label="${state === 'watched' ? 'Mark unwatched' : 'Mark watched'}" aria-pressed="${state === 'watched'}">${state === 'watched' ? '✓' : ''}</button>
           <details class="episode-details">
             <summary>
-              <span class="ep-title">E${episode.episodeNumber} · ${episode.name}</span>
+              <span class="ep-title">E${episode.episodeNumber} · ${escapeHtml(episode.name)}</span>
               <span class="ep-meta">${episode.runtime ? episode.runtime + ' min · ' : ''}${episode.airDate ? formatDate(episode.airDate) : 'Date unknown'}${state === 'upcoming' ? ' · Upcoming' : ''}</span>
             </summary>
-            <p>${episode.overview || 'No episode synopsis available.'}</p>
+            <p>${escapeHtml(episode.overview || 'No episode synopsis available.')}</p>
           </details>
         </div>
       `;

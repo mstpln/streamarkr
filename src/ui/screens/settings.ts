@@ -3,6 +3,10 @@ import { serviceLogoHtml } from '../logos.js';
 
 type SettingsTab = 'preferences' | 'connections' | 'data';
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 /** Settings always lands on Preferences when entered from navigation. Internal tab changes pass
  * the desired tab explicitly so rerenders do not bounce the user back unexpectedly. */
 export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferences') {
@@ -32,15 +36,16 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         <div style="font-weight:700;margin-bottom:8px;">My streaming services</div>
         ${services.map((service) => `
           <div class="card-row">
-            <span style="display:inline-flex;align-items:center;gap:8px;">${serviceLogoHtml(service.serviceKey, service.displayName, 22)}${service.displayName}</span>
-            <button class="toggle ${service.userSelected ? 'on' : ''}" data-svc="${service.serviceKey}" role="switch" aria-checked="${service.userSelected}" aria-label="${service.displayName}"></button>
+            <span style="display:inline-flex;align-items:center;gap:8px;">${serviceLogoHtml(service.serviceKey, service.displayName, 22)}${escapeHtml(service.displayName)}</span>
+            <button class="toggle ${service.userSelected ? 'on' : ''}" data-svc="${escapeHtml(service.serviceKey)}" role="switch" aria-checked="${service.userSelected}" aria-label="${escapeHtml(service.displayName)}"></button>
           </div>
         `).join('')}
         <div class="card-row">
           <label class="sr-only" for="new-svc">Add another streaming service</label>
-          <input id="new-svc" placeholder="Add another service" style="background:transparent;border:none;color:var(--text);flex:1;outline:none;" />
+          <input id="new-svc" maxlength="80" placeholder="Add another service" style="background:transparent;border:none;color:var(--text);flex:1;outline:none;" />
           <button class="action-btn" id="add-svc">Add</button>
         </div>
+        <div id="svc-status" class="section-empty-hint" aria-live="polite"></div>
       </div>
     `;
     body.querySelectorAll('[data-svc]').forEach((button) => button.addEventListener('click', async () => {
@@ -51,9 +56,18 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
     }));
     body.querySelector('#add-svc')?.addEventListener('click', async () => {
       const input = body.querySelector('#new-svc') as HTMLInputElement;
-      if (input.value.trim()) {
-        await repo.addCustomService(input.value);
+      const status = body.querySelector('#svc-status')!;
+      const name = input.value.trim();
+      if (!name) return;
+      if (!/[a-z0-9]/i.test(name)) {
+        status.textContent = 'Use at least one letter or number in the service name.';
+        return;
+      }
+      try {
+        await repo.addCustomService(name);
         await render(el, 'preferences');
+      } catch {
+        status.textContent = 'That service name conflicts with an existing streaming service.';
       }
     });
   } else if (activeTab === 'connections') {
@@ -82,7 +96,7 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         <div class="card-row"><span>History / import</span><span>Synthetic fixtures</span></div>
         <div class="card-row"><span>Export personal data</span><button class="action-btn" id="export-btn">Export JSON</button></div>
         <div class="card-row"><span>Reset local data</span><button class="action-btn" id="reset-btn" style="border-color:var(--coral);color:var(--coral);">Reset to fixtures…</button></div>
-        <div class="card-row"><span>App version</span><span>v0.14.0 (backend cache bridge)</span></div>
+        <div class="card-row"><span>App version</span><span>v0.15.0 (backend user-state routes)</span></div>
       </div>
     `;
     body.querySelector('#export-btn')?.addEventListener('click', async () => {

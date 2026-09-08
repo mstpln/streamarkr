@@ -85,7 +85,67 @@ describe('repo + db integration (fake IndexedDB)', () => {
     expect(resolvedFuture.watched).toBe(false);
   });
 
+  it('local custom service keys match the Worker route-safe normalization and reject collisions', async () => {
+    await repo.resetToFixtures();
+    await repo.addCustomService('MUBI + More');
+    let services = await repo.allServices();
+    expect(services.some((service) => service.serviceKey === 'mubi-more' && service.displayName === 'MUBI + More')).toBe(true);
+
+    let collisionThrew = false;
+    try {
+      await repo.addCustomService('MUBI More');
+    } catch {
+      collisionThrew = true;
+    }
+    expect(collisionThrew).toBe(true);
+    services = await repo.allServices();
+    expect(services.filter((service) => service.serviceKey === 'mubi-more').length).toBe(1);
+  });
+
+  it('local custom service creation refuses names that cannot be addressed by the Worker routes', async () => {
+    await repo.resetToFixtures();
+    const before = (await repo.allServices()).length;
+    await repo.addCustomService('A'.repeat(81));
+    await repo.addCustomService('!!!');
+    const services = await repo.allServices();
+    expect(services.length).toBe(before);
+    expect(services.some((service) => service.serviceKey.length > 80)).toBe(false);
+  });
+
+  it('adding an existing same-name service reselects it instead of creating a duplicate', async () => {
+    await repo.resetToFixtures();
+    await repo.setServiceSelected('netflix', false);
+    await repo.addCustomService('netflix');
+    const services = await repo.allServices();
+    const netflix = services.find((service) => service.serviceKey === 'netflix');
+    expect(netflix?.userSelected).toBe(true);
+    expect(services.filter((service) => service.serviceKey === 'netflix').length).toBe(1);
+  });
+
+  it('watched-service writes require a selected service but historical values survive later deselection', async () => {
+    await repo.resetToFixtures();
+    const id = F.TITLES[1].id;
+    expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(false);
+
+    await repo.setServiceSelected('netflix', false);
+    let threw = false;
+    try {
+      await repo.setWatchedService(id, 'netflix');
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(true);
+    expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(false);
+
+    await repo.setServiceSelected('netflix', true);
+    await repo.setWatchedService(id, 'netflix');
+    await repo.setServiceSelected('netflix', false);
+    expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(true);
+  });
+
   it('buildExportPayload (Correction 14) includes every user-owned data category', async () => {
+    await repo.resetToFixtures();
+    await repo.setServiceSelected('netflix', true);
     const id = F.TITLES[0].id;
     await repo.addToLibrary(id);
     await repo.setRating(id, 5);

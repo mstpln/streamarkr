@@ -25,6 +25,55 @@ export class MissingCanonicalTitleError extends Error {
   }
 }
 
+export class MissingServiceError extends Error {
+  constructor(serviceKey: string) {
+    super(`Missing streaming service record: ${serviceKey}`);
+    this.name = 'MissingServiceError';
+  }
+}
+
+export class UnselectedServiceError extends Error {
+  constructor(serviceKey: string) {
+    super(`Streaming service is not selected: ${serviceKey}`);
+    this.name = 'UnselectedServiceError';
+  }
+}
+
+export class InvalidCustomServiceNameError extends Error {
+  constructor() {
+    super('Invalid custom streaming service name');
+    this.name = 'InvalidCustomServiceNameError';
+  }
+}
+
+export class MissingEpisodeError extends Error {
+  constructor(titleId: string, seasonNumber: number, episodeNumber: number) {
+    super(`Missing episode record: ${titleId} S${seasonNumber}E${episodeNumber}`);
+    this.name = 'MissingEpisodeError';
+  }
+}
+
+export class MissingSeasonError extends Error {
+  constructor(titleId: string, seasonNumber: number) {
+    super(`Missing season record: ${titleId} S${seasonNumber}`);
+    this.name = 'MissingSeasonError';
+  }
+}
+
+export class InvalidOverrideScopeError extends Error {
+  constructor(titleId: string, expectedMediaType: Title['mediaType']) {
+    super(`Invalid override scope: ${titleId} must be a ${expectedMediaType}`);
+    this.name = 'InvalidOverrideScopeError';
+  }
+}
+
+export class ServiceKeyConflictError extends Error {
+  constructor(serviceKey: string) {
+    super(`A different streaming service already uses the normalized key: ${serviceKey}`);
+    this.name = 'ServiceKeyConflictError';
+  }
+}
+
 function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
@@ -156,6 +205,36 @@ async function requireCanonicalTitle(db: D1Database, titleId: string): Promise<v
   if (!title) throw new MissingCanonicalTitleError(titleId);
 }
 
+async function requireTitleMediaType(db: D1Database, titleId: string, expectedMediaType: Title['mediaType']): Promise<void> {
+  const title = await db.prepare('SELECT media_type FROM titles WHERE id = ?').bind(titleId).first<{ media_type: string }>();
+  if (!title) throw new MissingCanonicalTitleError(titleId);
+  if (title.media_type !== expectedMediaType) throw new InvalidOverrideScopeError(titleId, expectedMediaType);
+}
+
+async function requireService(db: D1Database, serviceKey: string): Promise<void> {
+  const service = await db.prepare('SELECT service_key FROM services WHERE service_key = ?').bind(serviceKey).first<{ service_key: string }>();
+  if (!service) throw new MissingServiceError(serviceKey);
+}
+
+async function requireSelectedService(db: D1Database, serviceKey: string): Promise<void> {
+  const service = await db.prepare('SELECT user_selected FROM services WHERE service_key = ?')
+    .bind(serviceKey).first<{ user_selected: number }>();
+  if (!service) throw new MissingServiceError(serviceKey);
+  if (integer(service.user_selected) !== 1) throw new UnselectedServiceError(serviceKey);
+}
+
+async function requireEpisode(db: D1Database, titleId: string, seasonNumber: number, episodeNumber: number): Promise<void> {
+  const episode = await db.prepare('SELECT episode_number FROM episodes WHERE title_id = ? AND season_number = ? AND episode_number = ?')
+    .bind(titleId, seasonNumber, episodeNumber).first<{ episode_number: number }>();
+  if (!episode) throw new MissingEpisodeError(titleId, seasonNumber, episodeNumber);
+}
+
+async function requireSeason(db: D1Database, titleId: string, seasonNumber: number): Promise<void> {
+  const season = await db.prepare('SELECT season_number FROM seasons WHERE title_id = ? AND season_number = ?')
+    .bind(titleId, seasonNumber).first<{ season_number: number }>();
+  if (!season) throw new MissingSeasonError(titleId, seasonNumber);
+}
+
 export async function upsertTitle(db: D1Database, title: Title): Promise<void> {
   await run(db, `INSERT INTO titles (id, media_type, tmdb_id, trakt_id, imdb_id, availability_id, title, year)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -200,6 +279,108 @@ export async function setRating(db: D1Database, titleId: string, stars: Rating['
 export async function clearRating(db: D1Database, titleId: string): Promise<void> {
   await run(db, 'DELETE FROM ratings WHERE title_id = ?', [titleId]);
 }
+
+export async function setWatchedService(db: D1Database, titleId: string, serviceKey: string | null, now: string): Promise<void> {
+  await requireCanonicalTitle(db, titleId);
+  if (serviceKey === null) {
+    await run(db, 'DELETE FROM watched_service WHERE title_id = ?', [titleId]);
+    return;
+  }
+  await requireSelectedService(db, serviceKey);
+  await run(db, `INSERT INTO watched_service (title_id, service_key, changed_at) VALUES (?, ?, ?)
+    ON CONFLICT(title_id) DO UPDATE SET service_key=excluded.service_key, changed_at=excluded.changed_at`, [titleId, serviceKey, now]);
+}
+
+function overrideInsertSql(): string {
+  return `INSERT INTO watch_overrides (id, scope_type, title_id, season_number, episode_number, state, changed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT DO UPDATE SET state=excluded.state, changed_at=excluded.changed_at`;
+}
+
+export async function setMovieOverride(
+  db: D1Database,
+  titleId: string,
+  state: WatchOverride['state'],
+  now: string,
+  id = `ov-api-${crypto.randomUUID()}`
+): Promise<void> {
+  await requireTitleMediaType(db, titleId, 'movie');
+  await run(db, overrideInsertSql(), [id, 'movie', titleId, null, null, state, now]);
+}
+
+export async function setEpisodeOverride(
+  db: D1Database,
+  titleId: string,
+  seasonNumber: number,
+  episodeNumber: number,
+  state: WatchOverride['state'],
+  now: string,
+  id = `ov-api-${crypto.randomUUID()}`
+): Promise<void> {
+  await requireTitleMediaType(db, titleId, 'series');
+  await requireEpisode(db, titleId, seasonNumber, episodeNumber);
+  await run(db, overrideInsertSql(), [id, 'episode', titleId, seasonNumber, episodeNumber, state, now]);
+}
+
+/** Materialize a season bulk correction only for episodes known and released at action time.
+ * This deliberately removes any legacy season wildcard for the same season and never creates a
+ * new wildcard, so future episodes cannot inherit an old bulk action. */
+export async function setSeasonOverride(
+  db: D1Database,
+  titleId: string,
+  seasonNumber: number,
+  state: WatchOverride['state'],
+  now: string
+): Promise<number> {
+  await requireTitleMediaType(db, titleId, 'series');
+  await requireSeason(db, titleId, seasonNumber);
+  const date = now.slice(0, 10);
+  const result = await db.prepare(`SELECT episode_number FROM episodes
+    WHERE title_id = ? AND season_number = ? AND air_date IS NOT NULL AND air_date <= ?
+    ORDER BY episode_number`).bind(titleId, seasonNumber, date).all<{ episode_number: number }>();
+  if (!result.success) throw new Error('D1 released-episode query failed');
+  const episodes = result.results ?? [];
+
+  const statements = [
+    db.prepare("DELETE FROM watch_overrides WHERE scope_type = 'season' AND title_id = ? AND season_number = ?")
+      .bind(titleId, seasonNumber)
+  ];
+  const insert = db.prepare(overrideInsertSql());
+  for (const episode of episodes) {
+    statements.push(insert.bind(`ov-api-${crypto.randomUUID()}`, 'episode', titleId, seasonNumber,
+      integer(episode.episode_number), state, now));
+  }
+  const results = await db.batch(statements);
+  if (results.some((entry) => !entry.success)) throw new Error('D1 season override update failed');
+  return episodes.length;
+}
+
+export async function setServiceSelected(db: D1Database, serviceKey: string, selected: boolean): Promise<void> {
+  await requireService(db, serviceKey);
+  await run(db, 'UPDATE services SET user_selected = ? WHERE service_key = ?', [selected ? 1 : 0, serviceKey]);
+}
+
+export async function addCustomService(db: D1Database, displayName: string): Promise<string> {
+  const trimmed = displayName.trim();
+  if (!trimmed || trimmed.length > 80 || !/[a-z0-9]/i.test(trimmed)) throw new InvalidCustomServiceNameError();
+  const serviceKey = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!serviceKey || serviceKey.length > 80) throw new InvalidCustomServiceNameError();
+
+  const existing = await db.prepare('SELECT display_name FROM services WHERE service_key = ?')
+    .bind(serviceKey).first<{ display_name: string }>();
+  if (existing) {
+    if (existing.display_name.trim().toLowerCase() !== trimmed.toLowerCase()) {
+      throw new ServiceKeyConflictError(serviceKey);
+    }
+    await run(db, 'UPDATE services SET user_selected = 1 WHERE service_key = ?', [serviceKey]);
+    return serviceKey;
+  }
+
+  await run(db, `INSERT INTO services (service_key, display_name, logo_ref, user_selected, availability_source, subscription_catalog_key)
+    VALUES (?, ?, ?, 1, 'unsupported', NULL)`, [serviceKey, trimmed, trimmed[0]?.toUpperCase() ?? '?']);
+  return serviceKey;
+}
+
 export async function markAlertsSeen(db: D1Database, ids: string[], now: string): Promise<void> {
   if (ids.length === 0) return;
   const statement = db.prepare('UPDATE alerts SET seen_at = COALESCE(seen_at, ?) WHERE id = ?');

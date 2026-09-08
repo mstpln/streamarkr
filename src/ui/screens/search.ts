@@ -9,12 +9,16 @@ let query = '';
 let filter: 'all' | 'series' | 'movie' = 'all';
 let debounceHandle: ReturnType<typeof setTimeout> | null = null;
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export async function render(el: HTMLElement) {
   el.innerHTML = `
     <div class="page-title">Search</div>
     <div class="search-input-wrap">
       <label class="sr-only" for="search-box">Search series and movies</label>
-      <input class="search-input" id="search-box" placeholder="Search series and movies…" value="${escapeAttr(query)}" />
+      <input class="search-input" id="search-box" placeholder="Search series and movies…" value="${escapeHtml(query)}" />
     </div>
     <div class="pill-row">
       <button class="pill ${filter === 'all' ? 'active' : ''}" data-f="all">All</button>
@@ -54,10 +58,10 @@ async function runSearch(el: HTMLElement) {
 
   results.innerHTML = `<div class="row-list">
     ${rows.map(({ title, inLibrary }) => `
-      <div class="row-item" data-open="${title.id}" role="link" tabindex="0" aria-label="Open ${title.title}">
+      <div class="row-item" data-open="${title.id}" role="link" tabindex="0" aria-label="Open ${escapeHtml(title.title)}">
         <div class="row-thumb" style="${posterStyle(title.id)}"></div>
         <div class="row-body">
-          <div class="row-title">${title.title}</div>
+          <div class="row-title">${escapeHtml(title.title)}</div>
           <div class="row-meta">${title.mediaType === 'series' ? 'Series' : 'Movie'} · ${title.year}</div>
           <div class="svc-logo-row" data-avail="${title.id}" aria-live="polite"></div>
         </div>
@@ -104,8 +108,4 @@ async function runSearch(el: HTMLElement) {
         : subs.map((a) => serviceLogoHtml(a.serviceKey, services.find((s) => s.serviceKey === a.serviceKey)?.displayName ?? a.serviceKey, 20)).join('');
     });
   }
-}
-
-function escapeAttr(s: string) {
-  return s.replace(/"/g, '&quot;');
 }

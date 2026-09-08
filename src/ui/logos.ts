@@ -19,7 +19,11 @@ const BRANDS: Record<string, ServiceBrand> = {
 };
 
 function brandFor(serviceKey: string, fallbackGlyph: string): ServiceBrand {
-  return BRANDS[serviceKey] ?? { bg: '#2A2A36', fg: '#F4F5FA', mark: fallbackGlyph.slice(0, 3).toUpperCase() };
+  // Custom service keys are user-controlled. Guard against inherited Object prototype names such
+  // as "constructor"/"toString" being mistaken for a ServiceBrand entry.
+  return Object.prototype.hasOwnProperty.call(BRANDS, serviceKey)
+    ? BRANDS[serviceKey]!
+    : { bg: '#2A2A36', fg: '#F4F5FA', mark: fallbackGlyph.slice(0, 3).toUpperCase() };
 }
 
 /** Compact square badge (used in dense contexts: Search rows, Library cards, History rows). */

@@ -17,6 +17,7 @@
 - Finished: all episodes watched and provider series status is **exactly `Ended`**. `Canceled` does not silently mean Finished.
 - `src/lib/season-select.ts` is the single source of truth for engaged/relevant season selection.
 - Season bulk watched/unwatched actions are bounded snapshots over currently known released episodes. They must not create wildcard state affecting future episodes.
+- The durable Worker implementation follows the same rule: the server requires the requested season to exist, selects episodes released as of the action date and stores episode-level overrides only. Season 0 is valid for specials.
 
 ## Alerts
 - Alerts are in-app only; no push notifications in V1.
@@ -35,23 +36,28 @@
 - Discover only includes subscription-included titles on one of the user's selected services. No rent/buy-only recommendations.
 - Discover excludes titles already in History or My Library.
 - Top Picks uses 5-star titles; Similar To can use any Library title and remains same media type; By Genre uses rating/preference weighting.
+- Custom service names are normalized identically in local IndexedDB mode and Worker/D1 mode: trim, lowercase, collapse each non-ASCII-alphanumeric run to one hyphen, then trim edge hyphens. Names are bounded to 80 characters so resulting keys remain addressable by Worker routes.
+- Re-adding the same custom/built-in service name case-insensitively reselects the existing row. A different display name that normalizes to an already-used key is a conflict and must not silently alias or overwrite the existing service.
+- Any user/service-controlled text inserted through `innerHTML` must be escaped first; service names/keys must remain text/attribute data and never become executable markup.
 
 ## Architecture
 - Target: Vite + TypeScript PWA, separate Cloudflare Worker, separate D1, optional separate R2 only if needed, real provider adapters, GitHub CI.
 - PR #1 established the reviewed v0.10.2 synthetic/local baseline.
 - PR #2 / v0.11.0 established the source-level Worker + D1 backend foundation while leaving the working UI on IndexedDB/fake providers.
 - PR #3 / v0.12.0 established pinned Wrangler-local D1 runtime validation before remote activation.
+- PR #8 / v0.14.0 established the guarded browser cache bridge while keeping the production browser backend disabled.
+- PR #9 / v0.15.0 establishes Worker/client routes for the remaining core user-owned mutation types, but does not itself activate them in the production browser runtime.
 - `worker/repository.ts` is the server-side persistence boundary. Worker routes should not contain ad-hoc D1 mutation logic when the operation belongs in the repository layer.
 - `src/lib/backend-contract.ts` defines the shared browser/Worker snapshot shape; `src/lib/backend-client.ts` is the browser transport seam. UI modules should migrate through this seam rather than calling Worker endpoints directly.
 - Real provider code implements the interfaces in `worker/provider-contracts.ts`; provider credentials remain Worker-only and provider-specific concerns must not leak into UI/domain logic.
 - D1 is the durable source of truth once backend mode is activated. IndexedDB remains the browser cache/offline read layer rather than a second independent authority.
 - Backend snapshots hydrate IndexedDB atomically across related stores so the UI never observes a mixed old/new snapshot after a successful refresh.
 - A failed Worker snapshot fetch must leave the previously cached IndexedDB state untouched so offline use remains possible.
-- Synthetic fixtures remain the active runtime until an explicit later build safely configures the real PWA origin/browser authentication and routes all required user mutations through the Worker.
+- Synthetic fixtures remain the active runtime until an explicit later build safely configures the real PWA origin/browser authentication, migrates/reconciles existing local state, and routes active UI mutations through the Worker.
 - The D1 and IndexedDB availability key is `(title_id, service_key, option_type)` / `(titleId, serviceKey, optionType)`, allowing subscription/rent/buy options to coexist for one title/service.
 - The IndexedDB v1 -> v2 migration may discard the provider-owned availability cache to change its key, but must preserve all user-owned local stores.
 - D1 foreign keys use restrictive deletion for durable relationships. Provider refresh code reconciles provider-owned rows; it does not cascade-delete user-owned Library/rating/override/history preference state.
-- The initial Worker API exposes a compact snapshot plus a small set of representative personal mutations. Remaining mutations are added as the frontend migrates, rather than duplicating every current IndexedDB function before it is needed.
+- User-state reference/scope invariants are enforced at the repository boundary, not only trusted to HTTP routing. Movie overrides require canonical movies; episode/season overrides require canonical series; watched-service requires a known service; episode overrides require a known episode; season bulk overrides require a known season.
 - `wrangler.local.jsonc` is strictly local-only and may contain only non-production placeholder identifiers.
 - Wrangler is pinned to **4.129.0** and local migration validation always runs with `--local` against isolated ignored state.
 
@@ -67,7 +73,7 @@
 - The real `APP_ORIGIN` is not invented before the PWA hosting origin exists. Until configured, cross-origin API access remains denied by design.
 - **Normal merges to `main` must not automatically deploy production.** Cloudflare Workers Builds uses dedicated branch `deploy/production`, advanced only after fresh explicit user authorization. Non-production branch builds remain disabled for this single-user production Worker.
 - A production deployment may apply pending committed D1 migrations immediately before deploying the Worker, but only from an explicitly authorized deployment-branch update after the exact source head has already passed the normal PR review/test cycle.
-- The authorization used for the first production activation is consumed and must never be treated as reusable authorization for a later deploy.
+- A previous deployment authorization is consumed by the deployment it authorized and must never be reused for a later source head.
 
 ## Single-user Worker authentication
 - Personal-data API routes require a strong bearer device token. The expected value is supplied only as the Worker secret `DEVICE_ACCESS_TOKEN`.
