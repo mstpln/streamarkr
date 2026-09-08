@@ -41,7 +41,7 @@ export async function render(el: HTMLElement) {
       <button class="pill ${sortKey === 'watched' ? 'active' : ''}" data-sort="watched">Recently Watched</button>
     </div>
     <div class="pill-row">
-      <select class="pill" data-filter="genre" aria-label="Filter History by genre"><option value="">Genre${genreFilter ? ' · ' + genreFilter : ''}</option>${genres.map((genre) => `<option value="${genre}" ${genre === genreFilter ? 'selected' : ''}>${genre}</option>`).join('')}</select>
+      <select class="pill" data-filter="genre" aria-label="Filter History by genre"><option value="">Genre${genreFilter ? ' · ' + escapeHtml(genreFilter) : ''}</option>${genres.map((genre) => `<option value="${escapeHtml(genre)}" ${genre === genreFilter ? 'selected' : ''}>${escapeHtml(genre)}</option>`).join('')}</select>
       <select class="pill" data-filter="service" aria-label="Filter History by where I watched it"><option value="">Where I watched it${serviceFilter ? ' · ' + escapeHtml(activeServiceLabel) : ''}</option>${serviceOptions.map((option) => `<option value="${escapeHtml(option.key)}" ${option.key === serviceFilter ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select>
     </div>
     ${sorted.length === 0 ? '<div class="empty-state">No watch history yet.</div>' : `
@@ -52,7 +52,7 @@ export async function render(el: HTMLElement) {
         <button type="button" class="row-item row-button" data-open="${r.titleId}">
           <div class="row-thumb" style="${posterStyle(r.titleId)}"></div>
           <div class="row-body">
-            <div class="row-title">${r.title.title}</div>
+            <div class="row-title">${escapeHtml(r.title.title)}</div>
             <div class="row-meta">
               ${r.mediaType === 'series' ? `${r.watchedReleasedCount} of ${r.totalReleasedCount} episodes watched` : 'Movie'}
               ${r.lastWatchedAt ? ` · ${new Date(r.lastWatchedAt).toLocaleDateString()}` : ' · date unknown'}
