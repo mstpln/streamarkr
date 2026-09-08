@@ -70,6 +70,19 @@ async function main() {
     await page.goto(BASE + '/#/settings');
     await page.waitForTimeout(200);
     record('Settings renders', await page.getByText('Settings').first().isVisible());
+    const hostileServiceName = '<img src=x onerror="window.__streamarkrXss=1"> Evil';
+    await page.fill('#new-svc', hostileServiceName);
+    await page.click('#add-svc');
+    await page.waitForTimeout(150);
+    const customServiceSafe = await page.evaluate((name) => {
+      const bodyText = document.querySelector('#settings-body')?.textContent ?? '';
+      return bodyText.includes(name) && !document.querySelector('#settings-body img[src="x"]') && !(window).__streamarkrXss;
+    }, hostileServiceName);
+    record('Settings escapes custom streaming-service text', customServiceSafe);
+    await page.evaluate(async () => {
+      const mod = await import('/dist/lib/repo.js');
+      await mod.resetToFixtures();
+    });
     await page.click('[data-tab="connections"]');
     await page.waitForTimeout(100);
     record('Settings Connections tab switches', await page.getByText('Sync now').isVisible());
