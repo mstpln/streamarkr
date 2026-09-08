@@ -1,6 +1,7 @@
 import { renderShell, updateHeader, updateNav, getScreenEl } from './ui/shell.js';
 import { onRouteChange, type Route } from './ui/router.js';
-import { ensureSeeded } from './lib/repo.js';
+import { WorkerBackendClient } from './lib/backend-client.js';
+import { backendCacheInfo, configureBackendClient, ensureSeeded, refreshBackendCache } from './lib/repo.js';
 
 import * as Home from './ui/screens/home.js';
 import * as Discover from './ui/screens/discover.js';
@@ -12,7 +13,21 @@ import * as Alerts from './ui/screens/alerts.js';
 import * as Detail from './ui/screens/detail.js';
 
 async function boot() {
+  const backend = new WorkerBackendClient('');
+  configureBackendClient(backend);
   await ensureSeeded();
+
+  // Cached-first startup: an already-activated install renders safely from IndexedDB if the
+  // Worker is offline, but opportunistically refreshes the cache when the authenticated session
+  // is still available. Fresh synthetic/local installs never make a backend request here.
+  if ((await backendCacheInfo()).active) {
+    try {
+      await refreshBackendCache();
+    } catch {
+      // Offline/unavailable backend is non-fatal because the last verified snapshot is cached.
+    }
+  }
+
   const app = document.getElementById('app')!;
   renderShell(app);
   let previousRoute: Route['name'] | null = null;

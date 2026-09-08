@@ -50,6 +50,7 @@ function clientWith(getSnapshot: BackendClient['getSnapshot']): BackendClient {
 }
 
 async function hydrateFreshBackendCache(): Promise<void> {
+  repo.configureBackendClient(null);
   await db.clearAll();
   await repo.applyBackendSnapshot(snapshot());
 }
@@ -125,12 +126,12 @@ test('synthetic provider sync cannot mutate a hydrated Worker/D1 cache', async (
   assert.equal((await repo.allAvailability()).length, 2);
 });
 
-test('local-only user mutations are blocked while Worker/D1 cache mode is active', async () => {
+test('backend-mode user mutations fail closed when runtime Worker client is unavailable', async () => {
   await hydrateFreshBackendCache();
-  await assert.rejects(() => repo.setRating('movie-42', 4), /Local-only mutation is disabled/);
-  await assert.rejects(() => repo.removeFromLibrary('movie-42'), /Local-only mutation is disabled/);
-  await assert.rejects(() => repo.setWatchedService('movie-42', 'netflix'), /Local-only mutation is disabled/);
-  await assert.rejects(() => repo.setMovieOverride('movie-42', 'watched'), /Local-only mutation is disabled/);
+  await assert.rejects(() => repo.setRating('movie-42', 4), /no backend client is configured/);
+  await assert.rejects(() => repo.removeFromLibrary('movie-42'), /no backend client is configured/);
+  await assert.rejects(() => repo.setWatchedService('movie-42', 'netflix'), /no backend client is configured/);
+  await assert.rejects(() => repo.setMovieOverride('movie-42', 'watched'), /no backend client is configured/);
   assert.equal((await repo.allRatings())[0]?.stars, 5);
   assert.equal((await repo.allLibrary()).length, 1);
 });

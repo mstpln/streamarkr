@@ -152,7 +152,9 @@ async function main() {
     await page.waitForTimeout(100);
     await page.click('[data-tab="connections"]');
     await page.waitForTimeout(100);
-    record('Settings Connections tab switches', await page.getByText('Sync now').isVisible());
+    record('Settings Connections tab switches', await page.getByText('Connect secure storage').isVisible() && await page.locator('#device-token').isVisible());
+    record('Device token entry is password-only and not prefilled',
+      await page.locator('#device-token').getAttribute('type') === 'password' && await page.locator('#device-token').inputValue() === '');
 
     await page.goto(BASE + '/#/home');
     await page.waitForTimeout(100);

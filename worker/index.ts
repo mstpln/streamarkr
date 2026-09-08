@@ -6,6 +6,11 @@ import {
   isDeviceTokenAuthorized
 } from './auth.js';
 import {
+  InvalidMigrationPayloadError,
+  importLocalState,
+  MigrationConflictError
+} from './migration.js';
+import {
   addCustomService,
   addLibraryItem,
   clearRating,
@@ -28,8 +33,9 @@ import {
   setWatchedService,
   UnselectedServiceError
 } from './repository.js';
-import type { Env } from './types.js';
+import type { BackendMigrationBundle } from '../src/lib/backend-contract.js';
 import type { WatchOverride } from '../src/lib/types.js';
+import type { Env } from './types.js';
 
 function json(body: unknown, status = 200, extraHeaders: HeadersInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -164,6 +170,13 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json({ authenticated: true, method: auth }, 200, responseHeaders);
     }
 
+    if (request.method === 'POST' && url.pathname === '/api/migration/local-state') {
+      const bundle = await bodyJson<BackendMigrationBundle>(request);
+      if (!bundle) return json({ error: 'invalid_migration_payload' }, 400, responseHeaders);
+      const result = await importLocalState(env.DB, bundle);
+      return json({ ok: true, ...result }, 200, responseHeaders);
+    }
+
     if (request.method === 'GET' && url.pathname === '/api/snapshot') return json(await loadSnapshot(env.DB), 200, responseHeaders);
 
     const libraryTitleId = routeTitleId(url.pathname, '/api/library/');
@@ -261,6 +274,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json({ ok: true }, 200, responseHeaders);
     }
   } catch (error) {
+    if (error instanceof InvalidMigrationPayloadError) {
+      return json({ error: 'invalid_migration_payload', message: error.message }, 400, responseHeaders);
+    }
+    if (error instanceof MigrationConflictError) {
+      return json({ error: 'migration_conflict', message: error.message }, 409, responseHeaders);
+    }
     if (error instanceof MissingCanonicalTitleError) {
       return json({ error: 'missing_canonical_title', message: error.message }, 409, responseHeaders);
     }

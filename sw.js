@@ -4,7 +4,7 @@
 // The install-time manifest pre-caches the complete compiled module graph so first-load offline
 // behavior does not depend on fetch-time caching having already visited every route.
 // Personal/API responses are deliberately never placed in the app-shell cache.
-const CACHE_VERSION = 'streamarkr-v0.16.0';
+const CACHE_VERSION = 'streamarkr-v0.17.0';
 const APP_SHELL = [
   './',
   './index.html',

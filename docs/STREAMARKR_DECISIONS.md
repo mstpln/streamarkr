@@ -46,21 +46,36 @@
 - PR #2 / v0.11.0 established the source-level Worker + D1 backend foundation while leaving the working UI on IndexedDB/fake providers.
 - PR #3 / v0.12.0 established pinned Wrangler-local D1 runtime validation before remote activation.
 - PR #8 / v0.14.0 established the guarded browser cache bridge while keeping the production browser backend disabled.
-- PR #9 / v0.15.0 is merged and establishes Worker/client routes for the remaining core user-owned mutation types without activating them in the production browser runtime.
-- PR #10 / v0.16.0 establishes the browser session/bootstrap security foundation without configuring production origin, migrating local state, or activating the backend browser runtime.
+- PR #9 / v0.15.0 established Worker/client routes for the remaining core user-owned mutation types without activating them in the production browser runtime.
+- PR #10 / v0.16.0 established the browser session/bootstrap security foundation without configuring production origin, migrating local state, or activating the backend browser runtime.
+- PR #11 / v0.17.0 establishes the **safe activation transition**: retry-safe local-state migration/reconciliation plus a repository facade that routes user-owned mutations through the Worker after a verified takeover. It still does not authorize or perform production activation.
 - `worker/repository.ts` is the server-side persistence boundary. Worker routes should not contain ad-hoc D1 mutation logic when the operation belongs in the repository layer.
-- `src/lib/backend-contract.ts` defines the shared browser/Worker snapshot shape; `src/lib/backend-client.ts` is the browser transport seam. UI modules should migrate through this seam rather than calling Worker endpoints directly.
+- `src/lib/backend-contract.ts` defines shared browser/Worker snapshot and migration payload shapes; `src/lib/backend-client.ts` is the browser transport seam. UI modules must use this seam rather than calling personal Worker routes directly.
 - Real provider code implements the interfaces in `worker/provider-contracts.ts`; provider credentials remain Worker-only and provider-specific concerns must not leak into UI/domain logic.
-- D1 is the durable source of truth once backend mode is activated. IndexedDB remains the browser cache/offline read layer rather than a second independent authority.
+- D1 is the durable source of truth **only after** the guarded local-state migration has been durably imported, round-trip verified, and the browser cache has atomically switched its `data_source` marker to `backend`. Before that point, the existing IndexedDB source remains authoritative.
+- IndexedDB remains the browser cache/offline read layer after activation rather than a second independent authority.
 - Backend snapshots hydrate IndexedDB atomically across related stores so the UI never observes a mixed old/new snapshot after a successful refresh.
-- A failed Worker snapshot fetch must leave the previously cached IndexedDB state untouched so offline use remains possible.
-- Synthetic fixtures remain the active runtime until an explicit later build safely configures the real PWA origin, migrates/reconciles existing local state, and routes active UI reads/mutations through the Worker.
+- A failed Worker snapshot fetch or failed post-mutation refresh must leave the previously verified IndexedDB cache untouched so offline use remains possible.
 - The D1 and IndexedDB availability key is `(title_id, service_key, option_type)` / `(titleId, serviceKey, optionType)`, allowing subscription/rent/buy options to coexist for one title/service.
 - The IndexedDB v1 -> v2 migration may discard the provider-owned availability cache to change its key, but must preserve all user-owned local stores.
 - D1 foreign keys use restrictive deletion for durable relationships. Provider refresh code reconciles provider-owned rows; it does not cascade-delete user-owned Library/rating/override/history preference state.
 - User-state reference/scope invariants are enforced at the repository boundary, not only trusted to HTTP routing. Movie overrides require canonical movies; episode/season overrides require canonical series; watched-service requires a known service; episode overrides require a known episode; season bulk overrides require a known season.
 - `wrangler.local.jsonc` is strictly local-only and may contain only non-production placeholder identifiers.
 - Wrangler is pinned to **4.129.0** and local migration validation always runs with `--local` against isolated ignored state.
+
+## Local-state migration and backend takeover
+- Existing non-empty local/fixture state must never be silently overwritten by a first Worker snapshot. Activation requires the explicit v0.17 migration path.
+- The browser creates and persists a migration UUID in IndexedDB **before** the first import request. Retries reuse that same identity so a lost HTTP response cannot create a second independent import.
+- `POST /api/migration/local-state` requires the normal authenticated browser session and origin protections.
+- The Worker accepts a first import only when durable D1 application state is pristine apart from the seeded built-in service registry. It must fail closed rather than invent merge semantics for unexpected durable state.
+- The first import writes the accepted cache/user-state rows, a fingerprint of the durable user-state categories, and the migration marker atomically. An unchanged retry with the same migration ID is idempotent. If D1 committed but the browser lost the response and local state changed before retry, the same migration ID may reconcile that changed snapshot only when current D1 durable user state still matches the stored original fingerprint and provider-owned backend state remains untouched. Any independent durable backend change, missing fingerprint, or different migration ID fails closed.
+- Provider-owned sync timestamps/cursors are **not** promoted from local/synthetic browser state into D1. Real backend provider integrations must establish their own sync state later.
+- After import, the browser must fetch the authoritative D1 snapshot and compare durable user-state categories before switching authority. Library, ratings, watched-service, watch events, watch overrides, service definitions/preferences and alerts are part of that round-trip verification.
+- Any import failure, network failure, invalid snapshot or verification mismatch leaves the existing local source untouched and preserves the pending migration UUID for a safe retry.
+- Successful verification atomically replaces the browser cache and marks `data_source=backend`.
+- Once `data_source=backend`, user-owned mutations are Worker-routed and followed by an authoritative snapshot refresh. Local mutation fallbacks are not allowed in backend mode.
+- Reset-to-fixtures remains prohibited in backend mode. Synthetic provider sync remains prohibited in backend mode.
+- Startup is cached-first after activation: failure to reach the Worker is non-fatal and the last verified IndexedDB snapshot remains available.
 
 ## Cloudflare activation and deployment
 - The dedicated Cloudflare resources are named exactly Worker `streamarkr-api` and D1 `streamarkr`; the Worker binding is `DB`.
@@ -75,6 +90,7 @@
 - **Normal merges to `main` must not automatically deploy production.** Cloudflare Workers Builds uses dedicated branch `deploy/production`, advanced only after fresh explicit user authorization. Non-production branch builds remain disabled for this single-user production Worker.
 - A production deployment may apply pending committed D1 migrations immediately before deploying the Worker, but only from an explicitly authorized deployment-branch update after the exact source head has already passed the normal PR review/test cycle.
 - A previous deployment authorization is consumed by the deployment it authorized and must never be reused for a later source head.
+- v0.17 source readiness does not itself authorize deployment, `APP_ORIGIN` configuration, or migration of real personal browser data.
 
 ## Single-user Worker and browser authentication
 - The operational/manual API authentication primitive remains a strong bearer device token supplied only as Worker secret `DEVICE_ACCESS_TOKEN`.
@@ -107,6 +123,7 @@
 - Important controls target ~44x44 CSS px effective touch areas; icon-only actions need accessible labels/focus behavior.
 - Streaming-service badges in `src/ui/logos.ts` are placeholders; final app should use properly sourced/licensed recognizable logos.
 - App/runtime version and service-worker cache version must stay synchronized; one user-visible/architectural build = one bump, focused corrections to the same unreleased build keep the version.
+- Settings may expose the one-time device-token entry needed for browser bootstrap/migration, but it must be password-only, not prefilled, and cleared after use; no frontend persistence is allowed.
 
 ## Current test/tooling decision
 - Application/domain/Worker tests compile with TypeScript then use Node's built-in `node:test`; browser QA uses Playwright.

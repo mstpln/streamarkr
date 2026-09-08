@@ -1,3 +1,5 @@
+import { WorkerBackendClient } from '../../lib/backend-client.js';
+import { migrateLocalStateToBackend } from '../../lib/backend-migration.js';
 import * as repo from '../../lib/repo.js';
 import { serviceLogoHtml } from '../logos.js';
 
@@ -5,6 +7,15 @@ type SettingsTab = 'preferences' | 'connections' | 'data';
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function secureTokenInput(id: string, buttonId: string, buttonLabel: string): string {
+  return `
+    <div class="card-row">
+      <label class="sr-only" for="${id}">Device access token</label>
+      <input id="${id}" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Device access token" style="background:transparent;border:none;color:var(--text);flex:1;outline:none;min-width:0;" />
+      <button class="action-btn primary" id="${buttonId}">${buttonLabel}</button>
+    </div>`;
 }
 
 /** Settings always lands on Preferences when entered from navigation. Internal tab changes pass
@@ -77,12 +88,86 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         <div class="card-row"><span><span class="status-dot off"></span>Trakt</span><span>Not connected (synthetic mode)</span></div>
         <div class="card-row"><span><span class="status-dot ok"></span>TMDB</span><span>Fake adapter active</span></div>
         <div class="card-row"><span><span class="status-dot ok"></span>Streaming Availability</span><span>Fake adapter active</span></div>
-        <div class="card-row"><span><span class="status-dot ${cache.active ? 'ok' : 'off'}"></span>Data storage</span><span>${cache.active ? 'Worker/D1 snapshot cached in IndexedDB' : 'Local IndexedDB fixtures (Worker cache bridge ready, not connected)'}</span></div>
+        <div class="card-row"><span><span class="status-dot ${cache.active ? 'ok' : 'off'}"></span>Data storage</span><span>${cache.active ? 'Worker/D1 active · verified snapshot cached offline' : 'Local IndexedDB · ready for one-time Worker/D1 migration'}</span></div>
       </div>
-      <button class="action-btn primary" id="sync-now" style="width:100%;justify-content:center;" ${cache.active ? 'disabled aria-disabled="true"' : ''}>${cache.active ? 'Synthetic sync disabled for backend cache' : 'Sync now'}</button>
-      <div id="sync-status" class="section-empty-hint" style="margin-top:8px;" aria-live="polite">${cache.active ? 'A Worker/D1 cache must be refreshed through the backend client, never with fake provider data.' : ''}</div>
+      ${cache.active ? `
+        <button class="action-btn primary" id="backend-refresh" style="width:100%;justify-content:center;">Refresh Worker/D1 data</button>
+        <div class="card" style="margin-top:10px;">
+          <div style="font-weight:700;margin-bottom:6px;">Secure browser session</div>
+          <div class="section-empty-hint" style="margin-bottom:10px;">If the session has expired or was cleared, enter the device access token again. The token is exchanged for a new secure session and is never stored.</div>
+          ${secureTokenInput('reconnect-token', 'reconnect-session', 'Reconnect')}
+        </div>
+        <div id="backend-status" class="section-empty-hint" style="margin-top:8px;" aria-live="polite"></div>
+      ` : `
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:6px;">Connect secure storage</div>
+          <div class="section-empty-hint" style="margin-bottom:10px;">Enter the Streamarkr device access token once. It is exchanged for a secure browser session and is never stored in this app.</div>
+          ${secureTokenInput('device-token', 'activate-backend', 'Connect')}
+          <div id="backend-status" class="section-empty-hint" aria-live="polite"></div>
+        </div>
+        <button class="action-btn" id="sync-now" style="width:100%;justify-content:center;">Sync synthetic data</button>
+        <div id="sync-status" class="section-empty-hint" style="margin-top:8px;" aria-live="polite"></div>
+      `}
     `;
-    if (!cache.active) {
+
+    if (cache.active) {
+      body.querySelector('#backend-refresh')?.addEventListener('click', async () => {
+        const status = body.querySelector('#backend-status')!;
+        status.textContent = 'Refreshing…';
+        try {
+          const result = await repo.refreshBackendCache();
+          status.textContent = `Worker/D1 refreshed ${new Date(result.generatedAt).toLocaleString()}.`;
+        } catch {
+          status.textContent = 'Could not refresh Worker/D1. The last verified offline cache is unchanged. Reconnect the secure session if it has expired.';
+        }
+      });
+      body.querySelector('#reconnect-session')?.addEventListener('click', async () => {
+        const input = body.querySelector('#reconnect-token') as HTMLInputElement;
+        const button = body.querySelector('#reconnect-session') as HTMLButtonElement;
+        const status = body.querySelector('#backend-status')!;
+        const token = input.value;
+        if (!token) {
+          status.textContent = 'Enter the device access token first.';
+          return;
+        }
+        button.disabled = true;
+        status.textContent = 'Securing browser session…';
+        try {
+          await new WorkerBackendClient('').bootstrapSession(token);
+          input.value = '';
+          const result = await repo.refreshBackendCache();
+          status.textContent = `Secure session renewed. Worker/D1 refreshed ${new Date(result.generatedAt).toLocaleString()}.`;
+        } catch {
+          input.value = '';
+          button.disabled = false;
+          status.textContent = 'Could not renew the secure session. The last verified offline cache is unchanged.';
+        }
+      });
+    } else {
+      body.querySelector('#activate-backend')?.addEventListener('click', async () => {
+        const input = body.querySelector('#device-token') as HTMLInputElement;
+        const button = body.querySelector('#activate-backend') as HTMLButtonElement;
+        const status = body.querySelector('#backend-status')!;
+        const token = input.value;
+        if (!token) {
+          status.textContent = 'Enter the device access token first.';
+          return;
+        }
+        button.disabled = true;
+        status.textContent = 'Securing browser session…';
+        const client = new WorkerBackendClient('');
+        try {
+          await client.bootstrapSession(token);
+          input.value = '';
+          status.textContent = 'Migrating and verifying local data…';
+          await migrateLocalStateToBackend(client);
+          await render(el, 'connections');
+        } catch {
+          input.value = '';
+          button.disabled = false;
+          status.textContent = 'Connection or migration failed. Local data is unchanged; you can safely retry.';
+        }
+      });
       body.querySelector('#sync-now')?.addEventListener('click', async () => {
         const status = body.querySelector('#sync-status')!;
         status.textContent = 'Syncing…';
@@ -91,12 +176,13 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
       });
     }
   } else {
+    const cache = await repo.backendCacheInfo();
     body.innerHTML = `
       <div class="card">
-        <div class="card-row"><span>History / import</span><span>Synthetic fixtures</span></div>
+        <div class="card-row"><span>History / import</span><span>${cache.active ? 'Worker/D1 durable state' : 'Synthetic fixtures'}</span></div>
         <div class="card-row"><span>Export personal data</span><button class="action-btn" id="export-btn">Export JSON</button></div>
-        <div class="card-row"><span>Reset local data</span><button class="action-btn" id="reset-btn" style="border-color:var(--coral);color:var(--coral);">Reset to fixtures…</button></div>
-        <div class="card-row"><span>App version</span><span>v0.16.0 (browser auth bootstrap)</span></div>
+        <div class="card-row"><span>Reset local data</span><button class="action-btn" id="reset-btn" style="border-color:var(--coral);color:var(--coral);" ${cache.active ? 'disabled aria-disabled="true"' : ''}>${cache.active ? 'Disabled while Worker/D1 is active' : 'Reset to fixtures…'}</button></div>
+        <div class="card-row"><span>App version</span><span>v0.17.0 (backend activation migration)</span></div>
       </div>
     `;
     body.querySelector('#export-btn')?.addEventListener('click', async () => {
@@ -108,11 +194,13 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
       link.click();
       URL.revokeObjectURL(link.href);
     });
-    body.querySelector('#reset-btn')?.addEventListener('click', async () => {
-      if (confirm('This resets all local data back to the demo fixtures. Continue?')) {
-        await repo.resetToFixtures();
-        await render(el, 'data');
-      }
-    });
+    if (!cache.active) {
+      body.querySelector('#reset-btn')?.addEventListener('click', async () => {
+        if (confirm('This resets all local data back to the demo fixtures. Continue?')) {
+          await repo.resetToFixtures();
+          await render(el, 'data');
+        }
+      });
+    }
   }
 }
