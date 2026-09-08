@@ -17,6 +17,10 @@ class Statement implements D1PreparedStatement {
       const mediaType = this.db.knownTitleTypes.get(titleId);
       return mediaType ? { media_type: mediaType } as T : null;
     }
+    if (this.sql.includes('SELECT display_name FROM services')) {
+      const displayName = this.db.serviceDisplayNames.get(String(this.values[0]));
+      return displayName ? { display_name: displayName } as T : null;
+    }
     if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
     if (this.sql.includes('SELECT season_number FROM seasons') && this.db.knownSeasons.has(`${this.values[0]}:${this.values[1]}`)) {
       return { season_number: Number(this.values[1]) } as T;
@@ -41,6 +45,7 @@ class FakeDb implements D1Database {
   failReads = false;
   knownTitleTypes = new Map<string, Title['mediaType']>([['movie-1', 'movie'], ['series-1', 'series']]);
   knownServices = new Set(['netflix', 'hbo-max']);
+  serviceDisplayNames = new Map([['netflix', 'Netflix'], ['hbo-max', 'HBO Max']]);
   knownSeasons = new Set(['series-1:0', 'series-1:2']);
   knownEpisodes = new Set(['series-1:2:3', 'series-1:0:1']);
   releasedEpisodeNumbers = [1, 2, 3];
@@ -244,6 +249,24 @@ test('service preference and custom-service routes persist through D1', async ()
   assert.equal(custom.status, 200);
   assert.equal((await custom.json() as any).serviceKey, 'mubi-more');
   assert.match(db.writes.at(-1)?.sql ?? '', /INSERT INTO services/);
+});
+
+test('custom-service route reselects an existing same-name service and rejects normalized-key collisions', async () => {
+  const same = new FakeDb();
+  const sameResponse = await handleRequest(new Request('https://worker.example/api/services/custom', {
+    method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ displayName: 'netflix' })
+  }), env(same));
+  assert.equal(sameResponse.status, 200);
+  assert.equal((await sameResponse.json() as any).serviceKey, 'netflix');
+  assert.match(same.writes.at(-1)?.sql ?? '', /UPDATE services SET user_selected = 1/);
+
+  const collision = new FakeDb();
+  const collisionResponse = await handleRequest(new Request('https://worker.example/api/services/custom', {
+    method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ displayName: 'Netflix!' })
+  }), env(collision));
+  assert.equal(collisionResponse.status, 409);
+  assert.equal((await collisionResponse.json() as any).error, 'service_key_conflict');
+  assert.equal(collision.writes.length, 0);
 });
 
 test('CORS is emitted only for the configured exact app origin', async () => {
