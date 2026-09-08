@@ -1,12 +1,10 @@
 // Minimal hand-written service worker: app-shell cache-first strategy with a versioned cache
 // name tied to the app version, so a rebuild invalidates stale assets automatically.
-// The production-activation diagnostics hotfix changes this worker script so install-time
-// precaching refreshes the compiled module graph for existing v0.18.0 clients.
 //
 // The install-time manifest pre-caches the complete compiled module graph so first-load offline
 // behavior does not depend on fetch-time caching having already visited every route.
 // Personal/API responses are deliberately never placed in the app-shell cache.
-const CACHE_VERSION = 'streamarkr-v0.18.0';
+const CACHE_VERSION = 'streamarkr-v0.18.1';
 const APP_SHELL = [
   './',
   './index.html',
