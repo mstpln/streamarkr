@@ -4,7 +4,7 @@
   "cacheVersion": "streamarkr-v0.17.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-08T11:20:00Z",
+  "generatedAt": "2026-09-08T11:25:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -213,19 +213,19 @@
     "v0170": {
       "pr": 11,
       "baseMainCommit": "c26bc20b3579cc3736621e722d623ead12786564",
-      "lastValidatedImplementationHead": "bcaa21ece16c7684972acca84bacaa3789343732",
-      "lastValidatedImplementationCiRun": 254,
-      "tests": {"count": 195, "pass": 195, "fail": 0, "suites": 26},
+      "lastValidatedImplementationHead": "62306809828321cf930c04a3938f3161b32a0010",
+      "lastValidatedImplementationCiRun": 260,
+      "tests": {"count": 196, "pass": 196, "fail": 0, "suites": 26},
       "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
       "wranglerLocalD1": "pass with Wrangler 4.129.0",
       "browserQa": {"checks": 32, "pass": 32, "fail": 0, "consoleOrPageErrors": 0},
       "providerSecurityQa": {"checks": 8, "pass": 8, "fail": 0, "consoleOrPageErrors": 0},
-      "newCoverage": ["persisted retry-safe browser migration UUID", "authenticated origin-gated local-state migration route", "pristine-backend takeover guard", "same-id migration idempotency", "different-id migration conflict", "migration payload structural and semantic validation", "one-batch imported state plus migration marker", "provider sync-state exclusion from durable import", "post-import durable user-state round-trip verification", "verification mismatch preserves local source", "atomic verified backend-cache takeover", "backend-aware Worker-routed mutations", "failed post-mutation refresh preserves offline cache", "backend runtime client fail-closed behavior", "backend fixture-reset prohibition", "secure Settings migration entry point", "password-only non-prefilled device-token browser QA", "v0.17 reproducible package-lock install"],
+      "newCoverage": ["persisted retry-safe browser migration UUID", "authenticated origin-gated local-state migration route", "pristine-backend takeover guard", "same-id migration idempotency", "different-id migration conflict", "migration payload structural and semantic validation", "one-batch imported state plus migration marker", "provider sync-state exclusion from durable import", "post-import durable user-state round-trip verification", "verification mismatch preserves local source", "atomic verified backend-cache takeover", "backend-aware Worker-routed mutations", "failed post-mutation refresh preserves offline cache", "backend runtime client fail-closed behavior", "backend fixture-reset prohibition", "secure Settings migration entry point", "password-only non-prefilled device-token browser QA", "v0.17 reproducible package-lock install", "machine-readable build-state JSON and app/cache version synchronization"],
       "productionWorkerAccessedByTests": false,
       "personalDataUsed": false,
       "liveProvidersUsed": false,
       "bandmarkrAccessed": false,
-      "documentationInclusiveExactHeadGate": "complete CI/browser QA must pass on the unchanged continuity-synchronized PR #11 head before merge readiness"
+      "documentationInclusiveExactHeadGate": "complete CI/browser QA must pass on the unchanged continuity-recorded PR #11 head before merge readiness"
     },
     "responsive": ["344x792 folded", "873x1000 unfolded"],
     "physicalPixel9ProFold": "not yet run"
@@ -279,7 +279,7 @@
     "normal main merges cannot be the production deployment trigger"
   ],
   "pendingIntegrations": [
-    "Complete PR #11 continuity-synchronized exact-head CI/final security/review inspection and merge only after explicit user authorization",
+    "Complete PR #11 exact-head CI/final security/review inspection and merge only after explicit user authorization",
     "Establish real PWA hosting/API topology, configure APP_ORIGIN, and validate actual same-site/cookie behavior before activation",
     "Perform any real local-state migration or production deployment only after fresh explicit authorization",
     "Real Trakt OAuth + history sync",
