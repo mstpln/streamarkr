@@ -4,7 +4,7 @@
   "cacheVersion": "streamarkr-v0.18.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-08T13:50:00.000Z",
+  "generatedAt": "2026-09-08T14:15:00.000Z",
   "repository": {
     "fullName": "mstpln/streamarkr",
     "public": true,
@@ -91,7 +91,7 @@
   },
   "activationDiagnostics": {
     "pr": 13,
-    "status": "in review",
+    "status": "final exact-head validation pending after continuity synchronization",
     "stages": ["bootstrap", "verify-session", "migration"],
     "safeErrorSurface": "HTTP status plus sanitized backend error code only; arbitrary exception/response text is not rendered",
     "postBootstrapVerification": "GET /api/auth/session must verify cookie-backed authentication before migration",
@@ -132,6 +132,18 @@
       "ciRun": 280,
       "cloudflareBundle": "pass",
       "tests": "200/200",
+      "d1": "5/5",
+      "wranglerLocal": "pass",
+      "browser": "32/32",
+      "providerSecurity": "8/8",
+      "responsive": "folded/unfolded pass",
+      "consolePageErrors": 0
+    },
+    "pr13PreFinalContinuity": {
+      "reviewedHead": "37905f410a37c3e6f5cc51d3ec1b0cdd4f1cb9bc",
+      "ciRun": 300,
+      "cloudflareBundle": "pass",
+      "tests": "204/204",
       "d1": "5/5",
       "wranglerLocal": "pass",
       "browser": "32/32",
