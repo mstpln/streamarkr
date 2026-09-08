@@ -15,7 +15,7 @@
     "test": "rm -rf test-dist && tsc -p tsconfig.tests.json && node --test test-dist/tests/*.test.js tests/cloudflare-deploy-config.test.mjs",
     "test:d1": "node --experimental-sqlite --test tests/d1-schema.test.mjs",
     "test:d1:wrangler": "node scripts/validate-wrangler-d1.mjs",
-    "qa:browser": "node browser-qa.mjs"
+    "qa:browser": "node browser-qa.mjs && node browser-security-qa.mjs"
   },
   "engines": {
     "node": ">=22"
