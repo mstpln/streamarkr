@@ -23,7 +23,8 @@ The first secure-storage activation attempt did **not** complete. Settings showe
 
 ## PR #13 — secure activation diagnostics
 The hotfix makes the next production retry diagnostic without exposing credentials:
-- backend failures retain only HTTP status plus a sanitized backend error code;
+- backend failures retain only HTTP status plus an allowlisted backend error code;
+- unknown or arbitrary response values are discarded even if they look like normal snake-case error codes;
 - Settings separates device-token bootstrap, cookie-backed session verification, and local-state migration into explicit stages;
 - after token exchange, Settings verifies `/api/auth/session` before attempting migration;
 - token rejection, browser-session retention failure, origin rejection, migration conflict, and invalid migration payload produce distinct safe messages;
@@ -35,7 +36,7 @@ The service-worker script differs from deployed v0.18.0 only by diagnostic-hotfi
 ## Validation
 PR #12 final validation: Cloudflare bundle PASS, 200/200 tests, D1 5/5, Wrangler-local PASS, browser/responsive 32/32, provider/security 8/8, folded/unfolded PASS, zero console/page errors.
 
-PR #13 implementation/review validation on head `37905f410a37c3e6f5cc51d3ec1b0cdd4f1cb9bc` passed CI #300: Cloudflare bundle PASS, 204/204 tests across 26 suites, D1 5/5, Wrangler-local PASS, browser/responsive 32/32, provider/security 8/8, folded/unfolded PASS and zero console/page errors. The final continuity-only head must pass that same complete workflow again before merge readiness.
+PR #13 implementation/security review on head `6a427406ac172f4f6e26ccfbc168f03c214a1625` passed CI #305: Cloudflare bundle PASS with 35 compiled modules, 205/205 tests across 26 suites, D1 5/5, Wrangler 4.129.0 local-D1 PASS, browser/responsive 32/32, provider/security 8/8, folded/unfolded PASS and zero console/page errors. Review found and fixed one additional hardening issue: diagnostic error codes are now strict-allowlisted rather than accepting any syntactically valid snake-case value. The final continuity-only head must pass the same complete workflow before merge readiness.
 
 ## Next work
 1. Finish the PR #13 final exact-head CI/review cycle and merge only with explicit user authorization.
