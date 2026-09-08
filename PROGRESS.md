@@ -46,12 +46,14 @@ PR #9 adds the remaining core durable Worker/client mutation surface needed befo
 - streaming-service selection;
 - custom streaming services with route-safe normalized keys.
 
-Review hardening now enforces override media scope in both HTTP routing and the D1 repository, validates episode/season existence before correction, preserves season-zero specials, and keeps season bulk writes bounded and transactional. Local IndexedDB and Worker/D1 custom-service creation now use the same route-safe normalization and length bounds; same-name additions reselect an existing service while different-name normalized-key collisions are rejected rather than silently aliasing services. Dynamic service text is escaped in Settings, Detail, History and Library filter rendering, with hostile synthetic browser regressions covering all four surfaces. Settings also bounds input and reports invalid/conflicting names without unhandled page errors.
+Review hardening enforces override media scope in both HTTP routing and the D1 repository, validates episode/season existence before correction, preserves season-zero specials, and keeps season bulk writes bounded and transactional. Local IndexedDB and Worker/D1 custom-service creation use the same route-safe normalization and length bounds; same-name additions reselect an existing service while different-name normalized-key collisions are rejected rather than silently aliasing services.
 
-The final code/security-review head before continuity-only changes is `207db99c32aab71ef72895e72c07d1ce4fcad0c1`. CI #166 passed: `npm ci` PASS, PWA build PASS, Worker type-check PASS, **160/160 tests across 26 suites**, D1 **5/5**, Wrangler-local validation PASS, browser/responsive QA **31/31**, folded/unfolded PASS and zero smoke-pass console/page errors.
+The security review also closed stored-markup gaps beyond the original service-name surfaces. Provider/user/service-controlled text inserted through `innerHTML` is now escaped across Settings, Detail, Home, Library, History, Search, Discover and Alerts; unsafe provider deep-link schemes are rejected. Custom service logo lookup is hardened against prototype-like keys such as `constructor`. Browser regression QA now exercises these cases directly.
+
+Last validated implementation head before continuity synchronization: `d683104382bc7337bf0457ab0bb179e64ca3a64c`, CI #211. `npm ci` PASS, PWA build PASS, Worker type-check PASS, **164/164 tests across 26 suites**, D1 **5/5**, Wrangler-local validation PASS, core browser/responsive QA **31/31**, focused provider/security QA **8/8**, folded/unfolded PASS and zero console/page errors.
 
 ## Next work
-1. Complete PR #9 continuity synchronization, then require a clean complete CI/browser pass on the unchanged documentation-inclusive PR head and perform final PR/review-thread inspection; merge only after explicit user authorization.
+1. Require a clean complete CI/browser pass on the final unchanged continuity-synchronized PR #9 head, then perform final PR/review-thread/security inspection; merge only after explicit user authorization.
 2. Design the safe single-user browser authentication/bootstrap flow. `DEVICE_ACCESS_TOKEN` must never be embedded in public frontend source/generated assets.
 3. Migrate or explicitly reconcile existing local user-owned state into D1 before first backend browser activation.
 4. Establish the real PWA hosting origin and configure exact `APP_ORIGIN` only when that hosting decision is made.
