@@ -207,7 +207,10 @@ sandboxed/synthetic test accounts — never production credentials or real perso
   production trigger and may be advanced only after fresh explicit user authorization.
 - A previous deployment authorization is consumed by the deployment it authorized and must never
   be reused for a later commit.
-- `APP_ORIGIN` stays unset until the actual PWA hosting origin is known; do not invent one.
+- The PWA and `/api/*` share the same Worker origin. Browser CORS/session authorization must use the
+  actual Worker request URL origin as the authority; `APP_ORIGIN` must not redefine or override
+  browser trust. If a legacy/dashboard `APP_ORIGIN` value exists, it is non-authoritative for
+  browser authentication and must not block the genuine serving origin.
 
 ## Accessibility / responsive targets
 - Interactive controls need an effective touch target of at least 44×44 CSS px — achieved via
