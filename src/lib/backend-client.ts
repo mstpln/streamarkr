@@ -7,9 +7,6 @@ export interface BackendSessionStatus {
 }
 
 export interface BackendClient {
-  getSessionStatus(): Promise<BackendSessionStatus>;
-  bootstrapSession(deviceAccessToken: string): Promise<{ expiresAt: string }>;
-  clearSession(): Promise<void>;
   getSnapshot(): Promise<BackendSnapshot>;
   addToLibrary(titleId: string): Promise<void>;
   removeFromLibrary(titleId: string): Promise<void>;
