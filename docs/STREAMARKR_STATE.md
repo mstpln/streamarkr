@@ -1,71 +1,67 @@
 # Streamarkr current state
 
-Updated: 2026-09-08. Current unreleased build: **v0.18.0** / service-worker cache **streamarkr-v0.18.0**.
+Updated: 2026-09-08. Current PR build: **v0.18.1** / service-worker cache **streamarkr-v0.18.1**. Production remains on deployed **v0.18.0** until PR #13 is merged and separately authorized for deployment.
 
 ## Repository baseline
 - Public repo: `mstpln/streamarkr`; `main` is authoritative.
-- PR #11 / v0.17.0 safe backend activation migration merged at `1e411d1696d32269327b5ef30de5c5f158f302e0`. Exact final PR head `6b81e0f3640465dcd1d2ae58ca9510eaffac1b6d` passed CI #271 with 198/198 tests, D1 5/5, Wrangler-local PASS, browser/responsive 32/32, provider/security 8/8 and zero console/page errors.
-- PR #12 is the active v0.18.0 same-origin Worker-hosting build on `feat/same-origin-worker-hosting-v0180`.
+- PR #11 / v0.17.0 safe backend activation migration merged at `1e411d1696d32269327b5ef30de5c5f158f302e0`.
+- PR #12 / v0.18.0 same-origin Worker hosting merged at `77d8644e06be5a9e61c0938782616f02cdf8f179`; exact final PR head `c24795f93e9887620d3bdfacb438422c6e86c56a` passed Cloudflare bundle build, 200/200 tests, D1 5/5, Wrangler-local validation, browser/responsive 32/32, provider/security 8/8 and zero console/page errors.
+- PR #13 is the active **v0.18.1 production-activation diagnostics** patch on `fix/backend-activation-diagnostics-v0181`.
 
-## Cloudflare account state
-Dedicated Streamarkr resources exist and remain separate from BANDMARKR: D1 `streamarkr` in EU, Worker `streamarkr-api`, Worker binding `DB`, runtime secret `DEVICE_ACCESS_TOKEN`, and guarded Workers Builds using only `deploy/production`. The real D1 identifier stays outside the public repository.
+## Cloudflare account and production state
+Dedicated Streamarkr resources remain separate from BANDMARKR: D1 `streamarkr` in EU, Worker `streamarkr-api`, binding `DB`, runtime secret `DEVICE_ACCESS_TOKEN`, and guarded Workers Builds using only `deploy/production`. The real D1 identifier stays outside the public repository.
 
-The only previously authorized production deployment used deployment commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` for reviewed main `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. That authorization is consumed. No v0.14-v0.18 production deployment is implicitly authorized.
+The user explicitly authorized deployment of reviewed v0.18.0 main. `deploy/production` was advanced to `77d8644e06be5a9e61c0938782616f02cdf8f179` and the same-origin PWA is live on the existing Streamarkr Workers.dev origin.
+
+Manual production validation confirmed:
+- the PWA root renders Streamarkr;
+- `/api/health` is Worker-routed and returns `ok: true`, service `streamarkr-worker`, schema version `1`, and `authConfigured: true`;
+- the dedicated Streamarkr D1 connection is healthy;
+- static assets and `/api/*` share the intended Worker origin.
 
 ## Validated application behavior
 - Installable PWA with Home, Discover, My Library, History, Search, Alerts, Settings and universal movie/series detail pages.
-- IndexedDB remains the browser cache/offline read layer. D1 becomes durable authority only after the guarded v0.17 migration is imported, round-trip verified and the browser atomically switches `data_source=backend`.
-- User-owned Library membership, 1-5 star ratings, manual watched/unwatched overrides, selected streaming services, historical watched-service and alert seen state retain their established ownership boundaries.
-- Finished requires provider series status `Ended`; untouched newer seasons do not break Caught Up; On Hold uses genuine provider watch timestamps, not manual-correction timestamps.
-- Season bulk corrections affect only known released episodes and never future episodes.
-- User/provider/service-controlled display text is escaped; custom-service lookups reject prototype-like inherited keys; provider deep links are HTTP/HTTPS only.
-- Home, Library, History, Search, Discover, Detail, Alerts and Settings remain covered by deterministic browser QA.
+- IndexedDB remains the browser cache/offline read layer. D1 becomes durable authority only after guarded migration is imported, round-trip verified and the browser atomically switches `data_source=backend`.
+- User-owned Library membership, ratings, manual watch corrections, selected services, watched-service history and alert seen-state retain their ownership boundaries.
+- Backend-active mutations are Worker-routed and failed refreshes preserve the last verified offline cache.
+- Finished/Caught Up/On Hold and bounded season-override semantics remain unchanged.
+- User/provider/service-controlled display text is escaped and provider deep links are HTTP/HTTPS only.
 
-## v0.17.0 backend activation migration — merged
-- A migration UUID is persisted before the first import request and reused on retry.
-- First D1 takeover requires pristine application state apart from the built-in service registry.
-- The first import stores the durable user state, its fingerprint and migration marker atomically.
-- Same-ID unchanged retries are idempotent. Same-ID changed local state after an uncertain first response may reconcile only while D1 still matches the original durable-user-state fingerprint and provider-owned backend state is untouched; otherwise migration fails closed.
-- Provider-owned sync timestamps/cursors are deliberately not promoted from local/synthetic state.
-- The browser fetches an authoritative D1 snapshot and verifies durable user-state categories before switching authority.
-- Once backend-active, user-owned mutations route through the Worker and then refresh the authoritative snapshot; failed refreshes preserve the last verified offline cache.
-- Backend-active startup remains cached-first and fixture reset/synthetic provider sync remain blocked.
+## Production secure-storage activation status
+The first real-browser secure-storage activation attempt did not complete. The deployed v0.18.0 Settings UI reported its generic `Connection or migration failed` message. A same-browser follow-up request to `/api/auth/session` returned `unauthorized`.
 
-## v0.18.0 same-origin Worker hosting — PR #12 active
-PR #12 removes the remaining frontend/API-origin blocker using the existing Streamarkr Worker rather than adding another hosting service.
+That observation does **not** prove whether the device token was rejected during bootstrap or a successfully issued cookie was not retained, because v0.18.0 combined bootstrap and migration failures. No personal state was migrated and the local IndexedDB source remains unchanged.
 
-Implemented:
-- deployable PWA assets are staged under ignored `.wrangler/site`;
-- the generated Worker deployment config serves those assets with SPA fallback;
-- `/api/*` is configured Worker-first, while normal app files are served as static assets from the same Worker origin;
-- `npm run build:cloudflare` now builds the PWA, type-checks the Worker and prepares the staged asset bundle;
-- deployment preflight refuses remote operations if required staged PWA files are absent;
-- the browser auth origin defaults to the actual Worker serving origin when `APP_ORIGIN` is unset, so the existing Worker address can host both PWA and API safely;
-- an explicit `APP_ORIGIN` remains an exact override if a later topology requires it;
-- mismatching browser Origin requests remain rejected;
-- only deployable app assets are staged; repository package/docs/tests are excluded;
-- app/cache version is v0.18.0.
+## PR #13 / v0.18.1 activation diagnostics
+PR #13 makes the activation boundary safely observable:
+- `BackendRequestError` preserves only HTTP status plus a strictly sanitized backend error code;
+- Settings treats token bootstrap, browser-session verification, and migration as separate stages;
+- after bootstrap it explicitly verifies the cookie-backed session before any migration;
+- token rejection, origin rejection, cookie-retention failure, migration conflict, and invalid migration payload receive distinct safe messages;
+- arbitrary backend/exception text is never rendered, preventing accidental secret/error-detail disclosure;
+- the token remains password-only, is cleared after use and is never persisted.
 
-Focused validation before PR opening passed: `npm ci`, Cloudflare bundle build, **200/200 tests across 26 suites**, D1 **5/5**, and pinned Wrangler **4.129.0** local-D1 validation. Normal PR CI/browser QA is being repeated on the continuity-synchronized exact PR head before merge readiness.
+Because the compiled browser module graph changed, the normal cache/version rule is followed: package version, Settings version and service-worker cache all advance together to **v0.18.1 / streamarkr-v0.18.1**.
 
 ## Production safety boundary
-- PR #12 does **not** deploy production.
-- Production currently remains on the older reviewed Worker deployment.
+- PR #13 does not deploy production.
+- The prior v0.18.0 deployment authorization is consumed; deploying v0.18.1 requires fresh explicit user authorization after merge.
 - No real personal browser state has been migrated to D1.
-- No live TMDB/Trakt/availability credentials or calls are part of this build.
-- Any v0.18 production deployment requires a fresh explicit user authorization after merge.
-- Real browser-state migration must wait until the deployed same-origin PWA/API path and session cookie behavior are verified in the actual browser.
+- No live TMDB/Trakt/availability credentials or provider calls are part of this work.
+- Automated tests remain synthetic-only and never access production Worker/D1 or BANDMARKR.
 
 ## Next sequence toward V1
-1. Finish review/test/fix cycle for PR #12 and merge only with explicit approval.
-2. Separately authorize and validate the v0.18 deployment on the existing `streamarkr-api` Worker when the user chooses to do so.
-3. Build real TMDB metadata/search.
-4. Build Trakt OAuth/history ingestion and reconciliation.
-5. Add real Swedish streaming availability, alert transitions and Discover eligibility/ranking.
-6. Finish service branding, performance/accessibility hardening and physical Pixel 9 Pro Fold QA.
+1. Finish PR #13 exact-head review/test/fix and merge only with explicit approval.
+2. Separately authorize and deploy merged v0.18.1 if the user chooses to do so.
+3. Retry secure-storage activation and resolve the exact staged failure, if any, before accepting real personal-state migration.
+4. Build real TMDB metadata/search.
+5. Build Trakt OAuth/history ingestion and reconciliation.
+6. Add real Swedish streaming availability, alert transitions and Discover ranking.
+7. Finish service branding, performance/accessibility hardening and physical Pixel 9 Pro Fold QA.
 
 ## Still pending
-- v0.18 is not deployed to production.
-- No live provider integration yet.
-- Streaming-service marks remain placeholders pending properly sourced/licensed assets.
-- Physical Pixel 9 Pro Fold QA remains required before V1 release.
+- End-to-end secure browser-session activation on the live Workers.dev origin.
+- Real personal-state migration to production D1.
+- Live provider integrations.
+- Properly sourced/licensed streaming-service marks.
+- Physical Pixel 9 Pro Fold QA before V1 release.

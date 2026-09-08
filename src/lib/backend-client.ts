@@ -6,6 +6,16 @@ export interface BackendSessionStatus {
   method?: 'device-token' | 'browser-session';
 }
 
+export class BackendRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string | null = null
+  ) {
+    super(`Streamarkr backend request failed (${status})${code ? `: ${code}` : ''}`);
+    this.name = 'BackendRequestError';
+  }
+}
+
 export interface BackendClient {
   getSnapshot(): Promise<BackendSnapshot>;
   addToLibrary(titleId: string): Promise<void>;
@@ -27,6 +37,36 @@ export interface MigrationBackendClient extends BackendClient {
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+const KNOWN_BACKEND_ERROR_CODES = new Set([
+  'database_unavailable',
+  'origin_not_allowed',
+  'server_not_configured',
+  'unauthorized',
+  'invalid_migration_payload',
+  'migration_conflict',
+  'invalid_rating',
+  'invalid_service_key',
+  'invalid_override_scope',
+  'invalid_override_state',
+  'invalid_episode_override',
+  'invalid_season_override',
+  'invalid_service_selection',
+  'invalid_service_name',
+  'invalid_alert_ids',
+  'missing_canonical_title',
+  'missing_service',
+  'service_not_selected',
+  'missing_episode',
+  'missing_season',
+  'service_key_conflict',
+  'request_failed',
+  'not_found'
+]);
+
+function safeBackendErrorCode(value: unknown): string | null {
+  return typeof value === 'string' && KNOWN_BACKEND_ERROR_CODES.has(value) ? value : null;
+}
+
 export class WorkerBackendClient implements MigrationBackendClient {
   private readonly baseUrl: string;
   private readonly token: string | null;
@@ -44,14 +84,14 @@ export class WorkerBackendClient implements MigrationBackendClient {
     if (init.body != null && !headers.has('content-type')) headers.set('content-type', 'application/json');
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers, credentials: 'include' });
     if (!response.ok) {
-      let detail = '';
+      let code: string | null = null;
       try {
-        const payload = await response.json() as { error?: string; message?: string };
-        detail = payload.message || payload.error || '';
+        const payload = await response.json() as { error?: unknown };
+        code = safeBackendErrorCode(payload.error);
       } catch {
-        detail = '';
+        code = null;
       }
-      throw new Error(`Streamarkr backend request failed (${response.status})${detail ? `: ${detail}` : ''}`);
+      throw new BackendRequestError(response.status, code);
     }
     if (response.status === 204) return undefined as T;
     return await response.json() as T;

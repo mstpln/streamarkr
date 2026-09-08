@@ -41,8 +41,8 @@ Updated: 2026-09-08.
 
 ## Architecture
 - Target: Vite + TypeScript PWA, Cloudflare Worker, Cloudflare D1, optional R2 only if needed, real provider adapters and GitHub CI.
-- PR #11 / v0.17.0 merged at `1e411d1696d32269327b5ef30de5c5f158f302e0` and established the safe activation transition: retry-safe local-state migration/reconciliation plus Worker-routed user-owned mutations after verified takeover.
-- PR #12 / v0.18.0 establishes the **same-origin production topology**: the existing Streamarkr Worker serves the PWA static assets and `/api/*` from one Worker origin. This avoids adding a separate frontend hosting service or requiring a custom domain for V1.
+- PR #11 / v0.17.0 established retry-safe local-state migration/reconciliation plus Worker-routed user-owned mutations after verified takeover.
+- PR #12 / v0.18.0 established the **same-origin production topology**: the existing Streamarkr Worker serves PWA static assets and `/api/*` from one Worker origin. It merged at `77d8644e06be5a9e61c0938782616f02cdf8f179` and has been explicitly deployed to the dedicated Streamarkr Worker.
 - `worker/repository.ts` is the server-side persistence boundary. Worker routes do not contain ad-hoc D1 mutation logic when the operation belongs in the repository layer.
 - `src/lib/backend-contract.ts` defines shared browser/Worker shapes; `src/lib/backend-client.ts` is the browser transport seam. UI modules do not call personal Worker routes directly.
 - Real provider code implements `worker/provider-contracts.ts`; provider credentials remain Worker-only.
@@ -60,7 +60,7 @@ Updated: 2026-09-08.
 - `POST /api/migration/local-state` requires normal authentication and origin protections.
 - First import requires pristine durable application state apart from the built-in service registry.
 - First import writes accepted state, its durable-user-state fingerprint and migration marker atomically.
-- Same-ID unchanged retry is idempotent. If the first response was lost and local state changed, same-ID reconciliation is allowed only while D1 still matches the stored original durable-user-state fingerprint and provider-owned backend state remains untouched. Independent backend change, missing fingerprint or a different migration ID fails closed.
+- Same-ID unchanged retry is idempotent. Changed same-ID retry may reconcile only while D1 still matches the original durable-user-state fingerprint and provider-owned backend state remains untouched; otherwise it fails closed.
 - Provider-owned sync timestamps/cursors are not promoted from local/synthetic state.
 - After import, the browser fetches the authoritative snapshot and compares durable user-state categories before switching authority.
 - Any import/network/snapshot/verification failure leaves the existing local source intact for recovery.
@@ -69,18 +69,26 @@ Updated: 2026-09-08.
 - Startup is cached-first after activation; Worker outage is non-fatal to the last verified cache.
 
 ## Same-origin Worker hosting and browser authentication
-- The dedicated production resource remains Worker `streamarkr-api` with D1 `streamarkr` bound as `DB`. It is always separate from BANDMARKR.
+- The dedicated production resource remains Worker `streamarkr-api` with D1 `streamarkr` bound as `DB`, always separate from BANDMARKR.
 - v0.18 stages only deployable PWA assets under ignored `.wrangler/site`; package files, documentation, tests and private/runtime data are not part of the static asset bundle.
-- Generated Wrangler config uses static-asset SPA fallback and `run_worker_first: ['/api/*']` so normal PWA files and API routes share the Worker origin while API routes still execute Worker code.
+- Generated Wrangler config uses SPA fallback and `run_worker_first: ['/api/*']` so PWA files and API routes share the Worker origin while API routes execute Worker code.
 - `npm run build:cloudflare` builds the PWA, type-checks the Worker and stages the static asset bundle. Deployment preflight refuses remote work when required staged assets are absent.
 - `DEVICE_ACCESS_TOKEN` remains the single-user operational secret and is never embedded/persisted in frontend source, generated assets, localStorage, IndexedDB, cookies, logs or repository configuration.
 - Browser bootstrap sends a user-entered device token only to `POST /api/auth/session`; success returns no token and sets a signed HttpOnly browser-session cookie.
 - Cookie remains `__Host-streamarkr_session`, `HttpOnly`, `Secure`, `Path=/`, no `Domain`, with current 30-day TTL. Secret rotation invalidates existing sessions.
-- **v0.18 supersedes the earlier requirement that `APP_ORIGIN` must always be configured.** When `APP_ORIGIN` is unset, the effective allowed browser origin is the actual request URL/Worker serving origin. This is safe because the PWA and API are intentionally same-origin.
-- If `APP_ORIGIN` is explicitly configured later, it remains an exact-origin override and mismatching Origin requests fail closed.
+- When `APP_ORIGIN` is unset, the effective allowed browser origin is the actual request URL/Worker serving origin. If explicitly configured later, it remains an exact-origin override.
 - No-Origin cookie requests are accepted only when the request URL origin equals the effective app origin. Operational bearer clients without browser Origin remain supported.
 - `DELETE /api/auth/session` remains origin-gated and clears the session cookie without requiring the device token.
 - Browser session state is not stored in D1; signed expiry plus device-secret rotation is the V1 global revocation mechanism.
+
+## Production activation diagnostics
+- Live v0.18 validation confirmed the PWA root, `/api/*` routing, schema version 1, D1 health and configured authentication.
+- The first live secure-storage attempt produced the pre-hotfix generic failure and a subsequent same-browser `/api/auth/session` request was unauthorized. This is an unresolved activation finding, not evidence that migration succeeded.
+- No personal state may be considered migrated until the cookie-backed session is verified and the guarded migration/round-trip comparison succeeds.
+- Secure-storage activation must diagnose three stages separately: device-token bootstrap, browser-session verification, then migration. Do not collapse them into one generic error boundary.
+- User-facing diagnostics may expose only safe stage/status categories. They must never surface the device token, arbitrary backend response text, request headers, cookie values or raw exception content.
+- After a successful token exchange the browser must explicitly verify `/api/auth/session` before beginning migration. This distinguishes a rejected device token from a cookie-retention failure without developer-console debugging.
+- The production diagnostic hotfix remains within app/cache identifier v0.18.0 and changes service-worker bytes so installed v0.18.0 clients rerun install-time precaching. This is a narrow same-build production validation exception; the normal rule remains that product/cache-affecting builds advance package, Settings and cache versions together.
 
 ## Cloudflare activation and deployment
 - The committed `wrangler.jsonc` remains account-neutral. Account-specific D1 binding data is generated under ignored `.wrangler/deploy/` state from build-only configuration.
@@ -88,10 +96,9 @@ Updated: 2026-09-08.
 - Remote migration/deployment disables automatic provisioning and draft-resource creation.
 - `DEVICE_ACCESS_TOKEN` is a required Worker secret; production deployment fails if it is absent.
 - Wrangler preserves dashboard-managed runtime variables/secrets rather than removing them as a side effect.
-- **Normal merges to `main` never automatically deploy production.** Guarded production deployment remains a separate action after fresh explicit user authorization.
-- A deployment authorization is consumed by the exact deployment it authorizes and cannot be reused for later source heads.
-- Neither v0.17 merge nor v0.18 source readiness authorizes a production deployment or real personal-data migration.
-- After v0.18 is merged and separately authorized for deployment, first production validation must verify the PWA at the actual Worker address, static routing, `/api/*` routing, browser-session cookie behavior and health/D1 connectivity before migrating real personal browser state.
+- Normal merges to `main` never automatically deploy production. `deploy/production` remains the only guarded production trigger after fresh explicit user authorization.
+- Each deployment authorization is consumed by the exact deployment it authorizes and cannot be reused for later heads.
+- The v0.18.0 deployment authorization has been consumed. PR #13 or any later head requires a new explicit deployment authorization after merge.
 
 ## Repository/security
 - Repository is public: `mstpln/streamarkr`.
@@ -106,7 +113,7 @@ Updated: 2026-09-08.
 - Pixel 9 Pro Fold is the primary device target; both folded and unfolded widths must be validated.
 - Important controls target ~44x44 CSS px effective touch areas and icon-only actions require accessible labels/focus behavior.
 - Streaming-service badges remain placeholders until properly sourced/licensed assets are added.
-- App/runtime version and service-worker cache version stay synchronized; one user-visible/architectural build gets one version bump.
+- App/runtime version and service-worker cache version normally stay synchronized; one user-visible/architectural build gets one version bump.
 - Settings token entry remains password-only, not prefilled and cleared after use.
 
 ## Test/tooling decision
