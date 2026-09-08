@@ -59,7 +59,7 @@ v0.14.0 regression coverage includes atomic backend snapshot hydration, multi-op
 ## v0.15.0 backend user-state routes — PR #9 active
 PR #9 remains synthetic-only and does not activate or contact the production Worker. New deterministic coverage verifies:
 - `WorkerBackendClient` request methods, JSON bodies, bearer-header behavior and route encoding for the expanded user-state surface;
-- watched-service set/clear requires canonical titles and known services;
+- watched-service set/clear requires canonical titles, known services and selected watched services;
 - movie and episode watched/unwatched overrides persist through D1 repository methods;
 - both HTTP routing and the D1 repository enforce movie/series override scope;
 - episode overrides reject unknown episodes and season bulk corrections reject unknown seasons;
@@ -69,24 +69,27 @@ PR #9 remains synthetic-only and does not activate or contact the production Wor
 - service-selection mutations require an existing service;
 - local IndexedDB and Worker/D1 custom-service creation use the same route-safe punctuation/whitespace normalization and 80-character bounds;
 - adding the same normalized service reselects it, while a different-name normalized-key collision is rejected instead of silently aliasing two services;
-- Settings, Detail, History and Library service-filter rendering resist stored-markup injection from hostile synthetic service names;
+- prototype-like custom service keys such as `constructor` render with fallback branding and cannot resolve inherited object properties;
+- provider/user/service-controlled text inserted through `innerHTML` is escaped across Settings, Detail, Home, Library, History, Search, Discover and Alerts;
+- provider title/overview/genre/season/episode/alert hostile markup remains literal text and does not execute;
+- unsafe provider deep links such as `javascript:` are not rendered as actionable links;
 - Settings bounds custom-service input and reports invalid/conflicting names without an unhandled page error;
 - existing auth fail-closed, exact-origin CORS, sanitized backend errors, canonical Library/rating preconditions and alert payload bounds remain covered.
 
-The final code/security-review head before continuity-only updates is `207db99c32aab71ef72895e72c07d1ce4fcad0c1`. It passed CI #166:
+Last validated implementation head before continuity synchronization: `d683104382bc7337bf0457ab0bb179e64ca3a64c`, CI #211:
 - `npm ci --no-audit --no-fund`: PASS;
 - PWA build: PASS;
 - Worker build/type-check: PASS;
-- **160/160 tests across 26 suites**;
+- **164/164 tests across 26 suites**;
 - deterministic D1 semantics **5/5**;
-- pinned Wrangler **4.129.0** local-D1 validation PASS (`schema_version=1`, eight services, `titles`, migration history);
-- browser/responsive QA **31/31**;
+- pinned Wrangler **4.129.0** local-D1 validation PASS;
+- core browser/responsive QA **31/31**;
+- focused provider/security browser QA **8/8**;
 - folded 344×792 PASS;
 - unfolded 873×1000 PASS;
-- stored service-name rendering regressions PASS across Settings, Detail, History and Library filtering;
-- zero smoke-pass console/page errors.
+- zero browser console/page errors.
 
-The merge gate remains unchanged: after continuity-only documentation synchronization, the resulting unchanged PR head must pass the complete normal CI/browser suite before PR #9 is considered merge-ready.
+The merge gate remains unchanged: after continuity synchronization, the resulting unchanged PR head must pass the complete normal CI/browser suite before PR #9 is considered merge-ready.
 
 ## Manual Cloudflare production validation — completed for v0.13.0
 With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed reviewed main commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed successful build/deploy, healthy `/api/health`, D1 schema version 1, eight services and all expected application tables plus `d1_migrations`.
