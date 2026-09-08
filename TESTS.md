@@ -46,7 +46,8 @@ The first secure-storage activation attempt returned the pre-hotfix generic conn
 
 ## PR #13 activation diagnostic coverage
 New deterministic coverage verifies:
-- failed Worker client requests produce a structured `BackendRequestError` carrying only status and sanitized backend code;
+- failed Worker client requests produce a structured `BackendRequestError` carrying only status and an allowlisted backend error code;
+- unknown code-shaped response values are discarded instead of being surfaced;
 - token bootstrap rejection and cookie/session verification failure are distinguishable;
 - origin rejection, migration conflict and invalid migration payload each map to distinct safe diagnostics;
 - arbitrary exception text, including synthetic token-bearing text, is never surfaced in user-facing diagnostics;
@@ -55,9 +56,9 @@ New deterministic coverage verifies:
 
 Settings explicitly verifies the cookie-backed session after bootstrap and before migration/reconnect refresh. The token field remains password-only, not prefilled and cleared after use.
 
-Implementation/review validation on head `37905f410a37c3e6f5cc51d3ec1b0cdd4f1cb9bc` passed CI #300 with:
+Implementation/security review validation on head `6a427406ac172f4f6e26ccfbc168f03c214a1625` passed CI #305 with:
 - Cloudflare bundle build PASS, 35 compiled modules;
-- **204/204 tests across 26 suites**, zero failures/skips/todos;
+- **205/205 tests across 26 suites**, zero failures/skips/todos;
 - D1 **5/5**;
 - Wrangler **4.129.0** local-D1 validation PASS;
 - browser/responsive **32/32**;
@@ -65,7 +66,7 @@ Implementation/review validation on head `37905f410a37c3e6f5cc51d3ec1b0cdd4f1cb9
 - folded 344×792 and unfolded 873×1000 PASS;
 - zero console/page errors.
 
-The continuity update recording that validation creates a later head, so the complete normal verify + browser QA workflow must pass once more on the final unchanged PR head before PR #13 is merge-ready.
+The continuity updates recording that validation create a later head, so the complete normal verify + browser QA workflow must pass once more on the final unchanged PR head before PR #13 is merge-ready.
 
 ## Browser QA expectations
 The normal PR workflow validates:
