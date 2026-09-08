@@ -1,10 +1,10 @@
 {
-  "_readMeFirst": "v0.18.0 same-origin Worker hosting plus PR #13 diagnostics, PR #14 browser bootstrap changes and PR #15 cached-client compatibility are merged and deployed. Production activation still fails at initial secure-session bootstrap. PR #16 removes APP_ORIGIN as a browser-origin authority and uses the actual Worker request origin for same-origin browser authentication.",
+  "_readMeFirst": "v0.18.0 same-origin Worker hosting plus PR #13 diagnostics, PR #14 browser bootstrap changes and PR #15 cached-client compatibility are merged and deployed. Production activation still fails at initial secure-session bootstrap. PR #16 removes APP_ORIGIN as a browser-origin authority, normalizes accidental surrounding runtime-secret whitespace consistently, and adds real Wrangler+Chromium same-origin Worker authentication topology QA.",
   "appVersion": "0.18.0",
   "cacheVersion": "streamarkr-v0.18.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-08T16:55:00.000Z",
+  "generatedAt": "2026-09-08T17:12:00.000Z",
   "repository": {
     "fullName": "mstpln/streamarkr",
     "public": true,
@@ -33,6 +33,7 @@
     "tests": "npm test",
     "d1SchemaTests": "npm run test:d1",
     "d1WranglerLocal": "npm run test:d1:wrangler",
+    "workerAuthQa": "npm run qa:worker-auth",
     "browserQa": "npm run qa:browser"
   },
   "pwa": {
@@ -57,7 +58,7 @@
     "dedicatedD1Jurisdiction": "EU",
     "dedicatedD1Binding": "DB",
     "runtimeSecret": "DEVICE_ACCESS_TOKEN",
-    "browserAuth": "browser POST /api/auth/session accepts the current one-time JSON-body token exchange and cached-client bearer form; browser origin authorization is based only on the actual Worker request URL origin, not APP_ORIGIN configuration; token validation remains constant-time and successful exchange creates a signed 30-day HttpOnly Secure __Host-streamarkr_session cookie",
+    "browserAuth": "browser POST /api/auth/session accepts the current one-time JSON-body token exchange and cached-client bearer form; browser origin authorization is based only on the actual Worker request URL origin, not APP_ORIGIN configuration; supplied and configured token values normalize surrounding whitespace before constant-time comparison; successful exchange creates a signed 30-day HttpOnly Secure __Host-streamarkr_session cookie using the same normalized configured secret",
     "cors": "browser CORS is emitted only when Origin equals the actual Worker request URL origin; APP_ORIGIN is not a browser trust override",
     "localStateMigrationRoute": "POST /api/migration/local-state",
     "cloudflareResourcesCreated": true,
@@ -93,12 +94,13 @@
   },
   "activationBootstrapFix": {
     "pr": 16,
-    "status": "pre-final continuity head d0ead2b6eaa8c494b67305b87a42dbbd74668e90 passed complete CI #333; status-recording final head must pass the same workflow before merge readiness",
+    "status": "hardening head c575fabe4e750896af0025c2f9fb45c25b267aae passed complete CI #340 including real same-origin Worker authentication topology; continuity-synchronized final head must pass the same workflow before merge readiness",
     "browserExchange": "current JSON-body bootstrap plus cached-client bearer bootstrap accepted only on the actual serving origin",
     "originAuthority": "request URL origin; APP_ORIGIN ignored for browser trust decisions",
-    "tokenComparison": "constant-time digest comparison; surrounding supplied whitespace trimmed",
-    "sessionCookie": "signed HttpOnly Secure __Host-streamarkr_session",
+    "tokenComparison": "constant-time digest comparison; surrounding whitespace normalized on both supplied and configured values; interior content remains exact",
+    "sessionCookie": "signed HttpOnly Secure __Host-streamarkr_session using the same normalized configured secret for signing and verification",
     "controlledSessionFailure": "session_creation_failed",
+    "workerAuthTopologyQa": "pinned Wrangler local Worker + staged same-origin assets + real Chromium; stale APP_ORIGIN, padded synthetic runtime secret, successful bootstrap/cookie reuse, wrong-token 401 and foreign-origin 403",
     "legacyOperationalBearerAuth": true,
     "tokenPersistence": false,
     "personalDataTouched": false
@@ -131,12 +133,13 @@
       "responsive": "folded/unfolded pass",
       "consolePageErrors": 0
     },
-    "pr16PreFinal": {
-      "reviewedHead": "d0ead2b6eaa8c494b67305b87a42dbbd74668e90",
-      "ciRun": 333,
+    "pr16Hardening": {
+      "reviewedHead": "c575fabe4e750896af0025c2f9fb45c25b267aae",
+      "ciRun": 340,
       "tests": "208/208",
       "d1": "5/5",
       "wranglerLocal": "pass",
+      "workerAuthTopology": "4/4",
       "browser": "32/32",
       "providerSecurity": "8/8",
       "responsive": "folded/unfolded pass",
