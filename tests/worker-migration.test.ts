@@ -57,7 +57,7 @@ function bundle(id = '11111111-1111-4111-8111-111111111111'): BackendMigrationBu
   return { migrationId: id, snapshot: snapshot() };
 }
 
-test('pristine backend migration writes all imported state and marker in one batch', async () => {
+test('pristine backend migration writes user/cache state and marker in one batch', async () => {
   const db = new RecordingDb();
   const result = await importLocalState(db, bundle());
   assert.deepEqual(result, { alreadyApplied: false });
@@ -68,6 +68,18 @@ test('pristine backend migration writes all imported state and marker in one bat
   assert.ok(batch.some((entry) => /INSERT INTO ratings/.test(entry.sql)));
   assert.match(batch.at(-1)?.sql ?? '', /INSERT INTO app_meta/);
   assert.deepEqual(batch.at(-1)?.values, ['local_state_migration_id', bundle().migrationId]);
+});
+
+test('provider-owned sync timestamps are not promoted from browser cache into durable D1', async () => {
+  const db = new RecordingDb();
+  const payload = bundle();
+  payload.snapshot.syncState = [{
+    syncType: 'trakt',
+    lastAttemptAt: '2026-09-08T09:00:00.000Z',
+    lastSuccessAt: '2026-09-08T09:00:00.000Z'
+  }];
+  await importLocalState(db, payload);
+  assert.equal(db.batches[0].some((entry) => /INSERT INTO sync_state/.test(entry.sql)), false);
 });
 
 test('same migration id is retry-idempotent without another write batch', async () => {
@@ -96,6 +108,24 @@ test('invalid canonical identity is rejected before D1 writes', async () => {
   const db = new RecordingDb();
   const invalid = bundle();
   invalid.snapshot.titles[0] = { ...invalid.snapshot.titles[0], id: 'movie-999' };
+  await assert.rejects(() => importLocalState(db, invalid), InvalidMigrationPayloadError);
+  assert.equal(db.batches.length, 0);
+  assert.equal(db.reads.length, 0);
+});
+
+test('malformed cache-owned metadata is rejected as a controlled payload error before D1 access', async () => {
+  const db = new RecordingDb();
+  const invalid = bundle();
+  invalid.snapshot.metadata = [{
+    titleId: 'movie-42',
+    status: 'Released',
+    overview: 'synthetic',
+    genres: ['Drama'],
+    posterPath: '',
+    backdropPath: '',
+    trailerKey: null,
+    metadataUpdatedAt: 'not-a-date'
+  }];
   await assert.rejects(() => importLocalState(db, invalid), InvalidMigrationPayloadError);
   assert.equal(db.batches.length, 0);
   assert.equal(db.reads.length, 0);
