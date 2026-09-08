@@ -52,7 +52,9 @@ function assertSnapshot(snapshot: unknown): asserts snapshot is BackendSnapshot 
     if (!rows(snapshot[key], limit)) throw new InvalidMigrationPayloadError(`Invalid migration rows: ${key}`);
   }
 
-  for (const title of snapshot.titles) {
+  const typed = snapshot as unknown as BackendSnapshot;
+
+  for (const title of typed.titles) {
     if (!text(title.id, 100) || !/^(movie|series)-\d+$/.test(title.id) ||
         (title.mediaType !== 'movie' && title.mediaType !== 'series') || !finiteInteger(title.tmdbId) || title.tmdbId <= 0 ||
         !text(title.title, 1000) || !finiteInteger(title.year) ||
@@ -62,24 +64,24 @@ function assertSnapshot(snapshot: unknown): asserts snapshot is BackendSnapshot 
       throw new InvalidMigrationPayloadError('Invalid canonical title row');
     }
   }
-  for (const service of snapshot.services) {
+  for (const service of typed.services) {
     if (!text(service.serviceKey, 80) || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(service.serviceKey) ||
         !text(service.displayName, 80) || !text(service.logoGlyph, 40) || typeof service.userSelected !== 'boolean' ||
         !['streaming-availability', 'tmdb-fallback', 'unsupported'].includes(String(service.availabilitySource))) {
       throw new InvalidMigrationPayloadError('Invalid streaming service row');
     }
   }
-  for (const row of snapshot.library) {
+  for (const row of typed.library) {
     if (!text(row.titleId, 100) || !iso(row.addedAt) || !text(row.derivedStatus, 30) || !iso(row.statusComputedAt)) {
       throw new InvalidMigrationPayloadError('Invalid Library row');
     }
   }
-  for (const row of snapshot.ratings) {
+  for (const row of typed.ratings) {
     if (!text(row.titleId, 100) || !finiteInteger(row.stars) || row.stars < 1 || row.stars > 5 || !iso(row.ratedAt)) {
       throw new InvalidMigrationPayloadError('Invalid rating row');
     }
   }
-  for (const row of snapshot.watchOverrides) {
+  for (const row of typed.watchOverrides) {
     if (!text(row.id, 200) || !['movie', 'episode', 'season'].includes(String(row.scopeType)) || !text(row.titleId, 100) ||
         !['watched', 'unwatched'].includes(String(row.state)) || !iso(row.changedAt) ||
         (row.seasonNumber !== undefined && (!finiteInteger(row.seasonNumber) || row.seasonNumber < 0)) ||
@@ -87,7 +89,7 @@ function assertSnapshot(snapshot: unknown): asserts snapshot is BackendSnapshot 
       throw new InvalidMigrationPayloadError('Invalid watch override row');
     }
   }
-  for (const row of snapshot.watchEvents) {
+  for (const row of typed.watchEvents) {
     if (!text(row.id, 200) || !text(row.providerEventId, 200) || !text(row.titleId, 100) || row.source !== 'trakt' || !iso(row.watchedAt) ||
         (row.seasonNumber !== undefined && (!finiteInteger(row.seasonNumber) || row.seasonNumber < 0)) ||
         (row.episodeNumber !== undefined && (!finiteInteger(row.episodeNumber) || row.episodeNumber <= 0))) {
