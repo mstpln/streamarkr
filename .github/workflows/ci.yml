@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -19,92 +19,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Synchronize v0.17 review continuity
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/backend-activation-migration-v0170'
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import json
-
-          def replace(path, old, new):
-            p = Path(path)
-            text = p.read_text()
-            if old not in text:
-              raise SystemExit(f'continuity anchor not found in {path}: {old[:80]}')
-            p.write_text(text.replace(old, new))
-
-          replace('PROGRESS.md',
-            'The implementation/review cycle caught and fixed strict Worker typing, stale cache-mode regression expectations, test typing, incomplete migration row validation, provider sync-state promotion, incomplete service-preference verification, expired-session recovery, an outdated browser-QA expectation, and a corrupted lockfile integrity entry. The lockfile was regenerated from `package.json`, and the normal read-only CI workflow was restored before validation.',
-            'The implementation/review cycle caught and fixed strict Worker typing, stale cache-mode regression expectations, test typing, incomplete migration row validation, provider sync-state promotion, incomplete service-preference verification, expired-session recovery, an outdated browser-QA expectation, a corrupted lockfile integrity entry, and a lost-response retry trap. The retry trap occurred when D1 had committed the first import but the browser never received the response and local state changed before retry; the same migration ID previously returned `alreadyApplied` forever and could leave round-trip verification permanently mismatched. The fix persists a server-side durable-user-state fingerprint, keeps unchanged retries idempotent, safely reconciles changed same-ID retries only while the backend still matches the first imported fingerprint and provider-owned state is untouched, and otherwise fails closed. The lockfile was regenerated from `package.json`, and the normal read-only CI workflow was restored before validation.'
-          )
-          replace('PROGRESS.md',
-            'Continuity-validation head `62306809828321cf930c04a3938f3161b32a0010`, CI #260:',
-            'Review-fix validation head `eeb744b33db19eb3f98945c2297c11b02258450f`, CI #268:'
-          )
-          replace('PROGRESS.md', '**196/196 tests across 26 suites**;', '**198/198 tests across 26 suites**;')
-          replace('PROGRESS.md',
-            '1. Complete the final continuity record for CI #260, then require the complete normal CI/browser suite to pass once more on the resulting unchanged PR #11 head.\n2. Perform final PR diff, review-thread, secrets/personal-data and security inspection; only then mark PR #11 ready to merge. Merge still requires explicit user authorization.',
-            '1. Require the complete normal CI/browser suite to pass on the final unchanged continuity-synchronized PR #11 head.\n2. Perform final PR diff, review-thread, secrets/personal-data and security inspection; only then keep PR #11 merge-ready. Merge still requires explicit user authorization.'
-          )
-
-          replace('TESTS.md',
-            '- same migration ID is idempotent without a second write batch; a different previous ID fails closed;',
-            '- same migration ID with unchanged durable state is idempotent without a second write batch; a changed same-ID retry after an uncertain/lost first response reconciles only when D1 still matches the original durable-user-state fingerprint, while independent backend changes or a different migration ID fail closed;'
-          )
-          replace('TESTS.md', '### Continuity-validation run\nHead `62306809828321cf930c04a3938f3161b32a0010`, CI #260:', '### Review-fix validation run\nHead `eeb744b33db19eb3f98945c2297c11b02258450f`, CI #268:')
-          replace('TESTS.md', '**196/196 tests across 26 suites**, 0 failures;', '**198/198 tests across 26 suites**, 0 failures;')
-          replace('TESTS.md',
-            'The v0.17 PR merge gate remains: after recording this validation in continuity files, the resulting unchanged exact PR head must pass the complete normal CI/browser suite and final diff/security/review-thread inspection before it can be considered merge-ready.',
-            'The v0.17 review-fix suite now covers the uncertain-success case where D1 committed the first import, the HTTP response was lost, and local state changed before retry. After this continuity update, the resulting unchanged exact PR head must pass the complete normal CI/browser suite and final diff/security/review-thread inspection before merge readiness.'
-          )
-
-          replace('docs/STREAMARKR_STATE.md',
-            '- Imported local state and the migration marker are written in one D1 batch. Repeating the same migration ID is idempotent; a different prior migration ID fails closed.',
-            '- Imported local state, its durable-user-state fingerprint and the migration marker are written atomically. An unchanged same-ID retry is idempotent. If the first response was lost and local state changed before retry, the same ID may reconcile only while current D1 durable user state still matches the original fingerprint and provider-owned backend state remains untouched; otherwise the Worker fails closed. A different prior migration ID is always a conflict.'
-          )
-          replace('docs/STREAMARKR_STATE.md',
-            '- Continuity-validation head `62306809828321cf930c04a3938f3161b32a0010`, CI #260: `npm ci` PASS, PWA build PASS, Worker type-check PASS, **196/196 tests across 26 suites**, machine-readable build-state/version validation PASS, D1 **5/5**, Wrangler-local PASS, core browser/responsive QA **32/32**, provider/security QA **8/8**, folded/unfolded PASS and zero console/page errors.',
-            '- Review-fix validation head `eeb744b33db19eb3f98945c2297c11b02258450f`, CI #268: `npm ci` PASS, PWA build PASS, Worker type-check PASS, **198/198 tests across 26 suites**, machine-readable build-state/version validation PASS, D1 **5/5**, Wrangler-local PASS, core browser/responsive QA **32/32**, provider/security QA **8/8**, folded/unfolded PASS and zero console/page errors.'
-          )
-          replace('docs/STREAMARKR_STATE.md',
-            '- Run the complete normal CI/browser suite on the final unchanged continuity-recorded PR #11 head and complete final diff/security/review-thread inspection before merge readiness.',
-            '- Run the complete normal CI/browser suite on the final unchanged continuity-synchronized PR #11 head and complete final diff/security/review-thread inspection before merge readiness.'
-          )
-
-          replace('docs/STREAMARKR_DECISIONS.md',
-            '- The first import writes the accepted cache/user-state rows and migration marker in a single D1 batch. Repeating the same migration ID is idempotent; a different migration ID after activation is a conflict.',
-            '- The first import writes the accepted cache/user-state rows, a fingerprint of the durable user-state categories, and the migration marker atomically. An unchanged retry with the same migration ID is idempotent. If D1 committed but the browser lost the response and local state changed before retry, the same migration ID may reconcile that changed snapshot only when current D1 durable user state still matches the stored original fingerprint and provider-owned backend state remains untouched. Any independent durable backend change, missing fingerprint, or different migration ID fails closed.'
-          )
-
-          p = Path('docs/STREAMARKR_BUILD_STATE.json')
-          data = json.loads(p.read_text())
-          data['generatedAt'] = '2026-09-08T12:05:00Z'
-          data['backendFoundation']['localStateMigrationIdempotency'] = 'same persisted migration UUID is idempotent when durable user state is unchanged; after an uncertain first response, changed same-ID local state may reconcile only while D1 still matches the original durable-user-state fingerprint and provider-owned backend state is untouched; missing/mismatched fingerprint or a different migration UUID fails closed'
-          v = data['validation']['v0170']
-          v['lastValidatedImplementationHead'] = 'eeb744b33db19eb3f98945c2297c11b02258450f'
-          v['lastValidatedImplementationCiRun'] = 268
-          v['tests'] = {'count': 198, 'pass': 198, 'fail': 0, 'suites': 26}
-          for coverage in [
-            'same-id retry reconciliation after an uncertain committed response with subsequent local changes',
-            'server-side durable-user-state fingerprint blocks retry overwrite after independent backend changes'
-          ]:
-            if coverage not in v['newCoverage']:
-              v['newCoverage'].append(coverage)
-          v['documentationInclusiveExactHeadGate'] = 'review-fix validation passed CI #268; complete normal CI/browser QA must pass on the unchanged continuity-synchronized PR #11 head before merge readiness'
-          for behavior in [
-            'same-id migration retries remain recoverable after an uncertain committed response and later local edits only while D1 still matches the original durable-user-state fingerprint',
-            'migration retry reconciliation fails closed if durable backend user state changed independently after the first import'
-          ]:
-            if behavior not in data['hardenedBehaviors']:
-              data['hardenedBehaviors'].append(behavior)
-          p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
-          PY
-          if git diff --quiet -- PROGRESS.md TESTS.md docs/STREAMARKR_STATE.md docs/STREAMARKR_DECISIONS.md docs/STREAMARKR_BUILD_STATE.json; then exit 0; fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add PROGRESS.md TESTS.md docs/STREAMARKR_STATE.md docs/STREAMARKR_DECISIONS.md docs/STREAMARKR_BUILD_STATE.json
-          git commit -m "Synchronize v0.17 review continuity"
-          git push origin HEAD:refs/heads/${{ github.event.pull_request.head.ref }}
       - name: Install development tools
         run: npm ci --no-audit --no-fund
       - name: Build PWA
