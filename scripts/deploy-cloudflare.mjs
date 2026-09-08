@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -13,6 +14,8 @@ const ACCOUNT_NEUTRAL_CONFIG_PATH = path.join(PROJECT_ROOT, 'wrangler.jsonc');
 const CONFIG_PATH = path.join(PROJECT_ROOT, '.wrangler', 'deploy', 'wrangler.generated.jsonc');
 const SAFETY_FLAGS = ['--x-provision=false', '--x-auto-create=false'];
 const EXPECTED_D1_NAME = 'streamarkr';
+const WORKER_ASSET_ROOT = path.join(PROJECT_ROOT, '.wrangler', 'site');
+const REQUIRED_WORKER_ASSETS = ['index.html', 'manifest.webmanifest', 'sw.js', 'sw-manifest.json', path.join('dist', 'main.js'), path.join('src', 'styles', 'main.css')];
 
 export function assertRequiredSecretNames(secretList) {
   if (!Array.isArray(secretList)) throw new Error('Could not verify Streamarkr Worker secrets.');
@@ -33,6 +36,14 @@ export function assertDedicatedD1Info(databaseInfo, expectedDatabaseId) {
 
   if (actualName !== EXPECTED_D1_NAME || actualId !== expectedId) {
     throw new Error('Remote D1 identity does not match the dedicated Streamarkr database; refusing to migrate or deploy.');
+  }
+}
+
+export async function assertWorkerAssetBundle(assetRoot = WORKER_ASSET_ROOT) {
+  try {
+    await Promise.all(REQUIRED_WORKER_ASSETS.map((asset) => access(path.join(assetRoot, asset))));
+  } catch {
+    throw new Error('Same-origin Streamarkr Worker asset bundle is missing; run npm run build:cloudflare before deployment.');
   }
 }
 
@@ -61,6 +72,7 @@ function runWrangler(args, { capture = false } = {}) {
 
 export async function deployCloudflare() {
   const databaseId = validateD1DatabaseId(process.env.STREAMARKR_D1_DATABASE_ID);
+  await assertWorkerAssetBundle();
   await prepareCloudflareDeploy({ databaseId });
 
   // Query by literal database name using the account-neutral config, which deliberately contains

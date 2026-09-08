@@ -1,10 +1,10 @@
 {
-  "_readMeFirst": "v0.17.0 adds the guarded IndexedDB-to-D1 migration/reconciliation path and backend-aware UI mutation routing. D1 becomes durable authority only after import, round-trip verification, and atomic browser cache takeover. Production browser mode remains intentionally disabled until the real PWA/API origin topology and APP_ORIGIN are configured and a fresh production deployment is explicitly authorized.",
-  "appVersion": "0.17.0",
-  "cacheVersion": "streamarkr-v0.17.0",
+  "_readMeFirst": "v0.18.0 packages the existing PWA as Cloudflare Worker static assets on the same Streamarkr Worker origin and lets browser auth safely default to that serving origin when APP_ORIGIN is unset. Production deployment and migration of real personal data still require fresh explicit authorization.",
+  "appVersion": "0.18.0",
+  "cacheVersion": "streamarkr-v0.18.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-08T12:05:00Z",
+  "generatedAt": "2026-09-08T12:44:58.968Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -12,7 +12,7 @@
     "browserCache": "IndexedDB",
     "optionalStorage": "Cloudflare R2",
     "providers": "real Trakt/TMDB/Streaming Availability adapters",
-    "status": "Dedicated Worker/D1 backend is deployed and verified; v0.14.0 added the guarded browser cache bridge, v0.15.0 durable user-state routes, v0.16.0 secure browser-session bootstrap, and v0.17.0 adds safe local-state migration plus Worker-routed browser mutations while production activation and live providers remain pending"
+    "status": "Dedicated Streamarkr Worker/D1 foundation plus v0.18.0 same-origin Worker static-asset hosting source is implemented; production deployment and live providers remain pending explicit authorization"
   },
   "currentToolchain": {
     "node": 22,
@@ -50,7 +50,8 @@
     "migrationVerification": "post-import authoritative snapshot must match durable local user state before data_source switches to backend",
     "startupMode": "cached-first after activation with opportunistic Worker refresh; Worker outage is non-fatal to the last verified offline cache",
     "customServiceRenderingRule": "user/provider/service-controlled text inserted through innerHTML is HTML-escaped across Settings, Detail, Home, Library, History, Search, Discover and Alerts; custom service brand lookup rejects inherited prototype keys; provider deep links are limited to HTTP/HTTPS; focused browser QA exercises hostile synthetic markup",
-    "cacheBoundary": "same-origin unauthenticated app assets only; /api, cross-origin, and Authorization-bearing requests bypass Cache Storage"
+    "cacheBoundary": "same-origin unauthenticated app assets only; /api, cross-origin, and Authorization-bearing requests bypass Cache Storage",
+    "productionHosting": "Cloudflare Worker static assets from generated .wrangler/site bundle; SPA fallback with /api/* routed Worker-first on the same origin"
   },
   "backendFoundation": {
     "workerSource": "worker/index.ts",
@@ -85,8 +86,8 @@
     "auth": "Operational bearer device token from Worker DEVICE_ACCESS_TOKEN secret plus signed browser-session cookies; fail closed if unconfigured",
     "browserAuth": "user-entered DEVICE_ACCESS_TOKEN may be exchanged only through POST /api/auth/session for a signed 30-day HttpOnly Secure __Host-streamarkr_session cookie; token is never embedded or persisted by frontend code",
     "browserSessionSigning": "HMAC-SHA256 over Streamarkr-specific context, expiry and random UUID nonce using DEVICE_ACCESS_TOKEN as key; secret rotation invalidates existing sessions",
-    "cors": "credentialed exact APP_ORIGIN only; APP_ORIGIN intentionally not set until real PWA origin exists",
-    "browserSessionOriginRule": "cookie-auth requests require exact configured APP_ORIGIN when Origin is supplied; no-Origin cookie auth is accepted only when request URL origin itself equals APP_ORIGIN",
+    "cors": "same-origin browser requests default to the request URL origin when APP_ORIGIN is unset; an explicit APP_ORIGIN remains an exact-origin override for controlled alternate hosting",
+    "browserSessionOriginRule": "cookie-auth requests require the effective app origin; by default this is the same Worker serving origin, while explicit APP_ORIGIN can override it exactly",
     "localStateMigrationRoute": "POST /api/migration/local-state; authenticated and origin-gated",
     "localStateMigrationPristineRule": "first import refuses any pre-existing durable application state other than seeded built-in service registry rows",
     "localStateMigrationIdempotency": "same persisted migration UUID is idempotent when durable user state is unchanged; after an uncertain first response, changed same-ID local state may reconcile only while D1 still matches the original durable-user-state fingerprint and provider-owned backend state is untouched; missing/mismatched fingerprint or a different migration UUID fails closed",
@@ -135,7 +136,8 @@
     "v0140ProductionDeploymentAuthorized": false,
     "v0150ProductionDeploymentAuthorized": false,
     "v0160ProductionDeploymentAuthorized": false,
-    "v0170ProductionDeploymentAuthorized": false
+    "v0170ProductionDeploymentAuthorized": false,
+    "v0180ProductionDeploymentAuthorized": false
   },
   "implementedScreens": [
     "home",

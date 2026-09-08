@@ -44,9 +44,15 @@ function json(body: unknown, status = 200, extraHeaders: HeadersInit = {}): Resp
   });
 }
 
-function corsHeaders(request: Request, env: Env): Record<string, string> {
+function appOrigin(url: URL, env: Env): string {
+  const configured = env.APP_ORIGIN?.trim();
+  return configured || url.origin;
+}
+
+function corsHeaders(request: Request, url: URL, env: Env): Record<string, string> {
   const origin = request.headers.get('origin');
-  if (!origin || !env.APP_ORIGIN || origin !== env.APP_ORIGIN) return {};
+  const expectedOrigin = appOrigin(url, env);
+  if (!origin || origin !== expectedOrigin) return {};
   return {
     'access-control-allow-origin': origin,
     'access-control-allow-credentials': 'true',
@@ -57,10 +63,10 @@ function corsHeaders(request: Request, env: Env): Record<string, string> {
 }
 
 function matchesAppOrigin(request: Request, url: URL, env: Env): boolean {
-  if (!env.APP_ORIGIN) return false;
+  const expectedOrigin = appOrigin(url, env);
   const origin = request.headers.get('origin');
-  if (origin) return origin === env.APP_ORIGIN;
-  return url.origin === env.APP_ORIGIN;
+  if (origin) return origin === expectedOrigin;
+  return url.origin === expectedOrigin;
 }
 
 function routeTitleId(pathname: string, prefix: string): string | null {
@@ -112,10 +118,10 @@ function nonNegativeInteger(value: unknown): value is number {
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const requestId = crypto.randomUUID();
-  const responseHeaders = { ...corsHeaders(request, env), 'x-request-id': requestId };
+  const responseHeaders = { ...corsHeaders(request, url, env), 'x-request-id': requestId };
 
   if (request.method === 'OPTIONS') {
-    if (!env.APP_ORIGIN || request.headers.get('origin') !== env.APP_ORIGIN) {
+    if (request.headers.get('origin') !== appOrigin(url, env)) {
       return new Response(null, { status: 403, headers: { 'x-request-id': requestId } });
     }
     return new Response(null, { status: 204, headers: responseHeaders });
@@ -143,7 +149,6 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   if (!env.DEVICE_ACCESS_TOKEN) return json({ error: 'server_not_configured' }, 503, responseHeaders);
 
   if (request.method === 'POST' && url.pathname === '/api/auth/session') {
-    if (!env.APP_ORIGIN) return json({ error: 'browser_auth_not_configured' }, 503, responseHeaders);
     if (!matchesAppOrigin(request, url, env)) return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
     if (!(await isDeviceTokenAuthorized(request, env.DEVICE_ACCESS_TOKEN))) return json({ error: 'unauthorized' }, 401, responseHeaders);
     const session = await createBrowserSession(env.DEVICE_ACCESS_TOKEN);
@@ -158,7 +163,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   if (!auth) return json({ error: 'unauthorized' }, 401, responseHeaders);
 
   const suppliedOrigin = request.headers.get('origin');
-  if (suppliedOrigin && (!env.APP_ORIGIN || suppliedOrigin !== env.APP_ORIGIN)) {
+  if (suppliedOrigin && suppliedOrigin !== appOrigin(url, env)) {
     return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
   }
   if (auth === 'browser-session' && !matchesAppOrigin(request, url, env)) {

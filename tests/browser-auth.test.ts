@@ -74,11 +74,25 @@ test('tampering with a browser session cookie invalidates it', async () => {
   assert.equal(response.status, 401);
 });
 
-test('browser bootstrap fails closed when origin configuration is absent or mismatched', async () => {
-  const unconfigured = await handleRequest(bootstrapRequest(), env({ APP_ORIGIN: undefined }));
-  assert.equal(unconfigured.status, 503);
-  assert.equal((await unconfigured.json() as { error: string }).error, 'browser_auth_not_configured');
+test('browser bootstrap safely defaults to the serving origin when APP_ORIGIN is unset', async () => {
+  const selfOriginEnv = env({ APP_ORIGIN: undefined });
+  const bootstrap = await handleRequest(bootstrapRequest('https://worker.example'), selfOriginEnv);
+  assert.equal(bootstrap.status, 200);
+  assert.equal(bootstrap.headers.get('access-control-allow-origin'), 'https://worker.example');
+  const cookie = (bootstrap.headers.get('set-cookie') ?? '').split(';')[0];
 
+  const sameOriginWithoutOriginHeader = await handleRequest(new Request('https://worker.example/api/auth/session', {
+    headers: { cookie }
+  }), selfOriginEnv);
+  assert.equal(sameOriginWithoutOriginHeader.status, 200);
+  assert.deepEqual(await sameOriginWithoutOriginHeader.json(), { authenticated: true, method: 'browser-session' });
+
+  const crossOrigin = await handleRequest(bootstrapRequest('https://evil.example'), selfOriginEnv);
+  assert.equal(crossOrigin.status, 403);
+  assert.equal((await crossOrigin.json() as { error: string }).error, 'origin_not_allowed');
+});
+
+test('browser bootstrap fails closed for an explicitly configured mismatched origin or bad token', async () => {
   const mismatch = await handleRequest(bootstrapRequest('https://evil.example'), env());
   assert.equal(mismatch.status, 403);
   assert.equal((await mismatch.json() as { error: string }).error, 'origin_not_allowed');
