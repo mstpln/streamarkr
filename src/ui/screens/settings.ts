@@ -42,9 +42,10 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         `).join('')}
         <div class="card-row">
           <label class="sr-only" for="new-svc">Add another streaming service</label>
-          <input id="new-svc" placeholder="Add another service" style="background:transparent;border:none;color:var(--text);flex:1;outline:none;" />
+          <input id="new-svc" maxlength="80" placeholder="Add another service" style="background:transparent;border:none;color:var(--text);flex:1;outline:none;" />
           <button class="action-btn" id="add-svc">Add</button>
         </div>
+        <div id="svc-status" class="section-empty-hint" aria-live="polite"></div>
       </div>
     `;
     body.querySelectorAll('[data-svc]').forEach((button) => button.addEventListener('click', async () => {
@@ -55,9 +56,18 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
     }));
     body.querySelector('#add-svc')?.addEventListener('click', async () => {
       const input = body.querySelector('#new-svc') as HTMLInputElement;
-      if (input.value.trim()) {
-        await repo.addCustomService(input.value);
+      const status = body.querySelector('#svc-status')!;
+      const name = input.value.trim();
+      if (!name) return;
+      if (!/[a-z0-9]/i.test(name)) {
+        status.textContent = 'Use at least one letter or number in the service name.';
+        return;
+      }
+      try {
+        await repo.addCustomService(name);
         await render(el, 'preferences');
+      } catch {
+        status.textContent = 'That service name conflicts with an existing streaming service.';
       }
     });
   } else if (activeTab === 'connections') {
