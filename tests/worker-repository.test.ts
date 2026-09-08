@@ -31,11 +31,11 @@ class Statement implements D1PreparedStatement {
       return displayName ? { display_name: displayName } as T : null;
     }
     if (this.sql.includes('SELECT user_selected FROM services')) {
-    const serviceKey = String(this.values[0]);
-    if (!this.db.knownServices.has(serviceKey)) return null;
-    return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
-  }
-  if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
+      const serviceKey = String(this.values[0]);
+      if (!this.db.knownServices.has(serviceKey)) return null;
+      return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
+    }
+    if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
     if (this.sql.includes('SELECT season_number FROM seasons') && this.db.knownSeasons.has(`${this.values[0]}:${this.values[1]}`)) {
       return { season_number: Number(this.values[1]) } as T;
     }
