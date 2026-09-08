@@ -1,6 +1,11 @@
 import type { BackendSnapshot } from './backend-contract.js';
 import type { Rating, WatchOverride } from './types.js';
 
+export interface BackendSessionStatus {
+  authenticated: boolean;
+  method?: 'device-token' | 'browser-session';
+}
+
 export interface BackendClient {
   getSnapshot(): Promise<BackendSnapshot>;
   addToLibrary(titleId: string): Promise<void>;
@@ -20,20 +25,20 @@ type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respo
 
 export class WorkerBackendClient implements BackendClient {
   private readonly baseUrl: string;
-  private readonly token: string;
+  private readonly token: string | null;
   private readonly fetchImpl: FetchLike;
 
-  constructor(baseUrl: string, token: string, fetchImpl: FetchLike = fetch) {
+  constructor(baseUrl: string, token: string | null = null, fetchImpl: FetchLike = fetch) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.token = token;
     this.fetchImpl = fetchImpl;
   }
 
-  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  private async request<T>(path: string, init: RequestInit = {}, bearerToken: string | null = this.token): Promise<T> {
     const headers = new Headers(init.headers);
-    headers.set('authorization', `Bearer ${this.token}`);
+    if (bearerToken) headers.set('authorization', `Bearer ${bearerToken}`);
     if (init.body != null && !headers.has('content-type')) headers.set('content-type', 'application/json');
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers });
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers, credentials: 'include' });
     if (!response.ok) {
       let detail = '';
       try {
@@ -46,6 +51,19 @@ export class WorkerBackendClient implements BackendClient {
     }
     if (response.status === 204) return undefined as T;
     return await response.json() as T;
+  }
+
+  getSessionStatus(): Promise<BackendSessionStatus> {
+    return this.request<BackendSessionStatus>('/api/auth/session');
+  }
+
+  async bootstrapSession(deviceAccessToken: string): Promise<{ expiresAt: string }> {
+    const result = await this.request<{ ok: true; expiresAt: string }>('/api/auth/session', { method: 'POST' }, deviceAccessToken);
+    return { expiresAt: result.expiresAt };
+  }
+
+  async clearSession(): Promise<void> {
+    await this.request('/api/auth/session', { method: 'DELETE' }, null);
   }
 
   getSnapshot(): Promise<BackendSnapshot> {
