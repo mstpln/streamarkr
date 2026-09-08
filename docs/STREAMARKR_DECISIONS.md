@@ -17,7 +17,7 @@
 - Finished: all episodes watched and provider series status is **exactly `Ended`**. `Canceled` does not silently mean Finished.
 - `src/lib/season-select.ts` is the single source of truth for engaged/relevant season selection.
 - Season bulk watched/unwatched actions are bounded snapshots over currently known released episodes. They must not create wildcard state affecting future episodes.
-- The durable Worker implementation follows the same rule: the server selects episodes released as of the action date and stores episode-level overrides only. Season 0 is valid for specials.
+- The durable Worker implementation follows the same rule: the server requires the requested season to exist, selects episodes released as of the action date and stores episode-level overrides only. Season 0 is valid for specials.
 
 ## Alerts
 - Alerts are in-app only; no push notifications in V1.
@@ -37,6 +37,7 @@
 - Discover excludes titles already in History or My Library.
 - Top Picks uses 5-star titles; Similar To can use any Library title and remains same media type; By Genre uses rating/preference weighting.
 - Custom service names are normalized to route-safe lowercase hyphenated keys before durable storage; punctuation/whitespace must not produce a key the Worker API cannot address later.
+- Any user-controlled custom-service text inserted through `innerHTML` must be escaped first; custom service names/keys must remain text/attribute data and never become executable markup.
 
 ## Architecture
 - Target: Vite + TypeScript PWA, separate Cloudflare Worker, separate D1, optional separate R2 only if needed, real provider adapters, GitHub CI.
@@ -55,7 +56,7 @@
 - The D1 and IndexedDB availability key is `(title_id, service_key, option_type)` / `(titleId, serviceKey, optionType)`, allowing subscription/rent/buy options to coexist for one title/service.
 - The IndexedDB v1 -> v2 migration may discard the provider-owned availability cache to change its key, but must preserve all user-owned local stores.
 - D1 foreign keys use restrictive deletion for durable relationships. Provider refresh code reconciles provider-owned rows; it does not cascade-delete user-owned Library/rating/override/history preference state.
-- Worker user-state routes validate canonical references before durable writes. Wrong movie/series override API scope is rejected before D1 access; watched-service requires a known service; episode overrides require a known episode.
+- User-state reference/scope invariants are enforced at the repository boundary, not only trusted to HTTP routing. Movie overrides require canonical movies; episode/season overrides require canonical series; watched-service requires a known service; episode overrides require a known episode; season bulk overrides require a known season.
 - `wrangler.local.jsonc` is strictly local-only and may contain only non-production placeholder identifiers.
 - Wrangler is pinned to **4.129.0** and local migration validation always runs with `--local` against isolated ignored state.
 
