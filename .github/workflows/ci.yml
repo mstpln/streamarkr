@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -19,77 +19,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Apply migration retry review fix
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/backend-activation-migration-v0170'
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          migration = Path('worker/migration.ts')
-          text = migration.read_text()
-          if "MIGRATION_HASH_META_KEY" not in text:
-              text = text.replace(
-                  "import type { D1Database, D1PreparedStatement, D1Primitive } from './types.js';\n",
-                  "import { loadSnapshot } from './repository.js';\nimport type { D1Database, D1PreparedStatement, D1Primitive } from './types.js';\n"
-              )
-              text = text.replace(
-                  "const MIGRATION_META_KEY = 'local_state_migration_id';\n",
-                  "const MIGRATION_META_KEY = 'local_state_migration_id';\nconst MIGRATION_HASH_META_KEY = 'local_state_migration_hash';\n"
-              )
-              text = text.replace(
-                  "function statement(db: D1Database, sql: string, values: D1Primitive[]): D1PreparedStatement {\n  return db.prepare(sql).bind(...values);\n}\n\nexport async function importLocalState",
-                  "function statement(db: D1Database, sql: string, values: D1Primitive[]): D1PreparedStatement {\n  return db.prepare(sql).bind(...values);\n}\n\nfunction stableRows<T>(rows: T[], key: (row: T) => string): T[] {\n  return [...rows].sort((a, b) => key(a).localeCompare(key(b)));\n}\n\nasync function migrationFingerprint(snapshot: BackendSnapshot): Promise<string> {\n  const durableUserState = {\n    library: stableRows(snapshot.library, (row) => row.titleId),\n    ratings: stableRows(snapshot.ratings, (row) => row.titleId),\n    watchedService: stableRows(snapshot.watchedService, (row) => row.titleId),\n    watchEvents: stableRows(snapshot.watchEvents, (row) => `${row.providerEventId}\\u0000${row.id}`),\n    watchOverrides: stableRows(snapshot.watchOverrides, (row) => `${row.scopeType}\\u0000${row.titleId}\\u0000${row.seasonNumber ?? -1}\\u0000${row.episodeNumber ?? -1}\\u0000${row.id}`),\n    services: stableRows(snapshot.services, (row) => row.serviceKey)\n      .map(({ serviceKey, displayName, logoGlyph, userSelected, availabilitySource }) => ({ serviceKey, displayName, logoGlyph, userSelected, availabilitySource })),\n    alerts: stableRows(snapshot.alerts, (row) => row.id)\n      .map(({ id, titleId, alertType, message, eventDate, createdAt, seenAt, dedupeKey }) => ({ id, titleId, alertType, message, eventDate, createdAt, seenAt, dedupeKey }))\n  };\n  const bytes = new TextEncoder().encode(JSON.stringify(durableUserState));\n  const digest = await crypto.subtle.digest('SHA-256', bytes);\n  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');\n}\n\nasync function assertRetryReplacementSafe(db: D1Database): Promise<void> {\n  for (const table of ['sync_state', 'provider_connections', 'recommendation_cache']) {\n    if (await firstCount(db, `SELECT COUNT(*) AS count FROM ${table}`) !== 0) {\n      throw new MigrationConflictError(`Backend changed after migration started: ${table} contains rows`);\n    }\n  }\n}\n\nexport async function importLocalState"
-              )
-              old = """  const existing = await db.prepare('SELECT value FROM app_meta WHERE key = ?').bind(MIGRATION_META_KEY).first<{ value: string }>();\n  if (existing?.value) {\n    if (existing.value === bundle.migrationId) return { alreadyApplied: true };\n    throw new MigrationConflictError('Backend has already been activated by another local-state migration');\n  }\n\n  await assertPristineBackend(db);\n  const s = bundle.snapshot;\n  const statements: D1PreparedStatement[] = [];\n"""
-              new = """  const fingerprint = await migrationFingerprint(bundle.snapshot);\n  const [existing, existingHash] = await Promise.all([\n    db.prepare('SELECT value FROM app_meta WHERE key = ?').bind(MIGRATION_META_KEY).first<{ value: string }>(),\n    db.prepare('SELECT value FROM app_meta WHERE key = ?').bind(MIGRATION_HASH_META_KEY).first<{ value: string }>()\n  ]);\n  let replaceExisting = false;\n  if (existing?.value) {\n    if (existing.value !== bundle.migrationId) {\n      throw new MigrationConflictError('Backend has already been activated by another local-state migration');\n    }\n    if (!existingHash?.value) {\n      throw new MigrationConflictError('Existing migration marker cannot be safely reconciled because its fingerprint is missing');\n    }\n    const currentFingerprint = await migrationFingerprint(await loadSnapshot(db));\n    if (currentFingerprint !== existingHash.value) {\n      throw new MigrationConflictError('Backend durable user state changed after migration started');\n    }\n    if (existingHash.value === fingerprint) return { alreadyApplied: true };\n    await assertRetryReplacementSafe(db);\n    replaceExisting = true;\n  } else {\n    await assertPristineBackend(db);\n  }\n\n  const s = bundle.snapshot;\n  const statements: D1PreparedStatement[] = [];\n  if (replaceExisting) {\n    for (const table of [\n      'alerts', 'availability', 'watched_service', 'ratings', 'library_items', 'watch_overrides',\n      'watch_events', 'episodes', 'seasons', 'title_metadata', 'titles'\n    ]) {\n      statements.push(statement(db, `DELETE FROM ${table}`, []));\n    }\n    statements.push(statement(db, 'DELETE FROM services', []));\n  }\n"""
-              if old not in text:
-                  raise SystemExit('migration retry prelude anchor not found')
-              text = text.replace(old, new)
-              old = """  statements.push(statement(db, 'INSERT INTO app_meta (key, value) VALUES (?, ?)', [MIGRATION_META_KEY, bundle.migrationId]));\n\n  const results = await db.batch(statements);\n"""
-              new = """  statements.push(statement(db, `INSERT INTO app_meta (key, value) VALUES (?, ?)\n    ON CONFLICT(key) DO UPDATE SET value=excluded.value`, [MIGRATION_HASH_META_KEY, fingerprint]));\n  statements.push(statement(db, `INSERT INTO app_meta (key, value) VALUES (?, ?)\n    ON CONFLICT(key) DO UPDATE SET value=excluded.value`, [MIGRATION_META_KEY, bundle.migrationId]));\n\n  const results = await db.batch(statements);\n"""
-              if old not in text:
-                  raise SystemExit('migration marker anchor not found')
-              text = text.replace(old, new)
-              migration.write_text(text)
-
-          tests = Path('tests/worker-migration.test.ts')
-          text = tests.read_text()
-          if "migrationHash" not in text:
-              text = text.replace(
-                  "  migrationId: string | null = null;\n",
-                  "  migrationId: string | null = null;\n  migrationHash: string | null = null;\n"
-              )
-              old = """    if (this.sql.includes('app_meta') && this.sql.includes('WHERE key = ?')) {\n      return this.db.migrationId ? { value: this.db.migrationId } as T : null;\n    }\n"""
-              new = """    if (this.sql.includes('app_meta') && this.sql.includes('WHERE key = ?')) {\n      const key = String(this.values[0] ?? '');\n      const value = key === 'local_state_migration_id' ? this.db.migrationId\n        : key === 'local_state_migration_hash' ? this.db.migrationHash\n        : null;\n      return value ? { value } as T : null;\n    }\n"""
-              if old not in text:
-                  raise SystemExit('recording db read anchor not found')
-              text = text.replace(old, new)
-              old = """    this.batches.push(rows);\n    return rows.map(() => ({ success: true, results: [] }));\n"""
-              new = """    this.batches.push(rows);\n    for (const row of rows) {\n      if (row.sql.includes('INSERT INTO app_meta')) {\n        const key = String(row.values[0] ?? '');\n        const value = String(row.values[1] ?? '');\n        if (key === 'local_state_migration_id') this.migrationId = value;\n        if (key === 'local_state_migration_hash') this.migrationHash = value;\n      }\n    }\n    return rows.map(() => ({ success: true, results: [] }));\n"""
-              if old not in text:
-                  raise SystemExit('recording db batch anchor not found')
-              text = text.replace(old, new)
-              old = """test('same migration id is retry-idempotent without another write batch', async () => {\n  const db = new RecordingDb();\n  db.migrationId = bundle().migrationId;\n  const result = await importLocalState(db, bundle());\n  assert.deepEqual(result, { alreadyApplied: true });\n  assert.equal(db.batches.length, 0);\n});\n"""
-              new = """test('same migration id and unchanged durable state is retry-idempotent without another write batch', async () => {\n  const db = new RecordingDb();\n  const payload = bundle();\n  await importLocalState(db, payload);\n  const result = await importLocalState(db, payload);\n  assert.deepEqual(result, { alreadyApplied: true });\n  assert.equal(db.batches.length, 1);\n});\n\ntest('same migration id safely reconciles local changes made after an uncertain first response', async () => {\n  const db = new RecordingDb();\n  const first = bundle();\n  await importLocalState(db, first);\n\n  const changed = bundle();\n  changed.snapshot.ratings = [{ ...changed.snapshot.ratings[0], stars: 5, ratedAt: '2026-09-08T09:20:00.000Z' }];\n  const result = await importLocalState(db, changed);\n\n  assert.deepEqual(result, { alreadyApplied: false });\n  assert.equal(db.batches.length, 2);\n  assert.ok(db.batches[1].some((entry) => /DELETE FROM ratings/.test(entry.sql)));\n  assert.ok(db.batches[1].some((entry) => /INSERT INTO ratings/.test(entry.sql) && entry.values[1] === 5));\n});\n\ntest('changed same-id retry fails closed if backend durable user state changed independently', async () => {\n  const db = new RecordingDb();\n  const first = bundle();\n  await importLocalState(db, first);\n  db.migrationHash = '0'.repeat(64);\n\n  const changed = bundle();\n  changed.snapshot.ratings = [{ ...changed.snapshot.ratings[0], stars: 5 }];\n  await assert.rejects(() => importLocalState(db, changed), /durable user state changed/);\n  assert.equal(db.batches.length, 1);\n});\n"""
-              if old not in text:
-                  raise SystemExit('idempotency test anchor not found')
-              text = text.replace(old, new)
-              old = """  assert.match(batch.at(-1)?.sql ?? '', /INSERT INTO app_meta/);\n  assert.deepEqual(batch.at(-1)?.values, ['local_state_migration_id', bundle().migrationId]);\n"""
-              new = """  assert.ok(batch.some((entry) => entry.values[0] === 'local_state_migration_hash'));\n  assert.match(batch.at(-1)?.sql ?? '', /INSERT INTO app_meta/);\n  assert.deepEqual(batch.at(-1)?.values, ['local_state_migration_id', bundle().migrationId]);\n"""
-              if old not in text:
-                  raise SystemExit('marker assertion anchor not found')
-              text = text.replace(old, new)
-              tests.write_text(text)
-
-          if not Path('worker/migration.ts').read_text().count('MIGRATION_HASH_META_KEY') >= 3:
-              raise SystemExit('migration retry fix did not apply')
-          PY
-          if git diff --quiet -- worker/migration.ts tests/worker-migration.test.ts; then exit 0; fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add worker/migration.ts tests/worker-migration.test.ts
-          git commit -m "Fix migration retry reconciliation"
-          git push origin HEAD:refs/heads/${{ github.event.pull_request.head.ref }}
       - name: Install development tools
         run: npm ci --no-audit --no-fund
       - name: Build PWA
