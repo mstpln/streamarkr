@@ -1,21 +1,22 @@
-name: Temporary v0.15.0 formatting cleanup
+name: Temporary v0.15.0 cleanup
 
 on:
   push:
-    branches: [feat/backend-user-state-v0150]
+    branches:
+      - feat/backend-user-state-v0150
 
 permissions:
   contents: write
 
 jobs:
   fix:
-    if: github.actor != 'github-actions[bot]'
+    if: "${{ github.actor != 'github-actions[bot]' }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
           ref: feat/backend-user-state-v0150
-      - name: Clean generated test formatting
+      - name: Apply cleanup
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -34,18 +35,56 @@ jobs:
     }
     if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
 """
-
           for path in ['tests/worker-routes.test.ts', 'tests/worker-repository.test.ts']:
               p = Path(path)
               text = p.read_text()
               if old not in text:
                   raise SystemExit(f'missing formatting marker in {path}')
               p.write_text(text.replace(old, new, 1))
+
+          p = Path('tests/repo-integration.test.ts')
+          text = p.read_text()
+          start = text.index("  it('watched-service writes require a selected service but historical values survive later deselection'")
+          export_start = text.index("it('buildExportPayload (Correction 14) includes every user-owned data category'", start)
+          replacement = """  it('watched-service writes require a selected service but historical values survive later deselection', async () => {
+    await repo.resetToFixtures();
+    const id = F.TITLES[1].id;
+    expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(false);
+
+    await repo.setServiceSelected('netflix', false);
+    let threw = false;
+    try {
+      await repo.setWatchedService(id, 'netflix');
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(true);
+    expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(false);
+
+    await repo.setServiceSelected('netflix', true);
+    await repo.setWatchedService(id, 'netflix');
+    await repo.setServiceSelected('netflix', false);
+    expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(true);
+  });
+
+  """
+          text = text[:start] + replacement + text[export_start:]
+          export_marker = """it('buildExportPayload (Correction 14) includes every user-owned data category', async () => {
+    const id = F.TITLES[0].id;
+"""
+          export_replacement = """it('buildExportPayload (Correction 14) includes every user-owned data category', async () => {
+    await repo.resetToFixtures();
+    await repo.setServiceSelected('netflix', true);
+    const id = F.TITLES[0].id;
+"""
+          if export_marker not in text:
+              raise SystemExit('missing export test marker')
+          p.write_text(text.replace(export_marker, export_replacement, 1))
           PY
       - name: Commit cleanup
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/worker-routes.test.ts tests/worker-repository.test.ts
-          git commit -m "Clean generated test formatting"
+          git add tests/worker-routes.test.ts tests/worker-repository.test.ts tests/repo-integration.test.ts
+          git commit -m "Fix watched-service regression coverage"
           git push
