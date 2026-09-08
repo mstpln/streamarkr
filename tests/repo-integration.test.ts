@@ -102,6 +102,16 @@ describe('repo + db integration (fake IndexedDB)', () => {
     expect(services.filter((service) => service.serviceKey === 'mubi-more').length).toBe(1);
   });
 
+  it('local custom service creation refuses names that cannot be addressed by the Worker routes', async () => {
+    await repo.resetToFixtures();
+    const before = (await repo.allServices()).length;
+    await repo.addCustomService('A'.repeat(81));
+    await repo.addCustomService('!!!');
+    const services = await repo.allServices();
+    expect(services.length).toBe(before);
+    expect(services.some((service) => service.serviceKey.length > 80)).toBe(false);
+  });
+
   it('adding an existing same-name service reselects it instead of creating a duplicate', async () => {
     await repo.resetToFixtures();
     await repo.setServiceSelected('netflix', false);
