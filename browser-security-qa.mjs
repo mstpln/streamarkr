@@ -39,29 +39,42 @@ try {
     const db = await import('/dist/lib/db.js');
     await repo.resetToFixtures();
 
-    const [titles, library, availability, metadata, seasons, episodes] = await Promise.all([
-      repo.allTitles(), repo.allLibrary(), repo.allAvailability(), repo.allMetadata(), repo.allSeasons(), repo.allEpisodes()
+    const [titles, library, availability, metadata, seasons, episodes, events] = await Promise.all([
+      repo.allTitles(), repo.allLibrary(), repo.allAvailability(), repo.allMetadata(), repo.allSeasons(), repo.allEpisodes(), repo.allEvents()
     ]);
     const libraryIds = new Set(library.map((item) => item.titleId));
-    const title = titles.find((item) => item.mediaType === 'series' && libraryIds.has(item.id) && availability.some((entry) => entry.titleId === item.id));
+    const historyIds = new Set(events.map((item) => item.titleId));
+    const title = titles.find((item) => item.mediaType === 'series' && libraryIds.has(item.id) && historyIds.has(item.id) && availability.some((entry) => entry.titleId === item.id));
     if (!title) return null;
 
     const hostileTitle = '<img src=x onerror="window.__providerTitleXss=1"> Provider title';
     const hostileOverview = '<img src=x onerror="window.__providerOverviewXss=1"> Provider overview';
+    const hostileGenre = '<img src=x onerror="window.__providerGenreXss=1"> Genre';
     const hostileSeason = '<img src=x onerror="window.__providerSeasonXss=1"> Season';
     const hostileEpisode = '<img src=x onerror="window.__providerEpisodeXss=1"> Episode';
+    const hostileAlert = '<img src=x onerror="window.__providerAlertXss=1"> Provider alert';
 
     await db.put('titles', { ...title, title: hostileTitle });
     const meta = metadata.find((item) => item.titleId === title.id);
-    if (meta) await db.put('title_metadata', { ...meta, overview: hostileOverview, genres: ['<img src=x onerror="window.__providerGenreXss=1"> Genre'] });
+    if (meta) await db.put('title_metadata', { ...meta, overview: hostileOverview, genres: [hostileGenre] });
     const season = seasons.find((item) => item.titleId === title.id && episodes.some((episode) => episode.titleId === title.id && episode.seasonNumber === item.seasonNumber));
     if (season) await db.put('seasons', { ...season, name: hostileSeason });
     const episode = episodes.find((item) => item.titleId === title.id && (!season || item.seasonNumber === season.seasonNumber));
     if (episode) await db.put('episodes', { ...episode, name: hostileEpisode, overview: hostileOverview });
     const availabilityRow = availability.find((item) => item.titleId === title.id);
     if (availabilityRow) await db.put('availability', { ...availabilityRow, deepLink: 'javascript:window.__providerLinkXss=1' });
+    await db.put('alerts', {
+      id: 'alert-security-provider-markup',
+      titleId: title.id,
+      alertType: 'new_episode_available',
+      message: hostileAlert,
+      eventDate: null,
+      createdAt: '2099-01-01T00:00:00.000Z',
+      seenAt: null,
+      dedupeKey: 'security-provider-markup'
+    });
 
-    return { id: title.id, seasonNumber: season?.seasonNumber ?? null, hostileTitle, hostileOverview, hostileSeason, hostileEpisode };
+    return { id: title.id, seasonNumber: season?.seasonNumber ?? null, hostileTitle, hostileOverview, hostileGenre, hostileSeason, hostileEpisode, hostileAlert };
   });
 
   if (!target) {
@@ -69,9 +82,9 @@ try {
   } else {
     await page.goto(BASE + '/#/title/' + target.id);
     await page.waitForTimeout(200);
-    const overviewSafe = await page.evaluate(({ hostileTitle, hostileOverview }) => {
+    const overviewSafe = await page.evaluate(({ hostileTitle, hostileOverview, hostileGenre }) => {
       const text = document.querySelector('#app')?.textContent ?? '';
-      return text.includes(hostileTitle) && text.includes(hostileOverview) &&
+      return text.includes(hostileTitle) && text.includes(hostileOverview) && text.includes(hostileGenre) &&
         !document.querySelector('#app img[src="x"]') &&
         !window.__providerTitleXss && !window.__providerOverviewXss && !window.__providerGenreXss;
     }, target);
@@ -104,6 +117,32 @@ try {
       return !unsafe && !window.__providerLinkXss;
     });
     record('Detail rejects unsafe provider deep-link protocols', unsafeLinkBlocked);
+
+    await page.goto(BASE + '/#/library');
+    await page.waitForTimeout(150);
+    const librarySafe = await page.evaluate(({ hostileTitle, hostileGenre }) => {
+      const text = document.querySelector('#app')?.textContent ?? '';
+      return text.includes(hostileTitle) && text.includes(hostileGenre) &&
+        !document.querySelector('#app img[src="x"]') && !window.__providerTitleXss && !window.__providerGenreXss;
+    }, target);
+    record('Library escapes provider title and genre markup', librarySafe);
+
+    await page.goto(BASE + '/#/history');
+    await page.waitForTimeout(150);
+    const historySafe = await page.evaluate(({ hostileTitle, hostileGenre }) => {
+      const text = document.querySelector('#app')?.textContent ?? '';
+      return text.includes(hostileTitle) && text.includes(hostileGenre) &&
+        !document.querySelector('#app img[src="x"]') && !window.__providerTitleXss && !window.__providerGenreXss;
+    }, target);
+    record('History escapes provider title and genre markup', historySafe);
+
+    await page.goto(BASE + '/#/alerts');
+    await page.waitForTimeout(150);
+    const alertSafe = await page.evaluate(({ hostileAlert }) => {
+      const text = document.querySelector('#app')?.textContent ?? '';
+      return text.includes(hostileAlert) && !document.querySelector('#app img[src="x"]') && !window.__providerAlertXss;
+    }, target);
+    record('Alerts escape provider-derived message markup', alertSafe);
   }
 
   record('Provider-security QA has zero console/page errors', errors.length === 0);
