@@ -9,6 +9,10 @@ let sortKey: 'az' | 'watched' = 'az';
 let genreFilter = '';
 let serviceFilter = '';
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export async function render(el: HTMLElement) {
   el.innerHTML = `<div class="skeleton" style="height:300px;border-radius:16px;"></div>`;
   const snap = await loadSnapshot();
@@ -38,7 +42,7 @@ export async function render(el: HTMLElement) {
     </div>
     <div class="pill-row">
       <select class="pill" data-filter="genre" aria-label="Filter History by genre"><option value="">Genre${genreFilter ? ' · ' + genreFilter : ''}</option>${genres.map((genre) => `<option value="${genre}" ${genre === genreFilter ? 'selected' : ''}>${genre}</option>`).join('')}</select>
-      <select class="pill" data-filter="service" aria-label="Filter History by where I watched it"><option value="">Where I watched it${serviceFilter ? ' · ' + activeServiceLabel : ''}</option>${serviceOptions.map((option) => `<option value="${option.key}" ${option.key === serviceFilter ? 'selected' : ''}>${option.label}</option>`).join('')}</select>
+      <select class="pill" data-filter="service" aria-label="Filter History by where I watched it"><option value="">Where I watched it${serviceFilter ? ' · ' + escapeHtml(activeServiceLabel) : ''}</option>${serviceOptions.map((option) => `<option value="${escapeHtml(option.key)}" ${option.key === serviceFilter ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select>
     </div>
     ${sorted.length === 0 ? '<div class="empty-state">No watch history yet.</div>' : `
     <div class="row-list">
@@ -53,7 +57,7 @@ export async function render(el: HTMLElement) {
               ${r.mediaType === 'series' ? `${r.watchedReleasedCount} of ${r.totalReleasedCount} episodes watched` : 'Movie'}
               ${r.lastWatchedAt ? ` · ${new Date(r.lastWatchedAt).toLocaleDateString()}` : ' · date unknown'}
             </div>
-            ${r.watchedService ? `<div class="row-meta" style="display:flex;align-items:center;gap:6px;margin-top:3px;">${serviceLogoHtml(r.watchedService, serviceLabel ?? r.watchedService, 18)}<span>Watched on ${serviceLabel ?? r.watchedService}</span></div>` : ''}
+            ${r.watchedService ? `<div class="row-meta" style="display:flex;align-items:center;gap:6px;margin-top:3px;">${serviceLogoHtml(r.watchedService, serviceLabel ?? r.watchedService, 18)}<span>Watched on ${escapeHtml(serviceLabel ?? r.watchedService)}</span></div>` : ''}
           </div>
         </button>`;
       }).join('')}
