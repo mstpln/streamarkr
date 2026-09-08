@@ -32,7 +32,7 @@ function comparableUserState(snapshot: BackendSnapshot): string {
     watchedService: stableRows(snapshot.watchedService, (row) => row.titleId),
     watchEvents: stableRows(snapshot.watchEvents, (row) => `${row.providerEventId}\u0000${row.id}`),
     watchOverrides: stableRows(snapshot.watchOverrides, (row) => `${row.scopeType}\u0000${row.titleId}\u0000${row.seasonNumber ?? -1}\u0000${row.episodeNumber ?? -1}\u0000${row.id}`),
-    selectedServices: stableRows(snapshot.services.filter((row) => row.userSelected), (row) => row.serviceKey)
+    services: stableRows(snapshot.services, (row) => row.serviceKey)
       .map(({ serviceKey, displayName, logoGlyph, userSelected, availabilitySource }) => ({ serviceKey, displayName, logoGlyph, userSelected, availabilitySource })),
     alerts: stableRows(snapshot.alerts, (row) => row.id)
       .map(({ id, titleId, alertType, message, eventDate, createdAt, seenAt, dedupeKey }) => ({ id, titleId, alertType, message, eventDate, createdAt, seenAt, dedupeKey }))
