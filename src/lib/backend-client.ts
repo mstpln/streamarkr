@@ -37,6 +37,10 @@ export interface MigrationBackendClient extends BackendClient {
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+function safeBackendErrorCode(value: unknown): string | null {
+  return typeof value === 'string' && /^[a-z0-9_]{1,80}$/.test(value) ? value : null;
+}
+
 export class WorkerBackendClient implements MigrationBackendClient {
   private readonly baseUrl: string;
   private readonly token: string | null;
@@ -56,8 +60,8 @@ export class WorkerBackendClient implements MigrationBackendClient {
     if (!response.ok) {
       let code: string | null = null;
       try {
-        const payload = await response.json() as { error?: string; message?: string };
-        code = payload.error || payload.message || null;
+        const payload = await response.json() as { error?: unknown };
+        code = safeBackendErrorCode(payload.error);
       } catch {
         code = null;
       }
