@@ -40,13 +40,13 @@ PR #11 combines the remaining closely coupled takeover work into one guarded mil
 - one-time secure token/session + migration flow in Settings and a reconnect flow for expired/cleared sessions;
 - backend-mode fixture reset protection and continued synthetic-sync blocking.
 
-The implementation/review cycle caught and fixed strict Worker typing, stale cache-mode regression expectations, test typing, incomplete migration row validation, provider sync-state promotion, incomplete service-preference verification, expired-session recovery, an outdated browser-QA expectation, and a corrupted lockfile integrity entry. The lockfile was regenerated from `package.json`, and the normal read-only CI workflow was restored before validation.
+The implementation/review cycle caught and fixed strict Worker typing, stale cache-mode regression expectations, test typing, incomplete migration row validation, provider sync-state promotion, incomplete service-preference verification, expired-session recovery, an outdated browser-QA expectation, a corrupted lockfile integrity entry, and a lost-response retry trap. The retry trap occurred when D1 had committed the first import but the browser never received the response and local state changed before retry; the same migration ID previously returned `alreadyApplied` forever and could leave round-trip verification permanently mismatched. The fix persists a server-side durable-user-state fingerprint, keeps unchanged retries idempotent, safely reconciles changed same-ID retries only while the backend still matches the first imported fingerprint and provider-owned state is untouched, and otherwise fails closed. The lockfile was regenerated from `package.json`, and the normal read-only CI workflow was restored before validation.
 
-Continuity-validation head `62306809828321cf930c04a3938f3161b32a0010`, CI #260:
+Review-fix validation head `eeb744b33db19eb3f98945c2297c11b02258450f`, CI #268:
 - `npm ci --no-audit --no-fund`: PASS;
 - PWA build: PASS, v0.17.0;
 - Worker build/type-check: PASS;
-- **196/196 tests across 26 suites**;
+- **198/198 tests across 26 suites**;
 - machine-readable build-state JSON/version synchronization: PASS;
 - deterministic D1 semantics **5/5**;
 - pinned Wrangler **4.129.0** local-D1 validation PASS;
@@ -58,8 +58,8 @@ Continuity-validation head `62306809828321cf930c04a3938f3161b32a0010`, CI #260:
 No production Worker/D1, live provider, personal data, or BANDMARKR resource was used by this validation.
 
 ## Next work
-1. Complete the final continuity record for CI #260, then require the complete normal CI/browser suite to pass once more on the resulting unchanged PR #11 head.
-2. Perform final PR diff, review-thread, secrets/personal-data and security inspection; only then mark PR #11 ready to merge. Merge still requires explicit user authorization.
+1. Require the complete normal CI/browser suite to pass on the final unchanged continuity-synchronized PR #11 head.
+2. Perform final PR diff, review-thread, secrets/personal-data and security inspection; only then keep PR #11 merge-ready. Merge still requires explicit user authorization.
 3. After a reviewed merge, establish the real PWA hosting/API topology, configure exact `APP_ORIGIN`, and validate actual browser cookie behavior. Prefer same-origin/same-site routing.
 4. Any production deployment or migration of real browser state requires fresh explicit user authorization and must remain separate from merge authorization.
 5. Add real TMDB metadata/search, Trakt OAuth/history and streaming availability in focused reviewed builds.

@@ -97,7 +97,7 @@ New deterministic coverage verifies:
 - malformed migration payloads return controlled 400 responses without a write batch;
 - canonical identity, metadata, season, episode, service, Library, rating, watched-service, override, event, availability, alert and sync-state payload validation;
 - first takeover requires pristine durable application state apart from seeded built-in service registry rows;
-- same migration ID is idempotent without a second write batch; a different previous ID fails closed;
+- same migration ID with unchanged durable state is idempotent without a second write batch; a changed same-ID retry after an uncertain/lost first response reconciles only when D1 still matches the original durable-user-state fingerprint, while independent backend changes or a different migration ID fail closed;
 - imported cache/user state and migration marker are batched transactionally;
 - provider-owned sync timestamps/cursors are not promoted into durable D1;
 - browser post-import round-trip compares durable user state before takeover;
@@ -112,12 +112,12 @@ New deterministic coverage verifies:
 - package manifest/lockfile install reproducibility after the v0.17 version bump;
 - machine-readable `STREAMARKR_BUILD_STATE.json` remains valid JSON and synchronized with package/cache/schema/repository metadata.
 
-### Continuity-validation run
-Head `62306809828321cf930c04a3938f3161b32a0010`, CI #260:
+### Review-fix validation run
+Head `eeb744b33db19eb3f98945c2297c11b02258450f`, CI #268:
 - `npm ci --no-audit --no-fund`: PASS, 43 packages;
 - PWA build: PASS, `streamarkr@0.17.0`, 34 compiled modules in service-worker manifest;
 - Worker build/type-check: PASS;
-- **196/196 tests across 26 suites**, 0 failures;
+- **198/198 tests across 26 suites**, 0 failures;
 - deterministic D1 semantics **5/5**;
 - pinned Wrangler **4.129.0** local-D1 validation PASS (`schema_version=1`, services=8, titles and migration history present);
 - core browser/responsive QA **32/32**;
@@ -126,7 +126,7 @@ Head `62306809828321cf930c04a3938f3161b32a0010`, CI #260:
 - unfolded 873×1000 PASS;
 - zero smoke-pass and provider/security console/page errors.
 
-The v0.17 PR merge gate remains: after recording this validation in continuity files, the resulting unchanged exact PR head must pass the complete normal CI/browser suite and final diff/security/review-thread inspection before it can be considered merge-ready.
+The v0.17 review-fix suite now covers the uncertain-success case where D1 committed the first import, the HTTP response was lost, and local state changed before retry. After this continuity update, the resulting unchanged exact PR head must pass the complete normal CI/browser suite and final diff/security/review-thread inspection before merge readiness.
 
 ## Manual Cloudflare production validation — completed for v0.13.0
 With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed reviewed main commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed successful build/deploy, healthy `/api/health`, D1 schema version 1, eight services and all expected application tables plus `d1_migrations`.

@@ -4,7 +4,7 @@
   "cacheVersion": "streamarkr-v0.17.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-08T11:25:00Z",
+  "generatedAt": "2026-09-08T12:05:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -34,7 +34,11 @@
     "serviceWorker": "sw.js",
     "serviceWorkerManifest": "sw-manifest.json",
     "storage": "IndexedDB cache/offline layer",
-    "indexedDbAvailabilityKey": ["titleId", "serviceKey", "optionType"],
+    "indexedDbAvailabilityKey": [
+      "titleId",
+      "serviceKey",
+      "optionType"
+    ],
     "providerMode": "fake-adapters-only until explicit production backend/provider activation",
     "backendCacheBridge": "BackendClient.getSnapshot -> local repo applyBackendSnapshot -> atomic IndexedDB replacement",
     "offlineRule": "failed Worker fetch or post-mutation refresh keeps prior verified IndexedDB cache; backend-hydrated cache is never overwritten by fixture seeding",
@@ -56,11 +60,25 @@
     "browserClient": "src/lib/backend-client.ts",
     "sharedContract": "src/lib/backend-contract.ts",
     "d1Migration": "migrations/0001_initial.sql",
-    "d1AvailabilityKey": ["title_id", "service_key", "option_type"],
+    "d1AvailabilityKey": [
+      "title_id",
+      "service_key",
+      "option_type"
+    ],
     "canonicalTitleKey": "${media_type}-${tmdb_id}, enforced by D1 CHECK plus UNIQUE(media_type, tmdb_id)",
     "crosswalkUpsertRule": "later partial provider payloads preserve already-known Trakt/IMDb/availability IDs when the incoming field is omitted",
     "canonicalMutationPrecondition": "Library/rating/watched-service/override writes validate their canonical references before durable mutation",
-    "userMutationRoutes": ["library add/remove", "rating set/clear", "alerts seen", "watched-service set/clear", "movie override", "episode override", "bounded season override", "service selection", "custom service creation"],
+    "userMutationRoutes": [
+      "library add/remove",
+      "rating set/clear",
+      "alerts seen",
+      "watched-service set/clear",
+      "movie override",
+      "episode override",
+      "bounded season override",
+      "service selection",
+      "custom service creation"
+    ],
     "seasonOverrideRule": "server selects episodes known and released at action date, requires the season to exist, removes legacy season wildcard, and materializes episode-level overrides in one D1 batch; season zero specials are valid",
     "customServiceKeyRule": "local and Worker paths trim, lowercase, collapse non-alphanumeric runs to hyphens and trim edge hyphens; names/keys are bounded to 80 characters, same-name additions reselect, and different-name normalized-key collisions are rejected",
     "overrideScopeRule": "movie overrides require canonical movies and episode/season overrides require canonical series; HTTP routing rejects obvious scope mismatches before D1 and the repository independently enforces the same invariant",
@@ -71,7 +89,7 @@
     "browserSessionOriginRule": "cookie-auth requests require exact configured APP_ORIGIN when Origin is supplied; no-Origin cookie auth is accepted only when request URL origin itself equals APP_ORIGIN",
     "localStateMigrationRoute": "POST /api/migration/local-state; authenticated and origin-gated",
     "localStateMigrationPristineRule": "first import refuses any pre-existing durable application state other than seeded built-in service registry rows",
-    "localStateMigrationIdempotency": "same persisted migration UUID returns alreadyApplied without a second batch; a different prior migration UUID is a conflict",
+    "localStateMigrationIdempotency": "same persisted migration UUID is idempotent when durable user state is unchanged; after an uncertain first response, changed same-ID local state may reconcile only while D1 still matches the original durable-user-state fingerprint and provider-owned backend state is untouched; missing/mismatched fingerprint or a different migration UUID fails closed",
     "localStateMigrationBatch": "accepted imported state plus migration marker is one D1 batch",
     "providerSyncMigrationRule": "browser/synthetic sync_state timestamps and cursors are validated as payload shape but are not promoted into D1",
     "requestTracing": "x-request-id on responses; sanitized structured server errors",
@@ -101,7 +119,14 @@
     "buildSecret": "STREAMARKR_D1_DATABASE_ID stored only in Cloudflare Workers Builds",
     "buildToken": "Workers Builds token with Worker deployment permissions plus D1 Edit, scoped to the Streamarkr account",
     "runtimeSecret": "DEVICE_ACCESS_TOKEN stored only in Cloudflare Worker Variables & Secrets",
-    "deployOrder": ["validate build-supplied D1 UUID", "resolve named remote D1 streamarkr and require UUID match", "prepare generated config", "verify DEVICE_ACCESS_TOKEN exists", "apply pending migrations", "deploy reviewed Worker source"],
+    "deployOrder": [
+      "validate build-supplied D1 UUID",
+      "resolve named remote D1 streamarkr and require UUID match",
+      "prepare generated config",
+      "verify DEVICE_ACCESS_TOKEN exists",
+      "apply pending migrations",
+      "deploy reviewed Worker source"
+    ],
     "firstRealDeploymentCompleted": true,
     "firstRealDeploymentAuthorizationConsumed": true,
     "futureProductionDeploymentsRequireFreshExplicitAuthorization": true,
@@ -112,23 +137,59 @@
     "v0160ProductionDeploymentAuthorized": false,
     "v0170ProductionDeploymentAuthorized": false
   },
-  "implementedScreens": ["home", "library", "history", "search", "discover", "detail", "alerts", "settings"],
+  "implementedScreens": [
+    "home",
+    "library",
+    "history",
+    "search",
+    "discover",
+    "detail",
+    "alerts",
+    "settings"
+  ],
   "validation": {
     "baselineV0102": {
       "commit": "438997dedc282366339e6507d826441d99a81adc",
-      "tests": {"count": 101, "pass": 101, "fail": 0},
-      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
+      "tests": {
+        "count": 101,
+        "pass": 101,
+        "fail": 0
+      },
+      "browserQa": {
+        "checks": 27,
+        "pass": 27,
+        "fail": 0,
+        "consoleOrPageErrors": 0
+      }
     },
     "v0110": {
       "mergeCommit": "65fba889597a22f7703b3337833fc1f0ca3c5cb1",
-      "logicRepositoryWorkerClientSecurityTests": {"count": 120, "pass": 120, "fail": 0},
-      "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
-      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
+      "logicRepositoryWorkerClientSecurityTests": {
+        "count": 120,
+        "pass": 120,
+        "fail": 0
+      },
+      "d1SchemaTests": {
+        "count": 5,
+        "pass": 5,
+        "fail": 0
+      },
+      "browserQa": {
+        "checks": 27,
+        "pass": 27,
+        "fail": 0,
+        "consoleOrPageErrors": 0
+      }
     },
     "v0120": {
       "mergeCommit": "02238c00150b059e9f73cb768e87a62a0d8b25e9",
       "wranglerLocalD1": "pass on exact final PR head with Wrangler 4.129.0",
-      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0}
+      "browserQa": {
+        "checks": 27,
+        "pass": 27,
+        "fail": 0,
+        "consoleOrPageErrors": 0
+      }
     },
     "v0130": {
       "activationConfigPr": 4,
@@ -139,13 +200,31 @@
       "ciRun": 83,
       "pwaBuild": "pass",
       "workerTypecheck": "pass",
-      "logicRepositoryWorkerClientSecurityDeploymentTests": {"count": 126, "pass": 126, "fail": 0},
-      "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
+      "logicRepositoryWorkerClientSecurityDeploymentTests": {
+        "count": 126,
+        "pass": 126,
+        "fail": 0
+      },
+      "d1SchemaTests": {
+        "count": 5,
+        "pass": 5,
+        "fail": 0
+      },
       "wranglerLocalD1": "pass with Wrangler 4.129.0",
-      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0},
+      "browserQa": {
+        "checks": 27,
+        "pass": 27,
+        "fail": 0,
+        "consoleOrPageErrors": 0
+      },
       "manualCloudflareActivation": {
         "buildDeploy": "pass",
-        "health": {"ok": true, "service": "streamarkr-worker", "schemaVersion": 1, "authConfigured": true},
+        "health": {
+          "ok": true,
+          "service": "streamarkr-worker",
+          "schemaVersion": 1,
+          "authConfigured": true
+        },
         "d1SchemaVersion": 1,
         "d1ServiceCount": 8,
         "d1TablesVerified": true,
@@ -160,11 +239,39 @@
       "finalReviewedHead": "469235cc3e7ffe0df614b612bc73480cf4fd6da1",
       "mergeCommit": "f6e6d4a04aa011e91036a773655e9572e2c6ded6",
       "ciRun": 123,
-      "tests": {"count": 137, "pass": 137, "fail": 0, "suites": 26},
-      "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
+      "tests": {
+        "count": 137,
+        "pass": 137,
+        "fail": 0,
+        "suites": 26
+      },
+      "d1SchemaTests": {
+        "count": 5,
+        "pass": 5,
+        "fail": 0
+      },
       "wranglerLocalD1": "pass with Wrangler 4.129.0",
-      "browserQa": {"checks": 27, "pass": 27, "fail": 0, "consoleOrPageErrors": 0},
-      "newCoverage": ["atomic backend snapshot hydration", "malformed snapshot rows rejected before cache mutation", "offline fetch failure preserves cache", "backend cache survives fixture seeding", "initial backend takeover refuses existing local state", "legacy non-empty cache without data_source cannot be mistaken for empty", "legacy startup assigns fixture provenance", "local-only mutations blocked in backend cache mode", "synthetic sync blocked in backend cache mode", "unsupported backend schema fails before replacement", "IndexedDB v1->v2 preserves user-owned stores", "availability invalidation marker is atomic with v1->v2 upgrade", "multi-option availability in IndexedDB v2"],
+      "browserQa": {
+        "checks": 27,
+        "pass": 27,
+        "fail": 0,
+        "consoleOrPageErrors": 0
+      },
+      "newCoverage": [
+        "atomic backend snapshot hydration",
+        "malformed snapshot rows rejected before cache mutation",
+        "offline fetch failure preserves cache",
+        "backend cache survives fixture seeding",
+        "initial backend takeover refuses existing local state",
+        "legacy non-empty cache without data_source cannot be mistaken for empty",
+        "legacy startup assigns fixture provenance",
+        "local-only mutations blocked in backend cache mode",
+        "synthetic sync blocked in backend cache mode",
+        "unsupported backend schema fails before replacement",
+        "IndexedDB v1->v2 preserves user-owned stores",
+        "availability invalidation marker is atomic with v1->v2 upgrade",
+        "multi-option availability in IndexedDB v2"
+      ],
       "productionWorkerAccessedByTests": false,
       "personalDataUsed": false,
       "liveProvidersUsed": false,
@@ -178,12 +285,52 @@
       "finalReviewedHead": "87dcbf9b3cf77fb8500529d7afbb936c68bf6059",
       "finalExactHeadCiRun": 215,
       "mergeCommit": "d6e8a9627dd1a1cab2e6d520753084b902589b9d",
-      "tests": {"count": 164, "pass": 164, "fail": 0, "suites": 26},
-      "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
+      "tests": {
+        "count": 164,
+        "pass": 164,
+        "fail": 0,
+        "suites": 26
+      },
+      "d1SchemaTests": {
+        "count": 5,
+        "pass": 5,
+        "fail": 0
+      },
       "wranglerLocalD1": "pass with Wrangler 4.129.0",
-      "browserQa": {"checks": 31, "pass": 31, "fail": 0, "consoleOrPageErrors": 0},
-      "providerSecurityQa": {"checks": 8, "pass": 8, "fail": 0, "consoleOrPageErrors": 0},
-      "newCoverage": ["watched-service set/clear", "canonical title and known selected service validation", "movie watched/unwatched override", "episode watched/unwatched override", "unknown episode conflict", "unknown season conflict", "HTTP and repository movie/series override scope enforcement", "season-zero specials", "bounded server-side season bulk materialization", "service selection", "custom service creation", "local and Worker route-safe custom-service normalization parity", "80-character custom-service route bounds", "same-name service reselect", "normalized-key collision rejection", "prototype-like custom service keys use fallback branding", "hostile service rendering remains literal text", "provider title/overview/genre/season/episode/alert markup remains literal text across affected screens", "unsafe provider deep-link protocols are rejected", "expanded BackendClient requests"],
+      "browserQa": {
+        "checks": 31,
+        "pass": 31,
+        "fail": 0,
+        "consoleOrPageErrors": 0
+      },
+      "providerSecurityQa": {
+        "checks": 8,
+        "pass": 8,
+        "fail": 0,
+        "consoleOrPageErrors": 0
+      },
+      "newCoverage": [
+        "watched-service set/clear",
+        "canonical title and known selected service validation",
+        "movie watched/unwatched override",
+        "episode watched/unwatched override",
+        "unknown episode conflict",
+        "unknown season conflict",
+        "HTTP and repository movie/series override scope enforcement",
+        "season-zero specials",
+        "bounded server-side season bulk materialization",
+        "service selection",
+        "custom service creation",
+        "local and Worker route-safe custom-service normalization parity",
+        "80-character custom-service route bounds",
+        "same-name service reselect",
+        "normalized-key collision rejection",
+        "prototype-like custom service keys use fallback branding",
+        "hostile service rendering remains literal text",
+        "provider title/overview/genre/season/episode/alert markup remains literal text across affected screens",
+        "unsafe provider deep-link protocols are rejected",
+        "expanded BackendClient requests"
+      ],
       "productionWorkerAccessedByTests": false,
       "personalDataUsed": false,
       "liveProvidersUsed": false,
@@ -198,12 +345,44 @@
       "finalReviewedHead": "4191f46ee1b1549d2c5079ec1781e302db395476",
       "finalExactHeadCiRun": 232,
       "mergeCommit": "c26bc20b3579cc3736621e722d623ead12786564",
-      "tests": {"count": 176, "pass": 176, "fail": 0, "suites": 26},
-      "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
+      "tests": {
+        "count": 176,
+        "pass": 176,
+        "fail": 0,
+        "suites": 26
+      },
+      "d1SchemaTests": {
+        "count": 5,
+        "pass": 5,
+        "fail": 0
+      },
       "wranglerLocalD1": "pass with Wrangler 4.129.0",
-      "browserQa": {"checks": 31, "pass": 31, "fail": 0, "consoleOrPageErrors": 0},
-      "providerSecurityQa": {"checks": 8, "pass": 8, "fail": 0, "consoleOrPageErrors": 0},
-      "newCoverage": ["device-token to signed browser-session exchange", "HttpOnly Secure __Host session cookie", "device token absent from cookie and browser persistence", "credentialed exact-origin CORS", "browser-session origin enforcement", "tampered session rejection", "session expiry boundary", "device-secret rotation invalidates sessions", "origin-gated logout", "legacy bearer compatibility", "credentialed WorkerBackendClient cookie transport", "package manifest/lockfile version synchronization"],
+      "browserQa": {
+        "checks": 31,
+        "pass": 31,
+        "fail": 0,
+        "consoleOrPageErrors": 0
+      },
+      "providerSecurityQa": {
+        "checks": 8,
+        "pass": 8,
+        "fail": 0,
+        "consoleOrPageErrors": 0
+      },
+      "newCoverage": [
+        "device-token to signed browser-session exchange",
+        "HttpOnly Secure __Host session cookie",
+        "device token absent from cookie and browser persistence",
+        "credentialed exact-origin CORS",
+        "browser-session origin enforcement",
+        "tampered session rejection",
+        "session expiry boundary",
+        "device-secret rotation invalidates sessions",
+        "origin-gated logout",
+        "legacy bearer compatibility",
+        "credentialed WorkerBackendClient cookie transport",
+        "package manifest/lockfile version synchronization"
+      ],
       "productionWorkerAccessedByTests": false,
       "personalDataUsed": false,
       "liveProvidersUsed": false,
@@ -213,21 +392,65 @@
     "v0170": {
       "pr": 11,
       "baseMainCommit": "c26bc20b3579cc3736621e722d623ead12786564",
-      "lastValidatedImplementationHead": "62306809828321cf930c04a3938f3161b32a0010",
-      "lastValidatedImplementationCiRun": 260,
-      "tests": {"count": 196, "pass": 196, "fail": 0, "suites": 26},
-      "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
+      "lastValidatedImplementationHead": "eeb744b33db19eb3f98945c2297c11b02258450f",
+      "lastValidatedImplementationCiRun": 268,
+      "tests": {
+        "count": 198,
+        "pass": 198,
+        "fail": 0,
+        "suites": 26
+      },
+      "d1SchemaTests": {
+        "count": 5,
+        "pass": 5,
+        "fail": 0
+      },
       "wranglerLocalD1": "pass with Wrangler 4.129.0",
-      "browserQa": {"checks": 32, "pass": 32, "fail": 0, "consoleOrPageErrors": 0},
-      "providerSecurityQa": {"checks": 8, "pass": 8, "fail": 0, "consoleOrPageErrors": 0},
-      "newCoverage": ["persisted retry-safe browser migration UUID", "authenticated origin-gated local-state migration route", "pristine-backend takeover guard", "same-id migration idempotency", "different-id migration conflict", "migration payload structural and semantic validation", "one-batch imported state plus migration marker", "provider sync-state exclusion from durable import", "post-import durable user-state round-trip verification", "verification mismatch preserves local source", "atomic verified backend-cache takeover", "backend-aware Worker-routed mutations", "failed post-mutation refresh preserves offline cache", "backend runtime client fail-closed behavior", "backend fixture-reset prohibition", "secure Settings migration entry point", "password-only non-prefilled device-token browser QA", "v0.17 reproducible package-lock install", "machine-readable build-state JSON and app/cache version synchronization"],
+      "browserQa": {
+        "checks": 32,
+        "pass": 32,
+        "fail": 0,
+        "consoleOrPageErrors": 0
+      },
+      "providerSecurityQa": {
+        "checks": 8,
+        "pass": 8,
+        "fail": 0,
+        "consoleOrPageErrors": 0
+      },
+      "newCoverage": [
+        "persisted retry-safe browser migration UUID",
+        "authenticated origin-gated local-state migration route",
+        "pristine-backend takeover guard",
+        "same-id migration idempotency",
+        "different-id migration conflict",
+        "migration payload structural and semantic validation",
+        "one-batch imported state plus migration marker",
+        "provider sync-state exclusion from durable import",
+        "post-import durable user-state round-trip verification",
+        "verification mismatch preserves local source",
+        "atomic verified backend-cache takeover",
+        "backend-aware Worker-routed mutations",
+        "failed post-mutation refresh preserves offline cache",
+        "backend runtime client fail-closed behavior",
+        "backend fixture-reset prohibition",
+        "secure Settings migration entry point",
+        "password-only non-prefilled device-token browser QA",
+        "v0.17 reproducible package-lock install",
+        "machine-readable build-state JSON and app/cache version synchronization",
+        "same-id retry reconciliation after an uncertain committed response with subsequent local changes",
+        "server-side durable-user-state fingerprint blocks retry overwrite after independent backend changes"
+      ],
       "productionWorkerAccessedByTests": false,
       "personalDataUsed": false,
       "liveProvidersUsed": false,
       "bandmarkrAccessed": false,
-      "documentationInclusiveExactHeadGate": "complete CI/browser QA must pass on the unchanged continuity-recorded PR #11 head before merge readiness"
+      "documentationInclusiveExactHeadGate": "review-fix validation passed CI #268; complete normal CI/browser QA must pass on the unchanged continuity-synchronized PR #11 head before merge readiness"
     },
-    "responsive": ["344x792 folded", "873x1000 unfolded"],
+    "responsive": [
+      "344x792 folded",
+      "873x1000 unfolded"
+    ],
     "physicalPixel9ProFold": "not yet run"
   },
   "hardenedBehaviors": [
@@ -276,7 +499,9 @@
     "remote config generation never commits the real account identifier",
     "remote deploy verifies named Streamarkr D1 identity and DEVICE_ACCESS_TOKEN before mutation",
     "remote Wrangler automatic provisioning is disabled",
-    "normal main merges cannot be the production deployment trigger"
+    "normal main merges cannot be the production deployment trigger",
+    "same-id migration retries remain recoverable after an uncertain committed response and later local edits only while D1 still matches the original durable-user-state fingerprint",
+    "migration retry reconciliation fails closed if durable backend user state changed independently after the first import"
   ],
   "pendingIntegrations": [
     "Complete PR #11 exact-head CI/final security/review inspection and merge only after explicit user authorization",

@@ -58,7 +58,7 @@ With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06
 ## v0.17.0 safe backend activation migration — PR #11 active
 - A browser-side migration UUID is persisted in IndexedDB before the first network attempt, making a lost response safely retryable with the same migration identity.
 - `POST /api/migration/local-state` is authenticated and origin-gated. The Worker rejects malformed payloads and refuses first takeover when D1 already contains non-registry state rather than guessing merge semantics.
-- Imported local state and the migration marker are written in one D1 batch. Repeating the same migration ID is idempotent; a different prior migration ID fails closed.
+- Imported local state, its durable-user-state fingerprint and the migration marker are written atomically. An unchanged same-ID retry is idempotent. If the first response was lost and local state changed before retry, the same ID may reconcile only while current D1 durable user state still matches the original fingerprint and provider-owned backend state remains untouched; otherwise the Worker fails closed. A different prior migration ID is always a conflict.
 - Provider-owned sync timestamps/cursors are deliberately **not** promoted from browser/synthetic cache into durable D1.
 - After import, the browser fetches an authoritative D1 snapshot and compares durable user-state categories before changing the local authority marker. A mismatch or failed request leaves the existing IndexedDB source untouched for recovery.
 - Once migration succeeds, IndexedDB is atomically replaced with the verified Worker/D1 snapshot and marked `data_source=backend`.
@@ -67,10 +67,10 @@ With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06
 - Startup remains cached-first: an activated installation renders from IndexedDB while offline and opportunistically refreshes when the authenticated Worker is reachable.
 - Settings now exposes one-time token exchange + migration for inactive installs and secure-session reconnect/refresh for activated installs. Token fields are password-only, not prefilled, and cleared after use.
 - Production activation is still intentionally blocked: `APP_ORIGIN` is unset, final PWA hosting/API topology is not established, and no production deployment or personal-data migration has been authorized.
-- Continuity-validation head `62306809828321cf930c04a3938f3161b32a0010`, CI #260: `npm ci` PASS, PWA build PASS, Worker type-check PASS, **196/196 tests across 26 suites**, machine-readable build-state/version validation PASS, D1 **5/5**, Wrangler-local PASS, core browser/responsive QA **32/32**, provider/security QA **8/8**, folded/unfolded PASS and zero console/page errors.
+- Review-fix validation head `eeb744b33db19eb3f98945c2297c11b02258450f`, CI #268: `npm ci` PASS, PWA build PASS, Worker type-check PASS, **198/198 tests across 26 suites**, machine-readable build-state/version validation PASS, D1 **5/5**, Wrangler-local PASS, core browser/responsive QA **32/32**, provider/security QA **8/8**, folded/unfolded PASS and zero console/page errors.
 
 ## Still pending
-- Run the complete normal CI/browser suite on the final unchanged continuity-recorded PR #11 head and complete final diff/security/review-thread inspection before merge readiness.
+- Run the complete normal CI/browser suite on the final unchanged continuity-synchronized PR #11 head and complete final diff/security/review-thread inspection before merge readiness.
 - Establish the real PWA hosting origin and same-origin/same-site API path where possible; configure exact production `APP_ORIGIN` and validate actual cookie behavior before browser activation.
 - Perform any future production deployment and real local-state migration only after fresh explicit user authorization and a reviewed merged source head.
 - Add real TMDB search/metadata, Trakt OAuth/history, and streaming-availability adapters in focused reviewed builds.
