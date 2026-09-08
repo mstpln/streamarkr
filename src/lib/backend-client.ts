@@ -6,6 +6,16 @@ export interface BackendSessionStatus {
   method?: 'device-token' | 'browser-session';
 }
 
+export class BackendRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string | null = null
+  ) {
+    super(`Streamarkr backend request failed (${status})${code ? `: ${code}` : ''}`);
+    this.name = 'BackendRequestError';
+  }
+}
+
 export interface BackendClient {
   getSnapshot(): Promise<BackendSnapshot>;
   addToLibrary(titleId: string): Promise<void>;
@@ -44,14 +54,14 @@ export class WorkerBackendClient implements MigrationBackendClient {
     if (init.body != null && !headers.has('content-type')) headers.set('content-type', 'application/json');
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers, credentials: 'include' });
     if (!response.ok) {
-      let detail = '';
+      let code: string | null = null;
       try {
         const payload = await response.json() as { error?: string; message?: string };
-        detail = payload.message || payload.error || '';
+        code = payload.error || payload.message || null;
       } catch {
-        detail = '';
+        code = null;
       }
-      throw new Error(`Streamarkr backend request failed (${response.status})${detail ? `: ${detail}` : ''}`);
+      throw new BackendRequestError(response.status, code);
     }
     if (response.status === 204) return undefined as T;
     return await response.json() as T;
