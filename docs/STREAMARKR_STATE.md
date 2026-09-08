@@ -5,8 +5,9 @@ Updated: 2026-09-08. Current app/cache identity remains **v0.18.0 / streamarkr-v
 ## Repository baseline
 - Public repo: `mstpln/streamarkr`; `main` is authoritative.
 - PR #12 / v0.18.0 same-origin Worker hosting merged at `77d8644e06be5a9e61c0938782616f02cdf8f179`.
-- PR #13 secure activation diagnostics merged at `3ddcbfcb515a31e1ed6ce2951ea741832d5adeda`; exact final reviewed head `086a013ac7e9da913f1940b26d839a7a753d6d09` passed the complete validation cycle and was separately authorized for production deployment.
-- PR #14 is the active focused browser-session bootstrap fix on `fix/browser-session-bootstrap-v0182`.
+- PR #13 secure activation diagnostics merged at `3ddcbfcb515a31e1ed6ce2951ea741832d5adeda` and was separately deployed.
+- PR #14 browser-session bootstrap fix merged at `e487b0804f7462aadfcb2ef5264ace141d775d74` and was separately deployed.
+- PR #15 is the active focused cached-client compatibility fix on `fix/activation-session-v0181`.
 
 ## Cloudflare account and production state
 Dedicated Streamarkr resources remain separate from BANDMARKR: D1 `streamarkr` in EU, Worker `streamarkr-api`, binding `DB`, runtime secret `DEVICE_ACCESS_TOKEN`, and guarded Workers Builds using only `deploy/production`. The real D1 identifier stays outside the public repository.
@@ -26,40 +27,39 @@ The same-origin PWA is live on the existing Streamarkr Workers.dev origin. Manua
 - User/provider/service-controlled display text is escaped and provider deep links are HTTP/HTTPS only.
 
 ## Production secure-storage activation status
-After PR #13 was deployed, a hard-refreshed live retry produced the staged message `Could not create the secure browser session. Local data is unchanged.` This establishes that the failure occurs during the initial token-to-session bootstrap, before browser cookie verification and before D1 migration.
+After PR #14 was deployed, the live browser still produced `Could not create the secure browser session. Local data is unchanged.` The failure remains at the initial token-to-session bootstrap, before browser cookie verification and before D1 migration.
 
 No personal state has been migrated. The local IndexedDB source remains unchanged and authoritative for the current browser until guarded migration succeeds.
 
-## PR #14 — robust one-time browser bootstrap
-PR #14 fixes the bootstrap boundary rather than adding another diagnostic-only layer:
-- the browser sends the user-entered device token only in the JSON body of same-origin HTTPS `POST /api/auth/session`, not in the browser `Authorization` header;
-- the Worker validates that body value with the existing constant-time digest comparison;
-- surrounding whitespace introduced by copy/paste is ignored;
-- missing/malformed/incorrect token bodies fail closed;
-- successful exchange still creates the same signed 30-day `__Host-streamarkr_session` HttpOnly/Secure cookie and never returns or persists the token;
-- unexpected session signing errors become the controlled `session_creation_failed` category rather than an uncaught Worker response;
-- legacy bearer authentication remains available for non-browser operational clients;
-- migration and all later browser requests remain cookie-backed and never re-send the device token.
+## PR #15 — cached-client bootstrap compatibility
+PR #15 removes the rollout dependency between the Worker and the installed v0.18 browser bundle:
+- the current browser flow may continue sending the one-time device token in the JSON body of same-origin HTTPS `POST /api/auth/session`;
+- an older cached browser bundle that still sends that one-time token as `Authorization: Bearer ...` is also accepted on the same POST route;
+- both forms require the exact allowed browser origin before credential validation;
+- both forms use the existing constant-time digest comparison;
+- successful exchange creates the same signed 30-day `__Host-streamarkr_session` HttpOnly/Secure cookie;
+- the device token is never returned, copied into the cookie, or persisted;
+- the compatibility allowance is limited to bootstrap; migration and later browser requests remain cookie-backed.
 
-The service-worker source bytes change so installed v0.18.0 clients detect the hotfix and rerun the existing install-time precache path. This does not clear IndexedDB or modify personal state.
+Review added explicit negative regressions proving that the compatibility path rejects both a wrong bearer token and a correct bearer token from the wrong browser origin.
 
 ## Validation
-PR #14 implementation head `c029d7891add50df815c54036214b078ece1403b` passed CI #309: Cloudflare bundle PASS with 35 compiled modules, **207/207 tests**, D1 **5/5**, Wrangler-local PASS, browser/responsive **32/32**, provider/security **8/8**, folded/unfolded PASS and zero console/page errors.
+Initial PR #15 head `c3aef8cfcfa068f87a9ee1d52be57d843f9f0132` passed CI #317: Cloudflare bundle PASS with 35 compiled modules, **208/208 tests**, D1 **5/5**, Wrangler-local PASS, browser/responsive **32/32**, provider/security **8/8**, folded/unfolded PASS and zero console/page errors.
 
-A final complete exact-head CI/browser cycle is required after continuity synchronization before merge readiness.
+The reviewed regression-hardening head `7fd7d05796122d7712d95a1521245fed75cbcd78` passed the verify job; full exact-final-head CI/browser validation is required again after continuity synchronization before merge readiness.
 
 ## Production safety boundary
-- PR #14 does not deploy production.
-- The deployment authorization used for PR #13 is consumed.
-- Deploying PR #14 after merge requires a fresh explicit user authorization.
+- PR #15 does not deploy production.
+- Previous deployment authorization is consumed.
+- Deploying PR #15 after merge requires a fresh explicit user authorization.
 - No real personal browser state has been migrated to D1.
 - No live TMDB/Trakt/availability credentials or provider calls are part of this fix.
 - Automated tests remain synthetic-only and never access production Worker/D1 or BANDMARKR.
 
 ## Next sequence toward V1
-1. Finish PR #14 exact-head review/test/fix and merge only with explicit approval.
-2. Separately authorize and deploy merged PR #14.
-3. Hard-refresh once and retry secure-storage activation. If session verification and guarded migration succeed, D1 becomes durable authority and IndexedDB remains the browser cache.
+1. Finish PR #15 exact-head review/test/fix and merge only with explicit approval.
+2. Separately authorize and deploy merged PR #15.
+3. Retry secure-storage activation. If session verification and guarded migration succeed, D1 becomes durable authority and IndexedDB remains the browser cache.
 4. Move directly into real TMDB metadata/search.
 5. Build Trakt OAuth/history ingestion and reconciliation.
 6. Add real Swedish streaming availability, alert transitions and Discover ranking.
