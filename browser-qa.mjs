@@ -76,13 +76,48 @@ async function main() {
     await page.waitForTimeout(150);
     const customServiceSafe = await page.evaluate((name) => {
       const bodyText = document.querySelector('#settings-body')?.textContent ?? '';
-      return bodyText.includes(name) && !document.querySelector('#settings-body img[src="x"]') && !(window).__streamarkrXss;
+      return bodyText.includes(name) && !document.querySelector('#settings-body img[src="x"]') && !window.__streamarkrXss;
     }, hostileServiceName);
     record('Settings escapes custom streaming-service text', customServiceSafe);
+
+    const customSecurityTarget = await page.evaluate(async (name) => {
+      const mod = await import('/dist/lib/repo.js');
+      const services = await mod.allServices();
+      const custom = services.find((service) => service.displayName === name);
+      const [titles, events] = await Promise.all([mod.allTitles(), mod.allEvents()]);
+      const seriesEvent = events.find((event) => titles.find((title) => title.id === event.titleId)?.mediaType === 'series');
+      if (!custom || !seriesEvent) return null;
+      await mod.setWatchedService(seriesEvent.titleId, custom.serviceKey);
+      return { titleId: seriesEvent.titleId, serviceKey: custom.serviceKey };
+    }, hostileServiceName);
+
+    if (customSecurityTarget) {
+      await page.goto(BASE + '/#/title/' + customSecurityTarget.titleId);
+      await page.waitForTimeout(200);
+      const detailCustomServiceSafe = await page.evaluate((name) => {
+        const text = document.querySelector('#watched-service-select')?.textContent ?? '';
+        return text.includes(name) && !document.querySelector('#tab-body img[src="x"]') && !window.__streamarkrXss;
+      }, hostileServiceName);
+      record('Detail escapes custom streaming-service text', detailCustomServiceSafe);
+
+      await page.goto(BASE + '/#/history');
+      await page.waitForTimeout(200);
+      const historyCustomServiceSafe = await page.evaluate((name) => {
+        const text = document.querySelector('#app')?.textContent ?? '';
+        return text.includes(name) && !document.querySelector('#app img[src="x"]') && !window.__streamarkrXss;
+      }, hostileServiceName);
+      record('History escapes custom streaming-service text', historyCustomServiceSafe);
+    } else {
+      record('Detail escapes custom streaming-service text', false, 'no synthetic series history target');
+      record('History escapes custom streaming-service text', false, 'no synthetic series history target');
+    }
+
     await page.evaluate(async () => {
       const mod = await import('/dist/lib/repo.js');
       await mod.resetToFixtures();
     });
+    await page.goto(BASE + '/#/settings');
+    await page.waitForTimeout(100);
     await page.click('[data-tab="connections"]');
     await page.waitForTimeout(100);
     record('Settings Connections tab switches', await page.getByText('Sync now').isVisible());
