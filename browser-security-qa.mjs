@@ -37,14 +37,14 @@ try {
     await db.put('titles', { ...title, title: hostileTitle });
     const meta = metadata.find((item) => item.titleId === title.id);
     if (meta) await db.put('title_metadata', { ...meta, overview: hostileOverview, genres: ['<img src=x onerror="window.__providerGenreXss=1"> Genre'] });
-    const season = seasons.find((item) => item.titleId === title.id);
+    const season = seasons.find((item) => item.titleId === title.id && episodes.some((episode) => episode.titleId === title.id && episode.seasonNumber === item.seasonNumber));
     if (season) await db.put('seasons', { ...season, name: hostileSeason });
     const episode = episodes.find((item) => item.titleId === title.id && (!season || item.seasonNumber === season.seasonNumber));
     if (episode) await db.put('episodes', { ...episode, name: hostileEpisode, overview: hostileOverview });
     const availabilityRow = availability.find((item) => item.titleId === title.id);
     if (availabilityRow) await db.put('availability', { ...availabilityRow, deepLink: 'javascript:window.__providerLinkXss=1' });
 
-    return { id: title.id, hostileTitle, hostileOverview, hostileSeason, hostileEpisode };
+    return { id: title.id, seasonNumber: season?.seasonNumber ?? null, hostileTitle, hostileOverview, hostileSeason, hostileEpisode };
   });
 
   if (!target) {
@@ -61,9 +61,14 @@ try {
     record('Detail escapes provider title, overview and genre markup', overviewSafe);
 
     const episodesTab = page.locator('[data-tab="episodes"]');
-    if (await episodesTab.count()) {
+    if (await episodesTab.count() && target.seasonNumber !== null) {
       await episodesTab.click();
       await page.waitForTimeout(100);
+      const seasonButton = page.locator(`[data-season="${target.seasonNumber}"]`);
+      if (await seasonButton.count()) {
+        await seasonButton.click();
+        await page.waitForTimeout(100);
+      }
       const episodeSafe = await page.evaluate(({ hostileSeason, hostileEpisode, hostileOverview }) => {
         const text = document.querySelector('#tab-body')?.textContent ?? '';
         return text.includes(hostileSeason) && text.includes(hostileEpisode) && text.includes(hostileOverview) &&
