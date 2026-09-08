@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { assertDedicatedD1Info, assertRequiredSecretNames } from '../scripts/deploy-cloudflare.mjs';
+import { assertDedicatedD1Info, assertRequiredSecretNames, assertWorkerAssetBundle } from '../scripts/deploy-cloudflare.mjs';
+import { prepareWorkerAssets } from '../scripts/prepare-worker-assets.mjs';
 import {
   buildRemoteConfig,
   prepareCloudflareDeploy,
@@ -44,6 +45,11 @@ test('builds only the dedicated Streamarkr Worker and D1 binding', () => {
   assert.equal(config.name, 'streamarkr-api');
   assert.equal(config.keep_vars, true);
   assert.deepEqual(config.secrets.required, ['DEVICE_ACCESS_TOKEN']);
+  assert.deepEqual(config.assets, {
+    directory: '../site',
+    not_found_handling: 'single-page-application',
+    run_worker_first: ['/api/*']
+  });
   assert.deepEqual(config.d1_databases, [{
     binding: 'DB',
     database_name: 'streamarkr',
@@ -85,7 +91,10 @@ test('committed Wrangler config is account-neutral and deployment is guarded', a
   assert.equal(Object.hasOwn(committedConfig, 'd1_databases'), false);
   assert.match(gitignore, /^\.wrangler\/$/m);
   assert.equal(packageJson.scripts['deploy:cloudflare'], 'node scripts/deploy-cloudflare.mjs');
+  assert.equal(packageJson.scripts['prepare:worker-assets'], 'node scripts/prepare-worker-assets.mjs');
+  assert.equal(packageJson.scripts['build:cloudflare'], 'npm run build && npm run build:worker && npm run prepare:worker-assets');
 
+  assert.match(deployScript, /assertWorkerAssetBundle/);
   assert.match(deployScript, /'d1', 'info', EXPECTED_D1_NAME/);
   assert.match(deployScript, /ACCOUNT_NEUTRAL_CONFIG_PATH/);
   assert.match(deployScript, /assertDedicatedD1Info/);
@@ -110,8 +119,27 @@ test('writes generated deployment configuration outside tracked source', async (
     const redirect = JSON.parse(await readFile(redirectPath, 'utf8'));
 
     assert.equal(generated.name, 'streamarkr-api');
+    assert.deepEqual(generated.assets, {
+      directory: '../site',
+      not_found_handling: 'single-page-application',
+      run_worker_first: ['/api/*']
+    });
     assert.equal(generated.d1_databases[0].database_id, SYNTHETIC_D1_ID);
     assert.deepEqual(redirect, { configPath: './wrangler.generated.jsonc' });
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+
+test('stages only deployable PWA assets for same-origin Worker hosting', async () => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), 'streamarkr-worker-assets-'));
+  try {
+    await prepareWorkerAssets({ projectRoot: PROJECT_ROOT, outputDir });
+    await assertWorkerAssetBundle(outputDir);
+    await stat(path.join(outputDir, 'public', 'icons', 'icon-192.png'));
+    await assert.rejects(readFile(path.join(outputDir, 'package.json'), 'utf8'), { code: 'ENOENT' });
+    await assert.rejects(readFile(path.join(outputDir, 'docs', 'STREAMARKR_STATE.md'), 'utf8'), { code: 'ENOENT' });
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }

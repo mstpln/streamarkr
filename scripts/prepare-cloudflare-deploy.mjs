@@ -27,6 +27,11 @@ export function buildRemoteConfig(databaseId) {
     secrets: {
       required: ['DEVICE_ACCESS_TOKEN']
     },
+    assets: {
+      directory: '../site',
+      not_found_handling: 'single-page-application',
+      run_worker_first: ['/api/*']
+    },
     d1_databases: [
       {
         binding: 'DB',

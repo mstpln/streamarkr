@@ -1,13 +1,13 @@
 {
   "name": "streamarkr",
   "private": true,
-  "version": "0.17.0",
+  "version": "0.18.0",
   "type": "module",
   "description": "Streamarkr personal movie and TV tracking PWA.",
   "scripts": {
     "build": "tsc -p tsconfig.json && node generate-sw-manifest.mjs",
     "build:worker": "rm -rf worker-dist && tsc -p tsconfig.worker.json",
-    "build:cloudflare": "npm run build:worker",
+    "build:cloudflare": "npm run build && npm run build:worker && npm run prepare:worker-assets",
     "prepare:cloudflare": "node scripts/prepare-cloudflare-deploy.mjs",
     "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs",
     "start": "npm run build && node server.mjs",
@@ -15,7 +15,8 @@
     "test": "rm -rf test-dist && tsc -p tsconfig.tests.json && node --test test-dist/tests/*.test.js tests/cloudflare-deploy-config.test.mjs",
     "test:d1": "node --experimental-sqlite --test tests/d1-schema.test.mjs",
     "test:d1:wrangler": "node scripts/validate-wrangler-d1.mjs",
-    "qa:browser": "node browser-qa.mjs && node browser-security-qa.mjs"
+    "qa:browser": "node browser-qa.mjs && node browser-security-qa.mjs",
+    "prepare:worker-assets": "node scripts/prepare-worker-assets.mjs"
   },
   "engines": {
     "node": ">=22"
