@@ -7,6 +7,7 @@ const PORT = 8791;
 const BASE_URL = `http://localhost:${PORT}`;
 const QA_DIR = path.resolve('.wrangler', 'auth-qa');
 const CONFIG_PATH = path.join(QA_DIR, 'wrangler.jsonc');
+const WRANGLER_BIN = path.resolve('node_modules', '.bin', process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler');
 const TOKEN = 'synthetic-browser-auth-qa-token';
 
 function wait(ms) {
@@ -25,6 +26,17 @@ async function waitForServer(processRef) {
     await wait(250);
   }
   throw new Error('Timed out waiting for the local same-origin Worker.');
+}
+
+async function stopProcess(processRef) {
+  if (processRef.exitCode !== null) return;
+  const exited = new Promise((resolve) => processRef.once('exit', resolve));
+  processRef.kill('SIGTERM');
+  const stopped = await Promise.race([exited.then(() => true), wait(1500).then(() => false)]);
+  if (!stopped && processRef.exitCode === null) {
+    processRef.kill('SIGKILL');
+    await Promise.race([exited, wait(1500)]);
+  }
 }
 
 async function main() {
@@ -48,8 +60,8 @@ async function main() {
   }, null, 2)}\n`);
 
   const wrangler = spawn(
-    process.platform === 'win32' ? 'npx.cmd' : 'npx',
-    ['wrangler', 'dev', '--config', CONFIG_PATH, '--local', '--port', String(PORT)],
+    WRANGLER_BIN,
+    ['dev', '--config', CONFIG_PATH, '--local', '--port', String(PORT)],
     { stdio: ['ignore', 'pipe', 'pipe'] }
   );
   let logs = '';
@@ -117,8 +129,7 @@ async function main() {
     console.log('4/4 same-origin Worker authentication topology checks passed.');
   } finally {
     if (browser) await browser.close();
-    if (wrangler.exitCode === null) wrangler.kill('SIGTERM');
-    await Promise.race([new Promise((resolve) => wrangler.once('exit', resolve)), wait(2000)]);
+    await stopProcess(wrangler);
     if (process.exitCode) process.stderr.write(logs);
   }
 }
