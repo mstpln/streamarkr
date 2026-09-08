@@ -3,6 +3,10 @@ import { serviceLogoHtml } from '../logos.js';
 
 type SettingsTab = 'preferences' | 'connections' | 'data';
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 /** Settings always lands on Preferences when entered from navigation. Internal tab changes pass
  * the desired tab explicitly so rerenders do not bounce the user back unexpectedly. */
 export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferences') {
@@ -32,8 +36,8 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         <div style="font-weight:700;margin-bottom:8px;">My streaming services</div>
         ${services.map((service) => `
           <div class="card-row">
-            <span style="display:inline-flex;align-items:center;gap:8px;">${serviceLogoHtml(service.serviceKey, service.displayName, 22)}${service.displayName}</span>
-            <button class="toggle ${service.userSelected ? 'on' : ''}" data-svc="${service.serviceKey}" role="switch" aria-checked="${service.userSelected}" aria-label="${service.displayName}"></button>
+            <span style="display:inline-flex;align-items:center;gap:8px;">${serviceLogoHtml(service.serviceKey, service.displayName, 22)}${escapeHtml(service.displayName)}</span>
+            <button class="toggle ${service.userSelected ? 'on' : ''}" data-svc="${escapeHtml(service.serviceKey)}" role="switch" aria-checked="${service.userSelected}" aria-label="${escapeHtml(service.displayName)}"></button>
           </div>
         `).join('')}
         <div class="card-row">
