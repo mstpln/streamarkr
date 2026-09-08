@@ -22,11 +22,11 @@ class Statement implements D1PreparedStatement {
       return displayName ? { display_name: displayName } as T : null;
     }
     if (this.sql.includes('SELECT user_selected FROM services')) {
-    const serviceKey = String(this.values[0]);
-    if (!this.db.knownServices.has(serviceKey)) return null;
-    return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
-  }
-  if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
+      const serviceKey = String(this.values[0]);
+      if (!this.db.knownServices.has(serviceKey)) return null;
+      return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
+    }
+    if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
     if (this.sql.includes('SELECT season_number FROM seasons') && this.db.knownSeasons.has(`${this.values[0]}:${this.values[1]}`)) {
       return { season_number: Number(this.values[1]) } as T;
     }
@@ -67,7 +67,7 @@ class FakeDb implements D1Database {
     this.batches.push(batch);
     return statements.map(() => ({ success: true, results: [] }));
   }
-  async exec(): Promise<{ count: number; duration: number }> { this.touched += 1; return { count: 0, duration: 0 }; }
+  async exec(): Promise<{ count: number; duration: number }> { this.db.touched += 1; return { count: 0, duration: 0 }; }
 }
 function env(db = new FakeDb(), overrides: Partial<Env> = {}): Env {
   return { DB: db, DEVICE_ACCESS_TOKEN: 'synthetic-test-token', APP_ORIGIN: 'https://app.example', APP_ENV: 'qa', ...overrides };
