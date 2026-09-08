@@ -51,15 +51,15 @@ test('bootstrap sends the device token only on the one exchange request and logo
 });
 
 test('local-state migration uses the browser session cookie and never re-sends the device token', async () => {
-  let seen: { url: string; auth: string | null; credentials: RequestCredentials | undefined; method: string; body: string | null } | null = null;
+  const seen: Array<{ url: string; auth: string | null; credentials: RequestCredentials | undefined; method: string; body: string | null }> = [];
   const client = new WorkerBackendClient('https://worker.example', null, async (input, init) => {
-    seen = {
+    seen.push({
       url: String(input),
       auth: new Headers(init?.headers).get('authorization'),
       credentials: init?.credentials,
       method: init?.method ?? 'GET',
       body: typeof init?.body === 'string' ? init.body : null
-    };
+    });
     return jsonResponse({ ok: true, alreadyApplied: false });
   });
   const bundle = {
@@ -74,9 +74,11 @@ test('local-state migration uses the browser session cookie and never re-sends t
 
   await client.importLocalState(bundle);
 
-  assert.equal(seen?.url, 'https://worker.example/api/migration/local-state');
-  assert.equal(seen?.auth, null);
-  assert.equal(seen?.credentials, 'include');
-  assert.equal(seen?.method, 'POST');
-  assert.equal(seen?.body, JSON.stringify(bundle));
+  assert.deepEqual(seen, [{
+    url: 'https://worker.example/api/migration/local-state',
+    auth: null,
+    credentials: 'include',
+    method: 'POST',
+    body: JSON.stringify(bundle)
+  }]);
 });
