@@ -3,6 +3,7 @@ import {
   browserSessionCookie,
   clearBrowserSessionCookie,
   createBrowserSession,
+  isDeviceTokenAuthorized,
   isDeviceTokenValueAuthorized
 } from './auth.js';
 import {
@@ -152,9 +153,9 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (!matchesAppOrigin(request, url, env)) return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
     const body = await bodyJson<{ deviceAccessToken?: unknown }>(request);
     const suppliedToken = body && typeof body.deviceAccessToken === 'string' ? body.deviceAccessToken : null;
-    if (!(await isDeviceTokenValueAuthorized(suppliedToken, env.DEVICE_ACCESS_TOKEN))) {
-      return json({ error: 'unauthorized' }, 401, responseHeaders);
-    }
+    const authorized = await isDeviceTokenValueAuthorized(suppliedToken, env.DEVICE_ACCESS_TOKEN)
+      || await isDeviceTokenAuthorized(request, env.DEVICE_ACCESS_TOKEN);
+    if (!authorized) return json({ error: 'unauthorized' }, 401, responseHeaders);
     try {
       const session = await createBrowserSession(env.DEVICE_ACCESS_TOKEN);
       return json(

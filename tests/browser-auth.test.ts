@@ -43,6 +43,28 @@ test('browser bootstrap exchanges the device token for an HttpOnly signed sessio
   assert.match(payload.expiresAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
+test('browser bootstrap remains compatible with an older cached client using Authorization', async () => {
+  const response = await handleRequest(new Request('https://worker.example/api/auth/session', {
+    method: 'POST',
+    headers: { origin: 'https://app.example', authorization: 'Bearer synthetic-device-token' }
+  }), env());
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('set-cookie') ?? '', /^__Host-streamarkr_session=/);
+
+  const badToken = await handleRequest(new Request('https://worker.example/api/auth/session', {
+    method: 'POST',
+    headers: { origin: 'https://app.example', authorization: 'Bearer wrong-token' }
+  }), env());
+  assert.equal(badToken.status, 401);
+
+  const wrongOrigin = await handleRequest(new Request('https://worker.example/api/auth/session', {
+    method: 'POST',
+    headers: { origin: 'https://evil.example', authorization: 'Bearer synthetic-device-token' }
+  }), env());
+  assert.equal(wrongOrigin.status, 403);
+  assert.equal((await wrongOrigin.json() as { error: string }).error, 'origin_not_allowed');
+});
+
 test('browser bootstrap tolerates copied surrounding whitespace without changing the configured secret', async () => {
   const response = await handleRequest(bootstrapRequest('https://app.example', '  synthetic-device-token\n'), env());
   assert.equal(response.status, 200);
