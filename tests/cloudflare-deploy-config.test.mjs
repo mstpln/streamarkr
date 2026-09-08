@@ -23,6 +23,16 @@ test('package manifest and lockfile versions stay synchronized', async () => {
   assert.equal(packageLock.packages?.['']?.version, packageJson.version);
 });
 
+test('machine-readable build state stays valid and synchronized with the app/cache version', async () => {
+  const packageJson = JSON.parse(await readFile(path.join(PROJECT_ROOT, 'package.json'), 'utf8'));
+  const buildState = JSON.parse(await readFile(path.join(PROJECT_ROOT, 'docs', 'STREAMARKR_BUILD_STATE.json'), 'utf8'));
+
+  assert.equal(buildState.appVersion, packageJson.version);
+  assert.equal(buildState.cacheVersion, `streamarkr-v${packageJson.version}`);
+  assert.equal(buildState.schemaVersion, 1);
+  assert.equal(buildState.repository?.fullName, 'mstpln/streamarkr');
+});
+
 test('rejects missing, malformed, and placeholder D1 identifiers', () => {
   assert.throws(() => validateD1DatabaseId(undefined), /STREAMARKR_D1_DATABASE_ID/);
   assert.throws(() => validateD1DatabaseId('not-a-uuid'), /STREAMARKR_D1_DATABASE_ID/);
