@@ -11,7 +11,11 @@ class Statement implements D1PreparedStatement {
   async first<T>(): Promise<T | null> {
     this.db.reads.push({ sql: this.sql, values: this.values });
     if (this.sql.includes('app_meta') && this.sql.includes('WHERE key = ?')) {
-      return this.db.migrationId ? { value: this.db.migrationId } as T : null;
+      const key = String(this.values[0] ?? '');
+      const value = key === 'local_state_migration_id' ? this.db.migrationId
+        : key === 'local_state_migration_hash' ? this.db.migrationHash
+        : null;
+      return value ? { value } as T : null;
     }
     if (this.sql.includes('COUNT(*) AS count')) {
       const table = this.sql.match(/FROM\s+([a-z_]+)/i)?.[1] ?? '';
@@ -25,6 +29,7 @@ class Statement implements D1PreparedStatement {
 
 class RecordingDb implements D1Database {
   migrationId: string | null = null;
+  migrationHash: string | null = null;
   nonEmptyTables = new Set<string>();
   reads: { sql: string; values: D1Primitive[] }[] = [];
   batches: { sql: string; values: D1Primitive[] }[][] = [];
@@ -35,6 +40,14 @@ class RecordingDb implements D1Database {
       return { sql: s.sql, values: s.values };
     });
     this.batches.push(rows);
+    for (const row of rows) {
+      if (row.sql.includes('INSERT INTO app_meta')) {
+        const key = String(row.values[0] ?? '');
+        const value = String(row.values[1] ?? '');
+        if (key === 'local_state_migration_id') this.migrationId = value;
+        if (key === 'local_state_migration_hash') this.migrationHash = value;
+      }
+    }
     return rows.map(() => ({ success: true, results: [] }));
   }
   async exec(): Promise<{ count: number; duration: number }> { return { count: 0, duration: 0 }; }
@@ -66,6 +79,7 @@ test('pristine backend migration writes user/cache state and marker in one batch
   assert.ok(batch.some((entry) => /INSERT INTO titles/.test(entry.sql)));
   assert.ok(batch.some((entry) => /INSERT INTO library_items/.test(entry.sql)));
   assert.ok(batch.some((entry) => /INSERT INTO ratings/.test(entry.sql)));
+  assert.ok(batch.some((entry) => entry.values[0] === 'local_state_migration_hash'));
   assert.match(batch.at(-1)?.sql ?? '', /INSERT INTO app_meta/);
   assert.deepEqual(batch.at(-1)?.values, ['local_state_migration_id', bundle().migrationId]);
 });
@@ -82,12 +96,40 @@ test('provider-owned sync timestamps are not promoted from browser cache into du
   assert.equal(db.batches[0].some((entry) => /INSERT INTO sync_state/.test(entry.sql)), false);
 });
 
-test('same migration id is retry-idempotent without another write batch', async () => {
+test('same migration id and unchanged durable state is retry-idempotent without another write batch', async () => {
   const db = new RecordingDb();
-  db.migrationId = bundle().migrationId;
-  const result = await importLocalState(db, bundle());
+  const payload = bundle();
+  await importLocalState(db, payload);
+  const result = await importLocalState(db, payload);
   assert.deepEqual(result, { alreadyApplied: true });
-  assert.equal(db.batches.length, 0);
+  assert.equal(db.batches.length, 1);
+});
+
+test('same migration id safely reconciles local changes made after an uncertain first response', async () => {
+  const db = new RecordingDb();
+  const first = bundle();
+  await importLocalState(db, first);
+
+  const changed = bundle();
+  changed.snapshot.ratings = [{ ...changed.snapshot.ratings[0], stars: 5, ratedAt: '2026-09-08T09:20:00.000Z' }];
+  const result = await importLocalState(db, changed);
+
+  assert.deepEqual(result, { alreadyApplied: false });
+  assert.equal(db.batches.length, 2);
+  assert.ok(db.batches[1].some((entry) => /DELETE FROM ratings/.test(entry.sql)));
+  assert.ok(db.batches[1].some((entry) => /INSERT INTO ratings/.test(entry.sql) && entry.values[1] === 5));
+});
+
+test('changed same-id retry fails closed if backend durable user state changed independently', async () => {
+  const db = new RecordingDb();
+  const first = bundle();
+  await importLocalState(db, first);
+  db.migrationHash = '0'.repeat(64);
+
+  const changed = bundle();
+  changed.snapshot.ratings = [{ ...changed.snapshot.ratings[0], stars: 5 }];
+  await assert.rejects(() => importLocalState(db, changed), /durable user state changed/);
+  assert.equal(db.batches.length, 1);
 });
 
 test('different prior migration id fails closed', async () => {

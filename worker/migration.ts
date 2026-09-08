@@ -1,7 +1,9 @@
 import type { BackendMigrationBundle, BackendSnapshot } from '../src/lib/backend-contract.js';
+import { loadSnapshot } from './repository.js';
 import type { D1Database, D1PreparedStatement, D1Primitive } from './types.js';
 
 const MIGRATION_META_KEY = 'local_state_migration_id';
+const MIGRATION_HASH_META_KEY = 'local_state_migration_hash';
 const BUILT_IN_SERVICES = [
   'netflix', 'hbo-max', 'disney-plus', 'prime-video', 'skyshowtime', 'apple-tv', 'viaplay', 'tv4-play'
 ] as const;
@@ -181,21 +183,76 @@ function statement(db: D1Database, sql: string, values: D1Primitive[]): D1Prepar
   return db.prepare(sql).bind(...values);
 }
 
+function stableRows<T>(rows: T[], key: (row: T) => string): T[] {
+  return [...rows].sort((a, b) => key(a).localeCompare(key(b)));
+}
+
+async function migrationFingerprint(snapshot: BackendSnapshot): Promise<string> {
+  const durableUserState = {
+    library: stableRows(snapshot.library, (row) => row.titleId),
+    ratings: stableRows(snapshot.ratings, (row) => row.titleId),
+    watchedService: stableRows(snapshot.watchedService, (row) => row.titleId),
+    watchEvents: stableRows(snapshot.watchEvents, (row) => `${row.providerEventId}\u0000${row.id}`),
+    watchOverrides: stableRows(snapshot.watchOverrides, (row) => `${row.scopeType}\u0000${row.titleId}\u0000${row.seasonNumber ?? -1}\u0000${row.episodeNumber ?? -1}\u0000${row.id}`),
+    services: stableRows(snapshot.services, (row) => row.serviceKey)
+      .map(({ serviceKey, displayName, logoGlyph, userSelected, availabilitySource }) => ({ serviceKey, displayName, logoGlyph, userSelected, availabilitySource })),
+    alerts: stableRows(snapshot.alerts, (row) => row.id)
+      .map(({ id, titleId, alertType, message, eventDate, createdAt, seenAt, dedupeKey }) => ({ id, titleId, alertType, message, eventDate, createdAt, seenAt, dedupeKey }))
+  };
+  const bytes = new TextEncoder().encode(JSON.stringify(durableUserState));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+async function assertRetryReplacementSafe(db: D1Database): Promise<void> {
+  for (const table of ['sync_state', 'provider_connections', 'recommendation_cache']) {
+    if (await firstCount(db, `SELECT COUNT(*) AS count FROM ${table}`) !== 0) {
+      throw new MigrationConflictError(`Backend changed after migration started: ${table} contains rows`);
+    }
+  }
+}
+
 export async function importLocalState(db: D1Database, bundle: BackendMigrationBundle): Promise<{ alreadyApplied: boolean }> {
   if (!object(bundle) || !text(bundle.migrationId, 80) || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(bundle.migrationId)) {
     throw new InvalidMigrationPayloadError('Invalid migration id');
   }
   assertSnapshot(bundle.snapshot);
 
-  const existing = await db.prepare('SELECT value FROM app_meta WHERE key = ?').bind(MIGRATION_META_KEY).first<{ value: string }>();
+  const fingerprint = await migrationFingerprint(bundle.snapshot);
+  const [existing, existingHash] = await Promise.all([
+    db.prepare('SELECT value FROM app_meta WHERE key = ?').bind(MIGRATION_META_KEY).first<{ value: string }>(),
+    db.prepare('SELECT value FROM app_meta WHERE key = ?').bind(MIGRATION_HASH_META_KEY).first<{ value: string }>()
+  ]);
+  let replaceExisting = false;
   if (existing?.value) {
-    if (existing.value === bundle.migrationId) return { alreadyApplied: true };
-    throw new MigrationConflictError('Backend has already been activated by another local-state migration');
+    if (existing.value !== bundle.migrationId) {
+      throw new MigrationConflictError('Backend has already been activated by another local-state migration');
+    }
+    if (!existingHash?.value) {
+      throw new MigrationConflictError('Existing migration marker cannot be safely reconciled because its fingerprint is missing');
+    }
+    const currentFingerprint = await migrationFingerprint(await loadSnapshot(db));
+    if (currentFingerprint !== existingHash.value) {
+      throw new MigrationConflictError('Backend durable user state changed after migration started');
+    }
+    if (existingHash.value === fingerprint) return { alreadyApplied: true };
+    await assertRetryReplacementSafe(db);
+    replaceExisting = true;
+  } else {
+    await assertPristineBackend(db);
   }
 
-  await assertPristineBackend(db);
   const s = bundle.snapshot;
   const statements: D1PreparedStatement[] = [];
+  if (replaceExisting) {
+    for (const table of [
+      'alerts', 'availability', 'watched_service', 'ratings', 'library_items', 'watch_overrides',
+      'watch_events', 'episodes', 'seasons', 'title_metadata', 'titles'
+    ]) {
+      statements.push(statement(db, `DELETE FROM ${table}`, []));
+    }
+    statements.push(statement(db, 'DELETE FROM services', []));
+  }
 
   for (const service of s.services) {
     statements.push(statement(db, `INSERT INTO services
@@ -288,7 +345,10 @@ export async function importLocalState(db: D1Database, bundle: BackendMigrationB
   // Provider sync cursors/timestamps are intentionally not migrated. They are provider-owned state
   // and must be recreated by the real backend integrations rather than promoted from a local or
   // synthetic browser cache during user-state takeover.
-  statements.push(statement(db, 'INSERT INTO app_meta (key, value) VALUES (?, ?)', [MIGRATION_META_KEY, bundle.migrationId]));
+  statements.push(statement(db, `INSERT INTO app_meta (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value=excluded.value`, [MIGRATION_HASH_META_KEY, fingerprint]));
+  statements.push(statement(db, `INSERT INTO app_meta (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value=excluded.value`, [MIGRATION_META_KEY, bundle.migrationId]));
 
   const results = await db.batch(statements);
   if (results.length !== statements.length || results.some((result) => !result.success)) {
