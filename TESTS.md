@@ -1,6 +1,6 @@
 # Streamarkr — Tests
 
-Updated: 2026-09-07.
+Updated: 2026-09-08.
 
 ## Test policy
 All automated Streamarkr QA is deterministic and synthetic-only. It must never call live Trakt/TMDB/Streaming Availability APIs, production Streamarkr data, the real Streamarkr Cloudflare Worker/D1, or any BANDMARKR resource. No API keys, OAuth tokens, Cloudflare credentials, real D1 identifiers, or personal viewing data belong in test fixtures.
@@ -61,16 +61,30 @@ PR #9 remains synthetic-only and does not activate or contact the production Wor
 - `WorkerBackendClient` request methods, JSON bodies, bearer-header behavior and route encoding for the expanded user-state surface;
 - watched-service set/clear requires canonical titles and known services;
 - movie and episode watched/unwatched overrides persist through D1 repository methods;
-- API override routes reject movie/series scope mismatches before touching D1;
-- episode overrides reject unknown episodes;
-- season number 0 is accepted for series specials;
-- season bulk corrections query only server-known released episodes at action date and materialize episode-level overrides in a single D1 batch;
+- both HTTP routing and the D1 repository enforce movie/series override scope;
+- episode overrides reject unknown episodes and season bulk corrections reject unknown seasons;
+- season number 0 remains valid for series specials;
+- season bulk corrections query only server-known released episodes at action date and materialize episode-level overrides in one D1 batch;
 - future episodes therefore cannot inherit an old season bulk action;
 - service-selection mutations require an existing service;
 - custom services are stored as selected `unsupported` services and normalize punctuation/whitespace to route-safe keys;
+- Settings escapes custom service names/keys before inserting them into HTML/attributes, with a hostile synthetic custom-service browser regression;
 - existing auth fail-closed, exact-origin CORS, sanitized backend errors, canonical Library/rating preconditions and alert payload bounds remain covered.
 
-Initial implementation head passed CI #125 before the review-hardening fixes. Final exact-head `npm ci`, PWA build, Worker type-check, complete test suite, D1 5/5, Wrangler-local validation and browser/responsive QA are required again after the final code/documentation head is fixed.
+The latest implementation/security-review head `a9cf1e0865f9b08af7931c3f10e02072ae90de98` passed CI #147:
+- `npm ci --no-audit --no-fund`: PASS;
+- PWA build: PASS;
+- Worker build/type-check: PASS;
+- **155/155 tests across 26 suites**;
+- deterministic D1 semantics **5/5**;
+- pinned Wrangler **4.129.0** local-D1 validation PASS (`schema_version=1`, eight services, `titles`, migration history);
+- browser/responsive QA **28/28**;
+- folded 344×792 PASS;
+- unfolded 873×1000 PASS;
+- hostile custom-service rendering regression PASS;
+- zero smoke-pass console/page errors.
+
+The merge gate remains unchanged: the final documentation-inclusive PR head must pass the complete normal CI/browser suite without further code changes before PR #9 is considered merge-ready.
 
 ## Manual Cloudflare production validation — completed for v0.13.0
 With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed reviewed main commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed successful build/deploy, healthy `/api/health`, D1 schema version 1, eight services and all expected application tables plus `d1_migrations`.
