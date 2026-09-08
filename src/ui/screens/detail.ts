@@ -142,7 +142,11 @@ function renderTab(
         <span>Where I watched it</span>
         <select id="watched-service-select" aria-label="Where I watched it">
           <option value="">Not set</option>
-          ${services.filter((service) => service.userSelected).map((service) => `<option value="${escapeHtml(service.serviceKey)}" ${watchedService?.serviceKey === service.serviceKey ? 'selected' : ''}>${escapeHtml(service.displayName)}</option>`).join('')}
+          ${services.filter((service) => service.userSelected || watchedService?.serviceKey === service.serviceKey).map((service) => {
+  const historicalOnly = watchedService?.serviceKey === service.serviceKey && !service.userSelected;
+  return `<option value="${escapeHtml(service.serviceKey)}" ${watchedService?.serviceKey === service.serviceKey ? 'selected' : ''} ${historicalOnly ? 'disabled' : ''}>${escapeHtml(service.displayName)}${historicalOnly ? ' · Not currently selected' : ''}</option>`;
+}).join('')}
+${watchedService && !services.some((service) => service.serviceKey === watchedService.serviceKey) ? `<option value="${escapeHtml(watchedService.serviceKey)}" selected disabled>${escapeHtml(watchedService.serviceKey)} · Historical service</option>` : ''}
         </select>
       </div>
     `;

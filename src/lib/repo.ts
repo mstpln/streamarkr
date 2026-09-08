@@ -252,6 +252,9 @@ export async function setWatchedService(titleId: string, serviceKey: string | nu
     await db.del('watched_service', titleId);
     return;
   }
+  const service = await db.get<ServiceDef>('services', serviceKey);
+  if (!service) throw new Error(`Unknown streaming service: ${serviceKey}`);
+  if (!service.userSelected) throw new Error(`Streaming service is not selected: ${serviceKey}`);
   await db.put('watched_service', { titleId, serviceKey, changedAt: new Date().toISOString() } satisfies WatchedService);
 }
 

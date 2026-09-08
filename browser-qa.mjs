@@ -88,6 +88,7 @@ async function main() {
       const seriesEvent = events.find((event) => titles.find((title) => title.id === event.titleId)?.mediaType === 'series');
       if (!custom || !seriesEvent) return null;
       await mod.setWatchedService(seriesEvent.titleId, custom.serviceKey);
+      await mod.setServiceSelected(custom.serviceKey, false);
       return { titleId: seriesEvent.titleId, serviceKey: custom.serviceKey };
     }, hostileServiceName);
 
@@ -98,7 +99,7 @@ async function main() {
         const text = document.querySelector('#watched-service-select')?.textContent ?? '';
         return text.includes(name) && !document.querySelector('#tab-body img[src="x"]') && !window.__streamarkrXss;
       }, hostileServiceName);
-      record('Detail escapes custom streaming-service text', detailCustomServiceSafe);
+      record('Detail preserves and escapes a deselected historical streaming service', detailCustomServiceSafe);
 
       await page.goto(BASE + '/#/history');
       await page.waitForTimeout(200);
