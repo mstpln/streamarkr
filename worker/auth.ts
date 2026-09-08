@@ -65,11 +65,15 @@ function sessionPayload(expiresAt: number, nonce: string): string {
   return `${SESSION_CONTEXT}.${expiresAt}.${nonce}`;
 }
 
-export async function isDeviceTokenAuthorized(request: Request, expectedToken: string): Promise<boolean> {
-  const supplied = bearerToken(request);
+export async function isDeviceTokenValueAuthorized(suppliedToken: string | null, expectedToken: string): Promise<boolean> {
+  const supplied = suppliedToken?.trim() || null;
   if (!supplied || !expectedToken) return false;
   const [suppliedDigest, expectedDigest] = await Promise.all([digest(supplied), digest(expectedToken)]);
   return equalBytes(suppliedDigest, expectedDigest);
+}
+
+export async function isDeviceTokenAuthorized(request: Request, expectedToken: string): Promise<boolean> {
+  return isDeviceTokenValueAuthorized(bearerToken(request), expectedToken);
 }
 
 export async function createBrowserSession(expectedToken: string, nowMs = Date.now()): Promise<{ token: string; expiresAt: string }> {
