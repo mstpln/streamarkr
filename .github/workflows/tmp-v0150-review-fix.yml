@@ -23,7 +23,7 @@ jobs:
               p = Path(path)
               text = p.read_text()
               if old not in text:
-                  raise SystemExit(f'missing expected block in {path}: {old[:80]!r}')
+                  raise SystemExit(f'missing expected block in {path}: {old[:100]!r}')
               p.write_text(text.replace(old, new, 1))
 
           replace('worker/repository.ts',
@@ -128,39 +128,26 @@ jobs:
 
           replace('worker/index.ts',
           """  clearRating,
-            InvalidOverrideScopeError,
-            loadSnapshot,""",
+            InvalidOverrideScopeError,""",
           """  clearRating,
             InvalidCustomServiceNameError,
-            InvalidOverrideScopeError,
-            loadSnapshot,""")
+            InvalidOverrideScopeError,""")
           replace('worker/index.ts',
-          """  setWatchedService
+          """  setServiceSelected,
+            setWatchedService
           } from './repository.js';""",
-          """  setWatchedService,
+          """  setServiceSelected,
+            setWatchedService,
             UnselectedServiceError
           } from './repository.js';""")
+          replace('worker/index.ts', 'return Number.isInteger(value) && Number(value) > 0;', 'return Number.isSafeInteger(value) && Number(value) > 0;')
+          replace('worker/index.ts', 'return Number.isInteger(value) && Number(value) >= 0;', 'return Number.isSafeInteger(value) && Number(value) >= 0;')
           replace('worker/index.ts',
-          """function positiveInteger(value: unknown): value is number {
-            return Number.isInteger(value) && Number(value) > 0;
-          }
-
-          function nonNegativeInteger(value: unknown): value is number {
-            return Number.isInteger(value) && Number(value) >= 0;
-          }""",
-          """function positiveInteger(value: unknown): value is number {
-            return Number.isSafeInteger(value) && Number(value) > 0;
-          }
-
-          function nonNegativeInteger(value: unknown): value is number {
-            return Number.isSafeInteger(value) && Number(value) >= 0;
-          }""")
-          replace('worker/index.ts',
-          """    if (error instanceof MissingServiceError) {
+          """if (error instanceof MissingServiceError) {
               return json({ error: 'missing_service', message: error.message }, 409, responseHeaders);
             }
             if (error instanceof MissingEpisodeError) {""",
-          """    if (error instanceof MissingServiceError) {
+          """if (error instanceof MissingServiceError) {
               return json({ error: 'missing_service', message: error.message }, 409, responseHeaders);
             }
             if (error instanceof UnselectedServiceError) {
@@ -171,49 +158,40 @@ jobs:
             }
             if (error instanceof MissingEpisodeError) {""")
 
-          replace('tests/worker-routes.test.ts',
-          """    if (this.sql.includes('SELECT display_name FROM services')) {
-              const displayName = this.db.serviceDisplayNames.get(String(this.values[0]));
-              return displayName ? { display_name: displayName } as T : null;
-            }
-            if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;""",
-          """    if (this.sql.includes('SELECT display_name FROM services')) {
-              const displayName = this.db.serviceDisplayNames.get(String(this.values[0]));
-              return displayName ? { display_name: displayName } as T : null;
-            }
-            if (this.sql.includes('SELECT user_selected FROM services')) {
+          for path, names_field in [('tests/worker-routes.test.ts', 'serviceDisplayNames'), ('tests/worker-repository.test.ts', 'knownServiceNames')]:
+              replace(path,
+              f"""    if (this.sql.includes('SELECT display_name FROM services')) {{
+              const displayName = this.db.{names_field}.get(String(this.values[0]));
+              return displayName ? {{ display_name: displayName }} as T : null;
+            }}
+            if (this.sql.includes('SELECT service_key FROM services')""",
+              f"""    if (this.sql.includes('SELECT display_name FROM services')) {{
+              const displayName = this.db.{names_field}.get(String(this.values[0]));
+              return displayName ? {{ display_name: displayName }} as T : null;
+            }}
+            if (this.sql.includes('SELECT user_selected FROM services')) {{
               const serviceKey = String(this.values[0]);
               if (!this.db.knownServices.has(serviceKey)) return null;
-              return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
-            }
-            if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;""")
+              return {{ user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 }} as T;
+            }}
+            if (this.sql.includes('SELECT service_key FROM services')""")
+
           replace('tests/worker-routes.test.ts',
           """  knownServices = new Set(['netflix', 'hbo-max']);
             serviceDisplayNames = new Map([['netflix', 'Netflix'], ['hbo-max', 'HBO Max']]);""",
           """  knownServices = new Set(['netflix', 'hbo-max']);
             selectedServices = new Set(['netflix', 'hbo-max']);
             serviceDisplayNames = new Map([['netflix', 'Netflix'], ['hbo-max', 'HBO Max']]);""")
+          replace('tests/worker-repository.test.ts',
+          """  knownServices = new Set<string>();
+            knownServiceNames = new Map<string, string>();""",
+          """  knownServices = new Set<string>();
+            selectedServices = new Set<string>();
+            knownServiceNames = new Map<string, string>();""")
+
           replace('tests/worker-routes.test.ts',
-          """test('unknown watched-service keys return a controlled conflict', async () => {
-            const db = new FakeDb();
-            const response = await handleRequest(new Request('https://worker.example/api/watched-service/movie-1', {
-              method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ serviceKey: 'not-real' })
-            }), env(db));
-            assert.equal(response.status, 409);
-            assert.equal((await response.json() as any).error, 'missing_service');
-          });
-
-          test('movie and episode override routes validate scope and persist durable corrections'""",
-          """test('unknown watched-service keys return a controlled conflict', async () => {
-            const db = new FakeDb();
-            const response = await handleRequest(new Request('https://worker.example/api/watched-service/movie-1', {
-              method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ serviceKey: 'not-real' })
-            }), env(db));
-            assert.equal(response.status, 409);
-            assert.equal((await response.json() as any).error, 'missing_service');
-          });
-
-          test('watched-service writes require a currently selected service without erasing historical values on later deselection', async () => {
+          """test('movie and episode override routes validate scope and persist durable corrections', async () => {""",
+          """test('watched-service writes require a currently selected service', async () => {
             const db = new FakeDb();
             db.knownServices.add('viaplay');
             const response = await handleRequest(new Request('https://worker.example/api/watched-service/movie-1', {
@@ -224,10 +202,10 @@ jobs:
             assert.equal(db.writes.length, 0);
           });
 
-          test('movie and episode override routes validate scope and persist durable corrections'""")
+          test('movie and episode override routes validate scope and persist durable corrections', async () => {""")
           replace('tests/worker-routes.test.ts',
           """test('override routes reject media-type scope mismatches before touching D1', async () => {""",
-          """test('override routes reject unsafe integer episode and season coordinates before touching D1', async () => {
+          """test('override routes reject unsafe integer coordinates before touching D1', async () => {
             const unsafe = Number.MAX_SAFE_INTEGER + 1;
             const episodeDb = new FakeDb();
             const episode = await handleRequest(new Request('https://worker.example/api/overrides/episode/series-1', {
@@ -249,28 +227,6 @@ jobs:
           test('override routes reject media-type scope mismatches before touching D1', async () => {""")
 
           replace('tests/worker-repository.test.ts',
-          """    if (this.sql.includes('SELECT display_name FROM services')) {
-              const displayName = this.db.knownServiceNames.get(String(this.values[0]));
-              return displayName ? { display_name: displayName } as T : null;
-            }
-            if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;""",
-          """    if (this.sql.includes('SELECT display_name FROM services')) {
-              const displayName = this.db.knownServiceNames.get(String(this.values[0]));
-              return displayName ? { display_name: displayName } as T : null;
-            }
-            if (this.sql.includes('SELECT user_selected FROM services')) {
-              const serviceKey = String(this.values[0]);
-              if (!this.db.knownServices.has(serviceKey)) return null;
-              return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
-            }
-            if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;""")
-          replace('tests/worker-repository.test.ts',
-          """  knownServices = new Set<string>();
-            knownServiceNames = new Map<string, string>();""",
-          """  knownServices = new Set<string>();
-            selectedServices = new Set<string>();
-            knownServiceNames = new Map<string, string>();""")
-          replace('tests/worker-repository.test.ts',
           """  db.knownServices.add('netflix');
             await setWatchedService(db, 'movie-1', 'netflix', '2026-09-07T00:00:00Z');""",
           """  db.knownServices.add('netflix');
@@ -280,7 +236,7 @@ jobs:
             await setWatchedService(db, 'movie-1', 'netflix', '2026-09-07T00:00:00Z');""")
           replace('tests/worker-repository.test.ts',
           """test('adding the same normalized service reselects it but a different-name collision is rejected', async () => {""",
-          """test('custom-service repository refuses names that cannot produce bounded route-safe keys', async () => {
+          """test('custom-service repository refuses unaddressable or oversized names', async () => {
             const db = new RecordingDb();
             await assert.rejects(() => addCustomService(db, 'A'.repeat(81)), /Invalid custom streaming service name/);
             await assert.rejects(() => addCustomService(db, '!!!'), /Invalid custom streaming service name/);
