@@ -1,0 +1,121 @@
+name: Temporary v0.15.0 local consistency
+
+on:
+  push:
+    branches: [feat/backend-user-state-v0150]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/backend-user-state-v0150
+      - name: Apply consistency fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def once(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if old not in s:
+                  raise SystemExit(f'missing marker in {path}: {old!r}')
+              p.write_text(s.replace(old, new, 1))
+
+          # Local repository must honor the same selected-service invariant as D1.
+          once('src/lib/repo.ts',
+               "  await db.put('watched_service', { titleId, serviceKey, changedAt: new Date().toISOString() } satisfies WatchedService);",
+               """  const service = await db.get<ServiceDef>('services', serviceKey);
+            if (!service) throw new Error(`Unknown streaming service: ${serviceKey}`);
+            if (!service.userSelected) throw new Error(`Streaming service is not selected: ${serviceKey}`);
+            await db.put('watched_service', { titleId, serviceKey, changedAt: new Date().toISOString() } satisfies WatchedService);""")
+
+          # Detail keeps an already-recorded historical service visible after the preference is deselected,
+          # while disabled so it cannot be newly selected again.
+          once('src/ui/screens/detail.ts',
+               "${services.filter((service) => service.userSelected).map((service) => `<option value=\"${escapeHtml(service.serviceKey)}\" ${watchedService?.serviceKey === service.serviceKey ? 'selected' : ''}>${escapeHtml(service.displayName)}</option>`).join('')}",
+               """${services.filter((service) => service.userSelected || watchedService?.serviceKey === service.serviceKey).map((service) => {
+            const historicalOnly = watchedService?.serviceKey === service.serviceKey && !service.userSelected;
+            return `<option value=\"${escapeHtml(service.serviceKey)}\" ${watchedService?.serviceKey === service.serviceKey ? 'selected' : ''} ${historicalOnly ? 'disabled' : ''}>${escapeHtml(service.displayName)}${historicalOnly ? ' · Not currently selected' : ''}</option>`;
+          }).join('')}
+          ${watchedService && !services.some((service) => service.serviceKey === watchedService.serviceKey) ? `<option value=\"${escapeHtml(watchedService.serviceKey)}\" selected disabled>${escapeHtml(watchedService.serviceKey)} · Historical service</option>` : ''}""")
+
+          # Existing hostile-text journey now also covers the deselected historical-service case.
+          once('browser-qa.mjs',
+               "      await mod.setWatchedService(seriesEvent.titleId, custom.serviceKey);\n      return { titleId: seriesEvent.titleId, serviceKey: custom.serviceKey };",
+               "      await mod.setWatchedService(seriesEvent.titleId, custom.serviceKey);\n      await mod.setServiceSelected(custom.serviceKey, false);\n      return { titleId: seriesEvent.titleId, serviceKey: custom.serviceKey };")
+          once('browser-qa.mjs',
+               "record('Detail escapes custom streaming-service text', detailCustomServiceSafe);",
+               "record('Detail preserves and escapes a deselected historical streaming service', detailCustomServiceSafe);")
+
+          # Local integration regression: reject new writes to unselected services, preserve old history after deselection.
+          once('tests/repo-integration.test.ts',
+               "  it('buildExportPayload (Correction 14) includes every user-owned data category', async () => {",
+               """  it('watched-service writes require a selected service but historical values survive later deselection', async () => {
+            await repo.resetToFixtures();
+            const id = F.TITLES[0].id;
+            await repo.setServiceSelected('netflix', false);
+            let threw = false;
+            try {
+              await repo.setWatchedService(id, 'netflix');
+            } catch {
+              threw = true;
+            }
+            expect(threw).toBe(true);
+            expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(false);
+
+            await repo.setServiceSelected('netflix', true);
+            await repo.setWatchedService(id, 'netflix');
+            await repo.setServiceSelected('netflix', false);
+            expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(true);
+          });
+
+          it('buildExportPayload (Correction 14) includes every user-owned data category', async () => {""")
+
+          # Clean indentation introduced by the prior generated hardening commit.
+          once('worker/index.ts',
+               """    if (error instanceof UnselectedServiceError) {
+            return json({ error: 'service_not_selected', message: error.message }, 409, responseHeaders);
+          }
+          if (error instanceof InvalidCustomServiceNameError) {
+            return json({ error: 'invalid_service_name' }, 400, responseHeaders);
+          }
+          if (error instanceof MissingEpisodeError) {
+              return json({ error: 'missing_episode', message: error.message }, 409, responseHeaders);
+            }""",
+               """    if (error instanceof UnselectedServiceError) {
+              return json({ error: 'service_not_selected', message: error.message }, 409, responseHeaders);
+            }
+            if (error instanceof InvalidCustomServiceNameError) {
+              return json({ error: 'invalid_service_name' }, 400, responseHeaders);
+            }
+            if (error instanceof MissingEpisodeError) {
+              return json({ error: 'missing_episode', message: error.message }, 409, responseHeaders);
+            }""")
+
+          for path in ['tests/worker-routes.test.ts', 'tests/worker-repository.test.ts']:
+              once(path,
+                   """    if (this.sql.includes('SELECT user_selected FROM services')) {
+            const serviceKey = String(this.values[0]);
+            if (!this.db.knownServices.has(serviceKey)) return null;
+            return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
+          }
+          if (this.sql.includes('SELECT service_key FROM services')""",
+                   """    if (this.sql.includes('SELECT user_selected FROM services')) {
+              const serviceKey = String(this.values[0]);
+              if (!this.db.knownServices.has(serviceKey)) return null;
+              return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
+            }
+            if (this.sql.includes('SELECT service_key FROM services')""")
+          PY
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/repo.ts src/ui/screens/detail.ts browser-qa.mjs tests/repo-integration.test.ts worker/index.ts tests/worker-routes.test.ts tests/worker-repository.test.ts
+          git commit -m "Align watched-service history semantics"
+          git push
