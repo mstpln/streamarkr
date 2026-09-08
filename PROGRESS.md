@@ -17,13 +17,15 @@ The repeated token-transport changes did not address a separate structural risk 
 
 PR #16 removes that configuration dependency. Browser CORS, session bootstrap/logout, cookie-session verification and authenticated browser route checks now use the actual Worker request URL origin as the authority. `APP_ORIGIN` no longer controls browser origin acceptance. Cross-origin requests still fail closed, operational no-Origin bearer clients remain supported, both current JSON-body and cached-client bearer bootstrap forms remain supported, and session-cookie/token cryptography is unchanged.
 
-## Review and validation
-The first PR #16 implementation head exposed three existing tests that still encoded the old configured-origin contract. Those tests were corrected to assert the intended serving-origin behavior rather than weakening the implementation.
+A final hardening review found two additional weaknesses before merge: the configured Worker secret itself was not whitespace-normalized even though copied browser input was, and CI did not exercise the real built Worker + static-assets + Chromium authentication topology. Both are now corrected. Surrounding runtime-secret whitespace is normalized consistently for token comparison and session signing/verification, and CI launches the actual Wrangler Worker with the staged same-origin asset bundle, a deliberately stale `APP_ORIGIN`, a padded synthetic runtime secret and real Chromium.
 
-Head `a50066847fc2f566d2c7ccd11327e6c2d0aaccdd` passed build, all logic/Worker/client tests, D1 schema tests and Wrangler-local D1 validation. Browser/responsive QA is completing before continuity synchronization and a final exact-head run.
+## Review and validation
+The earlier PR #16 implementation exposed three tests that still encoded the old configured-origin contract. Those tests were corrected to assert the intended serving-origin behavior rather than weakening the implementation.
+
+The hardening head `c575fabe4e750896af0025c2f9fb45c25b267aae` passed CI #340 / run `34255403504`: build PASS, **208/208 tests**, D1 **5/5**, Wrangler-local D1 PASS, new same-origin Worker auth topology **4/4**, browser/responsive **32/32**, provider/security **8/8**, folded/unfolded PASS and zero console/page errors. The topology test proves the actual Worker accepts same-origin bootstrap despite stale `APP_ORIGIN` and padded runtime-secret whitespace, Chrome retains and reuses the signed HttpOnly cookie, wrong tokens fail with 401, and foreign origins fail with 403.
 
 ## Next work
-1. Complete PR #16 exact-head CI/review cycle after continuity synchronization.
+1. Complete the final continuity-synchronized exact-head CI/review cycle for PR #16.
 2. Merge only with explicit user authorization.
 3. Deploy only with a separate fresh explicit production authorization.
 4. Retry secure-storage activation in the live PWA. Accept personal-state migration only after the session verifies and guarded round-trip migration succeeds.
