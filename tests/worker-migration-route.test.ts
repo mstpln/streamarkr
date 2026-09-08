@@ -27,7 +27,7 @@ class RouteDb implements D1Database {
   async exec(): Promise<{ count: number; duration: number }> { return { count: 0, duration: 0 }; }
 }
 function env(db: RouteDb): Env {
-  return { DB: db, DEVICE_ACCESS_TOKEN: 'synthetic-route-token', APP_ORIGIN: 'https://app.example', APP_ENV: 'qa' };
+  return { DB: db, DEVICE_ACCESS_TOKEN: 'synthetic-route-token', APP_ORIGIN: 'https://stale-config.example', APP_ENV: 'qa' };
 }
 function validBody() {
   return {
@@ -50,13 +50,13 @@ function request(body: unknown, headers: Record<string, string> = {}) {
 
 test('migration endpoint rejects unauthenticated requests before touching D1', async () => {
   const db = new RouteDb();
-  const response = await handleRequest(request(validBody(), { origin: 'https://app.example' }), env(db));
+  const response = await handleRequest(request(validBody(), { origin: 'https://worker.example' }), env(db));
   assert.equal(response.status, 401);
   assert.equal(db.reads, 0);
   assert.equal(db.batches, 0);
 });
 
-test('migration endpoint enforces configured browser origin before touching D1', async () => {
+test('migration endpoint enforces the serving browser origin before touching D1', async () => {
   const db = new RouteDb();
   const response = await handleRequest(request(validBody(), {
     origin: 'https://evil.example', authorization: 'Bearer synthetic-route-token'
@@ -66,10 +66,10 @@ test('migration endpoint enforces configured browser origin before touching D1',
   assert.equal(db.batches, 0);
 });
 
-test('authenticated migration route executes the guarded import transaction', async () => {
+test('authenticated migration route executes the guarded import transaction from the serving origin', async () => {
   const db = new RouteDb();
   const response = await handleRequest(request(validBody(), {
-    origin: 'https://app.example', authorization: 'Bearer synthetic-route-token'
+    origin: 'https://worker.example', authorization: 'Bearer synthetic-route-token'
   }), env(db));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, alreadyApplied: false });
@@ -80,7 +80,7 @@ test('authenticated migration route executes the guarded import transaction', as
 test('malformed migration payload returns controlled 400 without a write batch', async () => {
   const db = new RouteDb();
   const response = await handleRequest(request({ migrationId: 'not-a-uuid', snapshot: {} }, {
-    origin: 'https://app.example', authorization: 'Bearer synthetic-route-token'
+    origin: 'https://worker.example', authorization: 'Bearer synthetic-route-token'
   }), env(db));
   assert.equal(response.status, 400);
   assert.equal((await response.json() as { error: string }).error, 'invalid_migration_payload');
