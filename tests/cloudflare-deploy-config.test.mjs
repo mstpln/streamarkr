@@ -90,7 +90,7 @@ test('committed Wrangler config is account-neutral and deployment is guarded', a
   assert.deepEqual(committedConfig.secrets.required, ['DEVICE_ACCESS_TOKEN']);
   assert.equal(Object.hasOwn(committedConfig, 'd1_databases'), false);
   assert.match(gitignore, /^\.wrangler\/$/m);
-  assert.equal(packageJson.scripts['deploy:cloudflare'], 'node scripts/deploy-cloudflare.mjs');
+  assert.equal(packageJson.scripts['deploy:cloudflare'], 'npm run build:cloudflare && node scripts/deploy-cloudflare.mjs');
   assert.equal(packageJson.scripts['prepare:worker-assets'], 'node scripts/prepare-worker-assets.mjs');
   assert.equal(packageJson.scripts['build:cloudflare'], 'npm run build && npm run build:worker && npm run prepare:worker-assets');
 
@@ -130,7 +130,6 @@ test('writes generated deployment configuration outside tracked source', async (
     await rm(outputDir, { recursive: true, force: true });
   }
 });
-
 
 test('stages only deployable PWA assets for same-origin Worker hosting', async () => {
   const outputDir = await mkdtemp(path.join(os.tmpdir(), 'streamarkr-worker-assets-'));
