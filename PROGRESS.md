@@ -37,9 +37,9 @@ PR #10 adds the authentication foundation required before browser backend activa
 
 This remains a foundation build only. `APP_ORIGIN` is still intentionally unset in production, the active UI remains synthetic/local, no personal state has been migrated, and no production deployment has been authorized.
 
-Implementation review found one CI interface regression after the initial auth methods were added to the shared `BackendClient`: existing cache-layer mocks were incorrectly forced to implement auth lifecycle methods. The interface was narrowed back to backend data operations while the concrete `WorkerBackendClient` retains session methods. CI then passed. Additional review coverage was added for session expiry and secret rotation.
+Implementation review found one CI interface regression after the initial auth methods were added to the shared `BackendClient`: existing cache-layer mocks were incorrectly forced to implement auth lifecycle methods. The interface was narrowed back to backend data operations while the concrete `WorkerBackendClient` retains session methods. Later review also found and fixed package-manifest/lockfile version drift, added a regression test for version synchronization, and restored historical validation detail that had been unintentionally compressed out of `STREAMARKR_BUILD_STATE.json`.
 
-Last validated implementation head before continuity synchronization: `8dbdcd3d7199768f890dc67f427bb7bffde964ad`, CI #219. `npm ci` PASS, PWA build PASS, Worker type-check PASS, **175/175 tests across 26 suites**, D1 **5/5**, Wrangler-local validation PASS, core browser/responsive QA **31/31**, focused provider/security QA **8/8**, folded/unfolded PASS and zero console/page errors.
+Latest validated implementation/continuity head before final documentation synchronization: `796c2e1c1a058a2a505016f4be2c3ce33ba90b70`, CI #227. `npm ci` PASS, PWA build PASS, Worker type-check PASS, **176/176 tests across 26 suites**, D1 **5/5**, Wrangler-local validation PASS, core browser/responsive QA **31/31**, focused provider/security QA **8/8**, folded/unfolded PASS and zero console/page errors.
 
 ## Next work
 1. Require a clean complete CI/browser pass on the final unchanged continuity-synchronized PR #10 head, then perform final PR/review-thread/security/secrets inspection and only then mark it ready to merge.
