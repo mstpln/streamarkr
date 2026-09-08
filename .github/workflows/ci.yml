@@ -46,8 +46,10 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Build
-        run: npm run build
+      - name: Build same-origin Cloudflare bundle
+        run: npm run build:cloudflare
+      - name: Same-origin Worker authentication QA
+        run: npm run qa:worker-auth
       - name: Start synthetic app
         run: |
           node server.mjs 8787 > /tmp/streamarkr-server.log 2>&1 &

@@ -20,6 +20,10 @@ function cookieValue(request: Request, name: string): string | null {
   return null;
 }
 
+function normalizedSecret(value: string): string {
+  return value.trim();
+}
+
 async function digest(value: string): Promise<Uint8Array> {
   const data = new TextEncoder().encode(value);
   const result = await crypto.subtle.digest('SHA-256', data);
@@ -67,8 +71,9 @@ function sessionPayload(expiresAt: number, nonce: string): string {
 
 export async function isDeviceTokenValueAuthorized(suppliedToken: string | null, expectedToken: string): Promise<boolean> {
   const supplied = suppliedToken?.trim() || null;
-  if (!supplied || !expectedToken) return false;
-  const [suppliedDigest, expectedDigest] = await Promise.all([digest(supplied), digest(expectedToken)]);
+  const expected = normalizedSecret(expectedToken);
+  if (!supplied || !expected) return false;
+  const [suppliedDigest, expectedDigest] = await Promise.all([digest(supplied), digest(expected)]);
   return equalBytes(suppliedDigest, expectedDigest);
 }
 
@@ -77,10 +82,11 @@ export async function isDeviceTokenAuthorized(request: Request, expectedToken: s
 }
 
 export async function createBrowserSession(expectedToken: string, nowMs = Date.now()): Promise<{ token: string; expiresAt: string }> {
-  if (!expectedToken) throw new Error('Browser session signing requires a configured device token');
+  const signingSecret = normalizedSecret(expectedToken);
+  if (!signingSecret) throw new Error('Browser session signing requires a configured device token');
   const expiresAtSeconds = Math.floor(nowMs / 1000) + BROWSER_SESSION_TTL_SECONDS;
   const nonce = crypto.randomUUID();
-  const signature = await hmac(sessionPayload(expiresAtSeconds, nonce), expectedToken);
+  const signature = await hmac(sessionPayload(expiresAtSeconds, nonce), signingSecret);
   return {
     token: `${expiresAtSeconds}.${nonce}.${toBase64Url(signature)}`,
     expiresAt: new Date(expiresAtSeconds * 1000).toISOString()
@@ -89,7 +95,8 @@ export async function createBrowserSession(expectedToken: string, nowMs = Date.n
 
 export async function isBrowserSessionAuthorized(request: Request, expectedToken: string, nowMs = Date.now()): Promise<boolean> {
   const token = cookieValue(request, SESSION_COOKIE_NAME);
-  if (!token || !expectedToken) return false;
+  const signingSecret = normalizedSecret(expectedToken);
+  if (!token || !signingSecret) return false;
   const parts = token.split('.');
   if (parts.length !== 3) return false;
   const [expiresRaw, nonce, signatureRaw] = parts;
@@ -98,7 +105,7 @@ export async function isBrowserSessionAuthorized(request: Request, expectedToken
   if (!Number.isSafeInteger(expiresAtSeconds) || expiresAtSeconds <= Math.floor(nowMs / 1000)) return false;
   const suppliedSignature = fromBase64Url(signatureRaw);
   if (!suppliedSignature) return false;
-  const expectedSignature = await hmac(sessionPayload(expiresAtSeconds, nonce), expectedToken);
+  const expectedSignature = await hmac(sessionPayload(expiresAtSeconds, nonce), signingSecret);
   return equalBytes(suppliedSignature, expectedSignature);
 }
 

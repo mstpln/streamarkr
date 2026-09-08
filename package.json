@@ -16,6 +16,7 @@
     "test:d1": "node --experimental-sqlite --test tests/d1-schema.test.mjs",
     "test:d1:wrangler": "node scripts/validate-wrangler-d1.mjs",
     "qa:browser": "node browser-qa.mjs && node browser-security-qa.mjs",
+    "qa:worker-auth": "node worker-auth-qa.mjs",
     "prepare:worker-assets": "node scripts/prepare-worker-assets.mjs"
   },
   "engines": {

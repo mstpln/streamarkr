@@ -1,17 +1,17 @@
 {
-  "_readMeFirst": "v0.18.0 same-origin Worker hosting plus PR #13 diagnostics and PR #14 browser bootstrap changes are merged and deployed. Production activation still fails at initial secure-session bootstrap. PR #15 removes the cached-client rollout mismatch by accepting both current JSON-body and previous one-time bearer bootstrap forms on the same origin-gated POST route.",
+  "_readMeFirst": "v0.18.0 same-origin Worker hosting plus PR #13 diagnostics, PR #14 browser bootstrap changes and PR #15 cached-client compatibility are merged and deployed. Production activation still fails at initial secure-session bootstrap. PR #16 removes APP_ORIGIN as a browser-origin authority, normalizes accidental surrounding runtime-secret whitespace consistently, and adds real Wrangler+Chromium same-origin Worker authentication topology QA.",
   "appVersion": "0.18.0",
   "cacheVersion": "streamarkr-v0.18.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-08T16:05:00.000Z",
+  "generatedAt": "2026-09-08T17:12:00.000Z",
   "repository": {
     "fullName": "mstpln/streamarkr",
     "public": true,
     "sourceOfTruth": "main",
-    "currentMainCommit": "e487b0804f7462aadfcb2ef5264ace141d775d74",
-    "activePr": 15,
-    "activeBranch": "fix/activation-session-v0181"
+    "currentMainCommit": "49c49b322eda3067d96420e147525c0335e44f55",
+    "activePr": 16,
+    "activeBranch": "fix/same-origin-activation-v0182"
   },
   "targetArchitecture": {
     "build": "Vite + TypeScript target; current PWA remains plain TypeScript ES modules",
@@ -33,6 +33,7 @@
     "tests": "npm test",
     "d1SchemaTests": "npm run test:d1",
     "d1WranglerLocal": "npm run test:d1:wrangler",
+    "workerAuthQa": "npm run qa:worker-auth",
     "browserQa": "npm run qa:browser"
   },
   "pwa": {
@@ -57,8 +58,8 @@
     "dedicatedD1Jurisdiction": "EU",
     "dedicatedD1Binding": "DB",
     "runtimeSecret": "DEVICE_ACCESS_TOKEN",
-    "browserAuth": "browser POST /api/auth/session accepts the current one-time JSON-body token exchange and, for cached-client rollout compatibility, the previous one-time bearer form; both are exact-origin gated, use constant-time digest comparison, never persist the token, and exchange it for a signed 30-day HttpOnly Secure __Host-streamarkr_session cookie",
-    "cors": "same-origin browser requests default to the Worker request origin when APP_ORIGIN is unset; explicit APP_ORIGIN remains an exact override",
+    "browserAuth": "browser POST /api/auth/session accepts the current one-time JSON-body token exchange and cached-client bearer form; browser origin authorization is based only on the actual Worker request URL origin, not APP_ORIGIN configuration; supplied and configured token values normalize surrounding whitespace before constant-time comparison; successful exchange creates a signed 30-day HttpOnly Secure __Host-streamarkr_session cookie using the same normalized configured secret",
+    "cors": "browser CORS is emitted only when Origin equals the actual Worker request URL origin; APP_ORIGIN is not a browser trust override",
     "localStateMigrationRoute": "POST /api/migration/local-state",
     "cloudflareResourcesCreated": true,
     "streamarkrWorkerSourceDeployed": true,
@@ -72,7 +73,7 @@
   "production": {
     "productionBranch": "deploy/production",
     "normalMainMergeDeploysProduction": false,
-    "deployedReviewedMainCommit": "e487b0804f7462aadfcb2ef5264ace141d775d74",
+    "deployedReviewedMainCommit": "49c49b322eda3067d96420e147525c0335e44f55",
     "latestDeploymentAuthorizationConsumed": true,
     "pwaRootVerified": true,
     "apiHealthVerified": true,
@@ -84,7 +85,7 @@
     },
     "apiRoutingVerified": true,
     "browserSessionVerified": false,
-    "latestSecureStorageAttempt": "bootstrap failure after PR #14 deployment: Could not create the secure browser session. Local data is unchanged.",
+    "latestSecureStorageAttempt": "bootstrap failure after PR #15 deployment: Could not create the secure browser session. Local data is unchanged.",
     "failureStage": "bootstrap",
     "cookieVerificationReached": false,
     "migrationReached": false,
@@ -92,12 +93,14 @@
     "futureProductionDeploymentsRequireFreshExplicitAuthorization": true
   },
   "activationBootstrapFix": {
-    "pr": 15,
-    "status": "reviewed compatibility fix; final exact-head CI pending after continuity synchronization",
-    "browserExchange": "current JSON-body bootstrap plus previous one-time bearer bootstrap accepted only on exact allowed origin",
-    "tokenComparison": "constant-time digest comparison; surrounding supplied whitespace trimmed",
-    "sessionCookie": "signed HttpOnly Secure __Host-streamarkr_session",
+    "pr": 16,
+    "status": "hardening head c575fabe4e750896af0025c2f9fb45c25b267aae passed complete CI #340 including real same-origin Worker authentication topology; continuity-synchronized final head must pass the same workflow before merge readiness",
+    "browserExchange": "current JSON-body bootstrap plus cached-client bearer bootstrap accepted only on the actual serving origin",
+    "originAuthority": "request URL origin; APP_ORIGIN ignored for browser trust decisions",
+    "tokenComparison": "constant-time digest comparison; surrounding whitespace normalized on both supplied and configured values; interior content remains exact",
+    "sessionCookie": "signed HttpOnly Secure __Host-streamarkr_session using the same normalized configured secret for signing and verification",
     "controlledSessionFailure": "session_creation_failed",
+    "workerAuthTopologyQa": "pinned Wrangler local Worker + staged same-origin assets + real Chromium; stale APP_ORIGIN, padded synthetic runtime secret, successful bootstrap/cookie reuse, wrong-token 401 and foreign-origin 403",
     "legacyOperationalBearerAuth": true,
     "tokenPersistence": false,
     "personalDataTouched": false
@@ -115,52 +118,28 @@
     {"pr": 11, "version": "0.17.0", "mergeCommit": "1e411d1696d32269327b5ef30de5c5f158f302e0"},
     {"pr": 12, "version": "0.18.0", "mergeCommit": "77d8644e06be5a9e61c0938782616f02cdf8f179", "finalReviewedHead": "c24795f93e9887620d3bdfacb438422c6e86c56a"},
     {"pr": 13, "version": "0.18.0-activation-diagnostics", "mergeCommit": "3ddcbfcb515a31e1ed6ce2951ea741832d5adeda", "finalReviewedHead": "086a013ac7e9da913f1940b26d839a7a753d6d09"},
-    {"pr": 14, "version": "0.18.0-browser-bootstrap", "mergeCommit": "e487b0804f7462aadfcb2ef5264ace141d775d74"}
+    {"pr": 14, "version": "0.18.0-browser-bootstrap", "mergeCommit": "e487b0804f7462aadfcb2ef5264ace141d775d74"},
+    {"pr": 15, "version": "0.18.0-cached-client-compatibility", "mergeCommit": "49c49b322eda3067d96420e147525c0335e44f55", "finalReviewedHead": "172c5fec8e57c035eb53d71ccb5c3547c0b08dae"}
   ],
   "validation": {
-    "v0180": {
-      "finalReviewedHead": "c24795f93e9887620d3bdfacb438422c6e86c56a",
-      "ciRun": 280,
-      "cloudflareBundle": "pass",
-      "tests": "200/200",
-      "d1": "5/5",
-      "wranglerLocal": "pass",
-      "browser": "32/32",
-      "providerSecurity": "8/8",
-      "responsive": "folded/unfolded pass",
-      "consolePageErrors": 0
-    },
-    "pr13Final": {
-      "finalReviewedHead": "086a013ac7e9da913f1940b26d839a7a753d6d09",
-      "ciRun": 307,
-      "cloudflareBundle": "pass",
-      "tests": "205/205",
-      "d1": "5/5",
-      "wranglerLocal": "pass",
-      "browser": "32/32",
-      "providerSecurity": "8/8",
-      "responsive": "folded/unfolded pass",
-      "consolePageErrors": 0
-    },
-    "pr14ReviewedLine": {
-      "reviewedHead": "c029d7891add50df815c54036214b078ece1403b",
-      "ciRun": 309,
-      "cloudflareBundle": "pass",
-      "tests": "207/207",
-      "d1": "5/5",
-      "wranglerLocal": "pass",
-      "browser": "32/32",
-      "providerSecurity": "8/8",
-      "responsive": "folded/unfolded pass",
-      "consolePageErrors": 0
-    },
-    "pr15Initial": {
-      "reviewedHead": "c3aef8cfcfa068f87a9ee1d52be57d843f9f0132",
-      "ciRun": 317,
-      "cloudflareBundle": "pass",
+    "pr15Final": {
+      "finalReviewedHead": "172c5fec8e57c035eb53d71ccb5c3547c0b08dae",
+      "ciRun": 322,
       "tests": "208/208",
       "d1": "5/5",
       "wranglerLocal": "pass",
+      "browser": "32/32",
+      "providerSecurity": "8/8",
+      "responsive": "folded/unfolded pass",
+      "consolePageErrors": 0
+    },
+    "pr16Hardening": {
+      "reviewedHead": "c575fabe4e750896af0025c2f9fb45c25b267aae",
+      "ciRun": 340,
+      "tests": "208/208",
+      "d1": "5/5",
+      "wranglerLocal": "pass",
+      "workerAuthTopology": "4/4",
       "browser": "32/32",
       "providerSecurity": "8/8",
       "responsive": "folded/unfolded pass",
@@ -175,9 +154,9 @@
     "liveProviderProductionCredentialsInTestsAllowed": false
   },
   "nextSequence": [
-    "finish PR #15 exact-head review/test/fix cycle",
-    "merge PR #15 only with explicit authorization",
-    "deploy merged PR #15 only with separate fresh explicit authorization",
+    "finish PR #16 exact-head review/test/fix cycle",
+    "merge PR #16 only with explicit authorization",
+    "deploy merged PR #16 only with separate fresh explicit authorization",
     "retry and verify live secure browser activation and guarded migration",
     "build real TMDB metadata/search",
     "build Trakt OAuth/history ingestion",
