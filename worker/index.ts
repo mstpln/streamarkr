@@ -3,7 +3,7 @@ import {
   browserSessionCookie,
   clearBrowserSessionCookie,
   createBrowserSession,
-  isDeviceTokenAuthorized
+  isDeviceTokenValueAuthorized
 } from './auth.js';
 import {
   InvalidMigrationPayloadError,
@@ -150,13 +150,22 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
 
   if (request.method === 'POST' && url.pathname === '/api/auth/session') {
     if (!matchesAppOrigin(request, url, env)) return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
-    if (!(await isDeviceTokenAuthorized(request, env.DEVICE_ACCESS_TOKEN))) return json({ error: 'unauthorized' }, 401, responseHeaders);
-    const session = await createBrowserSession(env.DEVICE_ACCESS_TOKEN);
-    return json(
-      { ok: true, expiresAt: session.expiresAt },
-      200,
-      { ...responseHeaders, 'set-cookie': browserSessionCookie(session.token) }
-    );
+    const body = await bodyJson<{ deviceAccessToken?: unknown }>(request);
+    const suppliedToken = body && typeof body.deviceAccessToken === 'string' ? body.deviceAccessToken : null;
+    if (!(await isDeviceTokenValueAuthorized(suppliedToken, env.DEVICE_ACCESS_TOKEN))) {
+      return json({ error: 'unauthorized' }, 401, responseHeaders);
+    }
+    try {
+      const session = await createBrowserSession(env.DEVICE_ACCESS_TOKEN);
+      return json(
+        { ok: true, expiresAt: session.expiresAt },
+        200,
+        { ...responseHeaders, 'set-cookie': browserSessionCookie(session.token) }
+      );
+    } catch {
+      console.error(JSON.stringify({ level: 'error', requestId, route: '/api/auth/session', error: 'SessionCreationFailed' }));
+      return json({ error: 'session_creation_failed', requestId }, 500, responseHeaders);
+    }
   }
 
   const auth = await authorizationKind(request, env.DEVICE_ACCESS_TOKEN);
