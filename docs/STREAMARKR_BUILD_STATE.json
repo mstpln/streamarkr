@@ -4,7 +4,7 @@
   "cacheVersion": "streamarkr-v0.18.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-08T16:50:00.000Z",
+  "generatedAt": "2026-09-08T16:55:00.000Z",
   "repository": {
     "fullName": "mstpln/streamarkr",
     "public": true,
@@ -93,7 +93,7 @@
   },
   "activationBootstrapFix": {
     "pr": 16,
-    "status": "serving-origin implementation and tests passing before final continuity-synchronized CI",
+    "status": "pre-final continuity head d0ead2b6eaa8c494b67305b87a42dbbd74668e90 passed complete CI #333; status-recording final head must pass the same workflow before merge readiness",
     "browserExchange": "current JSON-body bootstrap plus cached-client bearer bootstrap accepted only on the actual serving origin",
     "originAuthority": "request URL origin; APP_ORIGIN ignored for browser trust decisions",
     "tokenComparison": "constant-time digest comparison; surrounding supplied whitespace trimmed",
@@ -132,11 +132,15 @@
       "consolePageErrors": 0
     },
     "pr16PreFinal": {
-      "reviewedHead": "a50066847fc2f566d2c7ccd11327e6c2d0aaccdd",
-      "tests": "pass",
+      "reviewedHead": "d0ead2b6eaa8c494b67305b87a42dbbd74668e90",
+      "ciRun": 333,
+      "tests": "208/208",
       "d1": "5/5",
       "wranglerLocal": "pass",
-      "browser": "pending continuity-synchronized final head"
+      "browser": "32/32",
+      "providerSecurity": "8/8",
+      "responsive": "folded/unfolded pass",
+      "consolePageErrors": 0
     }
   },
   "security": {
