@@ -1,17 +1,17 @@
 {
-  "_readMeFirst": "v0.18.0 same-origin Worker hosting and PR #13 staged activation diagnostics are merged and deployed. Live diagnostics now isolate the remaining failure to initial browser-session bootstrap before cookie verification or migration. PR #14 fixes that bootstrap path without touching personal data.",
+  "_readMeFirst": "v0.18.0 same-origin Worker hosting plus PR #13 diagnostics and PR #14 browser bootstrap changes are merged and deployed. Production activation still fails at initial secure-session bootstrap. PR #15 removes the cached-client rollout mismatch by accepting both current JSON-body and previous one-time bearer bootstrap forms on the same origin-gated POST route.",
   "appVersion": "0.18.0",
   "cacheVersion": "streamarkr-v0.18.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-08T15:05:00.000Z",
+  "generatedAt": "2026-09-08T16:05:00.000Z",
   "repository": {
     "fullName": "mstpln/streamarkr",
     "public": true,
     "sourceOfTruth": "main",
-    "currentMainCommit": "3ddcbfcb515a31e1ed6ce2951ea741832d5adeda",
-    "activePr": 14,
-    "activeBranch": "fix/browser-session-bootstrap-v0182"
+    "currentMainCommit": "e487b0804f7462aadfcb2ef5264ace141d775d74",
+    "activePr": 15,
+    "activeBranch": "fix/activation-session-v0181"
   },
   "targetArchitecture": {
     "build": "Vite + TypeScript target; current PWA remains plain TypeScript ES modules",
@@ -57,7 +57,7 @@
     "dedicatedD1Jurisdiction": "EU",
     "dedicatedD1Binding": "DB",
     "runtimeSecret": "DEVICE_ACCESS_TOKEN",
-    "browserAuth": "browser POST /api/auth/session sends the user-entered device token once in an HTTPS JSON body, never persists it, and exchanges it for a signed 30-day HttpOnly Secure __Host-streamarkr_session cookie; operational bearer auth remains supported",
+    "browserAuth": "browser POST /api/auth/session accepts the current one-time JSON-body token exchange and, for cached-client rollout compatibility, the previous one-time bearer form; both are exact-origin gated, use constant-time digest comparison, never persist the token, and exchange it for a signed 30-day HttpOnly Secure __Host-streamarkr_session cookie",
     "cors": "same-origin browser requests default to the Worker request origin when APP_ORIGIN is unset; explicit APP_ORIGIN remains an exact override",
     "localStateMigrationRoute": "POST /api/migration/local-state",
     "cloudflareResourcesCreated": true,
@@ -72,7 +72,7 @@
   "production": {
     "productionBranch": "deploy/production",
     "normalMainMergeDeploysProduction": false,
-    "deployedReviewedMainCommit": "3ddcbfcb515a31e1ed6ce2951ea741832d5adeda",
+    "deployedReviewedMainCommit": "e487b0804f7462aadfcb2ef5264ace141d775d74",
     "latestDeploymentAuthorizationConsumed": true,
     "pwaRootVerified": true,
     "apiHealthVerified": true,
@@ -84,7 +84,7 @@
     },
     "apiRoutingVerified": true,
     "browserSessionVerified": false,
-    "latestSecureStorageAttempt": "staged bootstrap failure: Could not create the secure browser session. Local data is unchanged.",
+    "latestSecureStorageAttempt": "bootstrap failure after PR #14 deployment: Could not create the secure browser session. Local data is unchanged.",
     "failureStage": "bootstrap",
     "cookieVerificationReached": false,
     "migrationReached": false,
@@ -92,9 +92,9 @@
     "futureProductionDeploymentsRequireFreshExplicitAuthorization": true
   },
   "activationBootstrapFix": {
-    "pr": 14,
-    "status": "implementation CI passed; final exact-head validation pending after continuity synchronization",
-    "browserExchange": "same-origin HTTPS JSON body; no browser Authorization header",
+    "pr": 15,
+    "status": "reviewed compatibility fix; final exact-head CI pending after continuity synchronization",
+    "browserExchange": "current JSON-body bootstrap plus previous one-time bearer bootstrap accepted only on exact allowed origin",
     "tokenComparison": "constant-time digest comparison; surrounding supplied whitespace trimmed",
     "sessionCookie": "signed HttpOnly Secure __Host-streamarkr_session",
     "controlledSessionFailure": "session_creation_failed",
@@ -114,7 +114,8 @@
     {"pr": 10, "version": "0.16.0", "mergeCommit": "c26bc20b3579cc3736621e722d623ead12786564"},
     {"pr": 11, "version": "0.17.0", "mergeCommit": "1e411d1696d32269327b5ef30de5c5f158f302e0"},
     {"pr": 12, "version": "0.18.0", "mergeCommit": "77d8644e06be5a9e61c0938782616f02cdf8f179", "finalReviewedHead": "c24795f93e9887620d3bdfacb438422c6e86c56a"},
-    {"pr": 13, "version": "0.18.0-activation-diagnostics", "mergeCommit": "3ddcbfcb515a31e1ed6ce2951ea741832d5adeda", "finalReviewedHead": "086a013ac7e9da913f1940b26d839a7a753d6d09"}
+    {"pr": 13, "version": "0.18.0-activation-diagnostics", "mergeCommit": "3ddcbfcb515a31e1ed6ce2951ea741832d5adeda", "finalReviewedHead": "086a013ac7e9da913f1940b26d839a7a753d6d09"},
+    {"pr": 14, "version": "0.18.0-browser-bootstrap", "mergeCommit": "e487b0804f7462aadfcb2ef5264ace141d775d74"}
   ],
   "validation": {
     "v0180": {
@@ -141,11 +142,23 @@
       "responsive": "folded/unfolded pass",
       "consolePageErrors": 0
     },
-    "pr14PreFinalContinuity": {
+    "pr14ReviewedLine": {
       "reviewedHead": "c029d7891add50df815c54036214b078ece1403b",
       "ciRun": 309,
       "cloudflareBundle": "pass",
       "tests": "207/207",
+      "d1": "5/5",
+      "wranglerLocal": "pass",
+      "browser": "32/32",
+      "providerSecurity": "8/8",
+      "responsive": "folded/unfolded pass",
+      "consolePageErrors": 0
+    },
+    "pr15Initial": {
+      "reviewedHead": "c3aef8cfcfa068f87a9ee1d52be57d843f9f0132",
+      "ciRun": 317,
+      "cloudflareBundle": "pass",
+      "tests": "208/208",
       "d1": "5/5",
       "wranglerLocal": "pass",
       "browser": "32/32",
@@ -162,9 +175,9 @@
     "liveProviderProductionCredentialsInTestsAllowed": false
   },
   "nextSequence": [
-    "finish PR #14 exact-head review/test/fix cycle",
-    "merge PR #14 only with explicit authorization",
-    "deploy merged PR #14 only with separate fresh explicit authorization",
+    "finish PR #15 exact-head review/test/fix cycle",
+    "merge PR #15 only with explicit authorization",
+    "deploy merged PR #15 only with separate fresh explicit authorization",
     "retry and verify live secure browser activation and guarded migration",
     "build real TMDB metadata/search",
     "build Trakt OAuth/history ingestion",
