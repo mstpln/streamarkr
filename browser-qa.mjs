@@ -192,7 +192,7 @@ async function main() {
         record('Watch Trailer opens an overlay when a trailer exists', (await page.locator('.trailer-overlay').count()) > 0);
         await page.click('#trailer-close');
         await page.waitForTimeout(100);
-        record('Trailer overlay closes');
+        record('Trailer overlay closes', (await page.locator('.trailer-overlay').count()) === 0);
       } else {
         record('Watch Trailer gracefully disabled with no trailer', true, 'no trailerKey on this fixture title');
       }
