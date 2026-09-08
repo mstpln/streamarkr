@@ -43,6 +43,7 @@ Updated: 2026-09-08.
 - Target: Vite + TypeScript PWA, Cloudflare Worker, Cloudflare D1, optional R2 only if needed, real provider adapters and GitHub CI.
 - PR #11 / v0.17.0 established retry-safe local-state migration/reconciliation plus Worker-routed user-owned mutations after verified takeover.
 - PR #12 / v0.18.0 established the **same-origin production topology**: the existing Streamarkr Worker serves PWA static assets and `/api/*` from one Worker origin. It merged at `77d8644e06be5a9e61c0938782616f02cdf8f179` and has been explicitly deployed to the dedicated Streamarkr Worker.
+- PR #13 established staged activation diagnostics and explicit post-bootstrap cookie verification. It merged at `3ddcbfcb515a31e1ed6ce2951ea741832d5adeda` and was separately deployed.
 - `worker/repository.ts` is the server-side persistence boundary. Worker routes do not contain ad-hoc D1 mutation logic when the operation belongs in the repository layer.
 - `src/lib/backend-contract.ts` defines shared browser/Worker shapes; `src/lib/backend-client.ts` is the browser transport seam. UI modules do not call personal Worker routes directly.
 - Real provider code implements `worker/provider-contracts.ts`; provider credentials remain Worker-only.
@@ -72,10 +73,13 @@ Updated: 2026-09-08.
 - The dedicated production resource remains Worker `streamarkr-api` with D1 `streamarkr` bound as `DB`, always separate from BANDMARKR.
 - v0.18 stages only deployable PWA assets under ignored `.wrangler/site`; package files, documentation, tests and private/runtime data are not part of the static asset bundle.
 - Generated Wrangler config uses SPA fallback and `run_worker_first: ['/api/*']` so PWA files and API routes share the Worker origin while API routes execute Worker code.
-- `npm run build:cloudflare` builds the PWA, type-checks the Worker and stages the static asset bundle. Deployment preflight refuses remote work when required staged assets are absent.
+- `npm run build:cloudflare` builds the PWA, type-checks the Worker and stages the static asset bundle. Deployment preflight refuses remote work when required PWA assets are missing.
 - `DEVICE_ACCESS_TOKEN` remains the single-user operational secret and is never embedded/persisted in frontend source, generated assets, localStorage, IndexedDB, cookies, logs or repository configuration.
-- Browser bootstrap sends a user-entered device token only to `POST /api/auth/session`; success returns no token and sets a signed HttpOnly browser-session cookie.
-- Cookie remains `__Host-streamarkr_session`, `HttpOnly`, `Secure`, `Path=/`, no `Domain`, with current 30-day TTL. Secret rotation invalidates existing sessions.
+- Browser bootstrap sends the user-entered device token only in the JSON body of same-origin HTTPS `POST /api/auth/session`. It is never placed in the browser `Authorization` header, persisted, logged, returned in a response, or copied into the signed cookie.
+- The bootstrap Worker trims surrounding copy/paste whitespace from the supplied browser value, then uses the existing constant-time digest comparison against the configured secret. Missing/malformed/incorrect values fail closed.
+- Operational/non-browser clients retain bearer authentication support; the JSON-body rule is specifically the browser bootstrap path.
+- Successful bootstrap sets the signed `__Host-streamarkr_session`, `HttpOnly`, `Secure`, `Path=/`, no `Domain`, with current 30-day TTL. Secret rotation invalidates existing sessions.
+- Unexpected session-signing failure returns only controlled `session_creation_failed` plus a request ID; raw exception details and credentials are never returned.
 - When `APP_ORIGIN` is unset, the effective allowed browser origin is the actual request URL/Worker serving origin. If explicitly configured later, it remains an exact-origin override.
 - No-Origin cookie requests are accepted only when the request URL origin equals the effective app origin. Operational bearer clients without browser Origin remain supported.
 - `DELETE /api/auth/session` remains origin-gated and clears the session cookie without requiring the device token.
@@ -83,12 +87,12 @@ Updated: 2026-09-08.
 
 ## Production activation diagnostics
 - Live v0.18 validation confirmed the PWA root, `/api/*` routing, schema version 1, D1 health and configured authentication.
-- The first live secure-storage attempt produced the pre-hotfix generic failure and a subsequent same-browser `/api/auth/session` request was unauthorized. This is an unresolved activation finding, not evidence that migration succeeded.
+- PR #13 staging showed that the remaining live failure occurs at browser bootstrap before cookie verification and migration; no personal state has been migrated.
 - No personal state may be considered migrated until the cookie-backed session is verified and the guarded migration/round-trip comparison succeeds.
-- Secure-storage activation must diagnose three stages separately: device-token bootstrap, browser-session verification, then migration. Do not collapse them into one generic error boundary.
+- Secure-storage activation diagnoses three stages separately: device-token bootstrap, browser-session verification, then migration.
 - User-facing diagnostics may expose only safe stage/status categories. They must never surface the device token, arbitrary backend response text, request headers, cookie values or raw exception content.
-- After a successful token exchange the browser must explicitly verify `/api/auth/session` before beginning migration. This distinguishes a rejected device token from a cookie-retention failure without developer-console debugging.
-- The production diagnostic hotfix remains within app/cache identifier v0.18.0 and changes service-worker bytes so installed v0.18.0 clients rerun install-time precaching. This is a narrow same-build production validation exception; the normal rule remains that product/cache-affecting builds advance package, Settings and cache versions together.
+- After a successful token exchange the browser explicitly verifies `/api/auth/session` before beginning migration.
+- Focused production activation fixes may remain within the existing v0.18.0 app/cache identity when they are correcting the same deployed activation boundary rather than introducing a new user-visible or architectural build. The service-worker source bytes must still change so installed clients rerun the install/precache path. The normal rule remains that new user-visible/architectural builds advance package, Settings and cache versions together.
 
 ## Cloudflare activation and deployment
 - The committed `wrangler.jsonc` remains account-neutral. Account-specific D1 binding data is generated under ignored `.wrangler/deploy/` state from build-only configuration.
@@ -98,7 +102,7 @@ Updated: 2026-09-08.
 - Wrangler preserves dashboard-managed runtime variables/secrets rather than removing them as a side effect.
 - Normal merges to `main` never automatically deploy production. `deploy/production` remains the only guarded production trigger after fresh explicit user authorization.
 - Each deployment authorization is consumed by the exact deployment it authorizes and cannot be reused for later heads.
-- The v0.18.0 deployment authorization has been consumed. PR #13 or any later head requires a new explicit deployment authorization after merge.
+- The deployment authorization used for PR #13 is consumed. PR #14 or any later head requires a new explicit deployment authorization after merge.
 
 ## Repository/security
 - Repository is public: `mstpln/streamarkr`.
