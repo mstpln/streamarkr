@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { handleRequest } from '../worker/index.js';
+import type { Title } from '../src/lib/types.js';
 import type { D1Database, D1PreparedStatement, D1Primitive, D1Result, Env } from '../worker/types.js';
 
 class Statement implements D1PreparedStatement {
@@ -10,8 +11,16 @@ class Statement implements D1PreparedStatement {
   async first<T>(): Promise<T | null> {
     this.db.touched += 1;
     if (this.sql.includes('app_meta')) return { value: '1' } as T;
-    if (this.sql.includes('SELECT id FROM titles') && this.db.knownTitles.has(String(this.values[0]))) return { id: String(this.values[0]) } as T;
+    const titleId = String(this.values[0]);
+    if (this.sql.includes('SELECT id FROM titles') && this.db.knownTitleTypes.has(titleId)) return { id: titleId } as T;
+    if (this.sql.includes('SELECT media_type FROM titles')) {
+      const mediaType = this.db.knownTitleTypes.get(titleId);
+      return mediaType ? { media_type: mediaType } as T : null;
+    }
     if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
+    if (this.sql.includes('SELECT season_number FROM seasons') && this.db.knownSeasons.has(`${this.values[0]}:${this.values[1]}`)) {
+      return { season_number: Number(this.values[1]) } as T;
+    }
     if (this.sql.includes('SELECT episode_number FROM episodes') && this.db.knownEpisodes.has(`${this.values[0]}:${this.values[1]}:${this.values[2]}`)) {
       return { episode_number: Number(this.values[2]) } as T;
     }
@@ -30,8 +39,9 @@ class Statement implements D1PreparedStatement {
 class FakeDb implements D1Database {
   touched = 0;
   failReads = false;
-  knownTitles = new Set(['movie-1', 'series-1']);
+  knownTitleTypes = new Map<string, Title['mediaType']>([['movie-1', 'movie'], ['series-1', 'series']]);
   knownServices = new Set(['netflix', 'hbo-max']);
+  knownSeasons = new Set(['series-1:0', 'series-1:2']);
   knownEpisodes = new Set(['series-1:2:3', 'series-1:0:1']);
   releasedEpisodeNumbers = [1, 2, 3];
   writes: { sql: string; values: D1Primitive[] }[] = [];
@@ -182,6 +192,17 @@ test('episode override rejects an episode that does not exist', async () => {
   }), env(db));
   assert.equal(response.status, 409);
   assert.equal((await response.json() as any).error, 'missing_episode');
+});
+
+test('season override rejects a season that does not exist', async () => {
+  const db = new FakeDb();
+  const response = await handleRequest(new Request('https://worker.example/api/overrides/season/series-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ seasonNumber: 7, state: 'watched' })
+  }), env(db));
+  assert.equal(response.status, 409);
+  assert.equal((await response.json() as any).error, 'missing_season');
+  assert.equal(db.batches.length, 0);
 });
 
 test('season override materializes only server-known released episodes and reports the affected count', async () => {
