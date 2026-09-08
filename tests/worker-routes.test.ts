@@ -67,7 +67,7 @@ class FakeDb implements D1Database {
     this.batches.push(batch);
     return statements.map(() => ({ success: true, results: [] }));
   }
-  async exec(): Promise<{ count: number; duration: number }> { this.db.touched += 1; return { count: 0, duration: 0 }; }
+  async exec(): Promise<{ count: number; duration: number }> { this.touched += 1; return { count: 0, duration: 0 }; }
 }
 function env(db = new FakeDb(), overrides: Partial<Env> = {}): Env {
   return { DB: db, DEVICE_ACCESS_TOKEN: 'synthetic-test-token', APP_ORIGIN: 'https://app.example', APP_ENV: 'qa', ...overrides };
