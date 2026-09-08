@@ -36,8 +36,9 @@
 - Discover only includes subscription-included titles on one of the user's selected services. No rent/buy-only recommendations.
 - Discover excludes titles already in History or My Library.
 - Top Picks uses 5-star titles; Similar To can use any Library title and remains same media type; By Genre uses rating/preference weighting.
-- Custom service names are normalized to route-safe lowercase hyphenated keys before durable storage; punctuation/whitespace must not produce a key the Worker API cannot address later.
-- Any user-controlled custom-service text inserted through `innerHTML` must be escaped first; custom service names/keys must remain text/attribute data and never become executable markup.
+- Custom service names are normalized identically in local IndexedDB mode and Worker/D1 mode: trim, lowercase, collapse each non-ASCII-alphanumeric run to one hyphen, then trim edge hyphens. Names are bounded to 80 characters so resulting keys remain addressable by Worker routes.
+- Re-adding the same custom/built-in service name case-insensitively reselects the existing row. A different display name that normalizes to an already-used key is a conflict and must not silently alias or overwrite the existing service.
+- Any user/service-controlled text inserted through `innerHTML` must be escaped first; service names/keys must remain text/attribute data and never become executable markup.
 
 ## Architecture
 - Target: Vite + TypeScript PWA, separate Cloudflare Worker, separate D1, optional separate R2 only if needed, real provider adapters, GitHub CI.
