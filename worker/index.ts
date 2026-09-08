@@ -220,12 +220,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
       return json({ error: 'missing_service', message: error.message }, 409, responseHeaders);
     }
     if (error instanceof UnselectedServiceError) {
-    return json({ error: 'service_not_selected', message: error.message }, 409, responseHeaders);
-  }
-  if (error instanceof InvalidCustomServiceNameError) {
-    return json({ error: 'invalid_service_name' }, 400, responseHeaders);
-  }
-  if (error instanceof MissingEpisodeError) {
+      return json({ error: 'service_not_selected', message: error.message }, 409, responseHeaders);
+    }
+    if (error instanceof InvalidCustomServiceNameError) {
+      return json({ error: 'invalid_service_name' }, 400, responseHeaders);
+    }
+    if (error instanceof MissingEpisodeError) {
       return json({ error: 'missing_episode', message: error.message }, 409, responseHeaders);
     }
     if (error instanceof MissingSeasonError) {
