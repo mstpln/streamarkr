@@ -78,7 +78,8 @@ Updated: 2026-09-08.
 - `npm run build:cloudflare` builds the PWA, type-checks the Worker and stages the static asset bundle. Deployment preflight refuses remote work when required PWA assets are missing.
 - `DEVICE_ACCESS_TOKEN` remains the single-user operational secret and is never embedded/persisted in frontend source, generated assets, localStorage, IndexedDB, cookies, logs or repository configuration.
 - The current browser bootstrap sends the user-entered device token in the JSON body of same-origin HTTPS `POST /api/auth/session`. During the v0.18 activation rollout, the same route also accepts the previous one-time bearer form so a cached browser can recover. Neither form persists, logs, returns or copies the device token into the signed cookie.
-- The bootstrap Worker trims surrounding copy/paste whitespace from the supplied browser value, then uses the existing constant-time digest comparison against the configured secret. Missing/malformed/incorrect values fail closed.
+- Browser-supplied and Worker-configured device-token values both normalize surrounding whitespace before comparison; interior content remains exact. The normalized configured secret is also used consistently for browser-session HMAC signing and verification so accidental secret-store newline/space padding cannot create a split authentication state.
+- Token comparison remains constant-time using SHA-256 digests. Missing/malformed/incorrect values fail closed.
 - Successful bootstrap sets the signed `__Host-streamarkr_session`, `HttpOnly`, `Secure`, `Path=/`, no `Domain`, with the current 30-day TTL. Secret rotation invalidates existing sessions.
 - Unexpected session-signing failure returns only controlled `session_creation_failed` plus a request ID; raw exception details and credentials are never returned.
 - Because PWA assets and `/api/*` are served by one Worker origin, browser origin authorization uses `new URL(request.url).origin` as the authority. An Origin header is accepted only when it equals that serving origin. A stale or mismatched `APP_ORIGIN` value is not trusted and cannot block the genuine serving origin.
@@ -91,7 +92,7 @@ Updated: 2026-09-08.
 - Live v0.18 validation confirmed the PWA root, `/api/*` routing, schema version 1, D1 health and configured authentication.
 - PR #13 staging showed that the remaining live failure occurs at browser bootstrap before cookie verification and migration; no personal state has been migrated.
 - PR #14 and PR #15 were both deployed but the same bootstrap-stage failure remained, ruling out the new-vs-cached token transport mismatch as a sufficient explanation.
-- PR #16 addresses the independent same-origin configuration dependency by removing `APP_ORIGIN` from browser trust decisions.
+- PR #16 addresses the independent same-origin configuration dependency by removing `APP_ORIGIN` from browser trust decisions and also normalizes accidental surrounding runtime-secret whitespace.
 - No personal state may be considered migrated until the cookie-backed session is verified and the guarded migration/round-trip comparison succeeds.
 - Secure-storage activation diagnoses three stages separately: device-token bootstrap, browser-session verification, then migration.
 - User-facing diagnostics may expose only safe stage/status categories. They must never surface the device token, arbitrary backend response text, request headers, cookie values or raw exception content.
@@ -131,4 +132,5 @@ Updated: 2026-09-08.
 - GitHub CI uses Node 22 and `npm ci`.
 - D1 migration is exercised against Node 22 SQLite and pinned Wrangler local D1.
 - Deployment-config tests use only synthetic D1 UUIDs and never contact Cloudflare.
+- Authentication changes must also pass `qa:worker-auth`, which launches the actual staged same-origin Worker with pinned Wrangler and real Chromium so Worker-first `/api/*` routing, stale `APP_ORIGIN` handling, padded runtime-secret normalization, secure cookie issuance/reuse, wrong-token rejection and cross-origin rejection are exercised together rather than only in unit tests.
 - Physical Pixel 9 Pro Fold QA remains a separate pre-V1 requirement.
