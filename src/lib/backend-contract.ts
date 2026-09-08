@@ -31,3 +31,11 @@ export interface BackendSnapshot {
   alerts: AlertRecord[];
   syncState: SyncState[];
 }
+
+/** One retry-safe browser-to-D1 takeover payload. The migrationId is created and persisted in
+ * IndexedDB before the first network attempt, so a lost response can be retried without creating a
+ * second migration identity or risking a second independent import. */
+export interface BackendMigrationBundle {
+  migrationId: string;
+  snapshot: BackendSnapshot;
+}
