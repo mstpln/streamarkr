@@ -38,6 +38,16 @@ test('backend request failures expose only status and sanitized error code', asy
   );
 });
 
+test('backend request failures discard arbitrary response text instead of treating it as a diagnostic code', async () => {
+  const client = new WorkerBackendClient('https://worker.example', null, async () =>
+    jsonResponse({ error: 'Bearer super-secret-token', message: 'also secret' }, 500));
+
+  await assert.rejects(
+    () => client.getSessionStatus(),
+    (error: unknown) => error instanceof BackendRequestError && error.status === 500 && error.code === null && !error.message.includes('secret')
+  );
+});
+
 test('bootstrap sends the device token only on the one exchange request and logout uses cookies', async () => {
   const seen: Array<{ auth: string | null; credentials: RequestCredentials | undefined; method: string }> = [];
   const client = new WorkerBackendClient('https://worker.example', null, async (_input, init) => {
