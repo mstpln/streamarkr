@@ -4,7 +4,7 @@
   "cacheVersion": "streamarkr-v0.15.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-08T05:15:00Z",
+  "generatedAt": "2026-09-08T05:55:00Z",
   "targetArchitecture": {
     "build": "Vite + TypeScript",
     "backend": "Cloudflare Worker",
@@ -41,7 +41,7 @@
     "initialActivationGuard": "backend takeover is allowed only for a genuinely empty cache; fixture/local and legacy non-empty caches require later explicit migration/reset",
     "legacyCacheRule": "v0.13-and-older caches without data_source are detected from actual stored rows and tagged as fixtures on normal startup",
     "backendCacheMutationMode": "local-only user mutations and synthetic provider sync remain blocked while a Worker/D1 snapshot cache is active until active UI writes are routed through BackendClient",
-    "customServiceRenderingRule": "Settings HTML-escapes user-controlled custom service names and keys before innerHTML/attribute insertion; browser QA exercises hostile synthetic markup",
+    "customServiceRenderingRule": "service-controlled names/keys used in Settings, Detail, History and Library filter innerHTML are HTML-escaped; browser QA exercises hostile synthetic markup across all four surfaces",
     "cacheBoundary": "same-origin unauthenticated app assets only; /api, cross-origin, and Authorization-bearing requests bypass Cache Storage"
   },
   "backendFoundation": {
@@ -58,7 +58,7 @@
     "canonicalMutationPrecondition": "Library/rating/watched-service/override writes validate their canonical references before durable mutation",
     "userMutationRoutes": ["library add/remove", "rating set/clear", "alerts seen", "watched-service set/clear", "movie override", "episode override", "bounded season override", "service selection", "custom service creation"],
     "seasonOverrideRule": "server selects episodes known and released at action date, requires the season to exist, removes legacy season wildcard, and materializes episode-level overrides in one D1 batch; season zero specials are valid",
-    "customServiceKeyRule": "trim, lowercase, collapse non-alphanumeric runs to hyphens, trim leading/trailing hyphens",
+    "customServiceKeyRule": "local and Worker paths trim, lowercase, collapse non-alphanumeric runs to hyphens and trim edge hyphens; names/keys are bounded to 80 characters, same-name additions reselect, and different-name normalized-key collisions are rejected",
     "overrideScopeRule": "movie overrides require canonical movies and episode/season overrides require canonical series; HTTP routing rejects obvious scope mismatches before D1 and the repository independently enforces the same invariant",
     "auth": "Bearer device token from Worker DEVICE_ACCESS_TOKEN secret; fail closed if unconfigured",
     "browserAuth": "not activated; production PWA must not embed DEVICE_ACCESS_TOKEN in public source/generated assets",
@@ -160,18 +160,18 @@
     "v0150": {
       "pr": 9,
       "baseMainCommit": "f6e6d4a04aa011e91036a773655e9572e2c6ded6",
-      "implementationSecurityReviewHead": "a9cf1e0865f9b08af7931c3f10e02072ae90de98",
-      "implementationSecurityReviewCiRun": 147,
-      "tests": {"count": 155, "pass": 155, "fail": 0, "suites": 26},
+      "finalCodeSecurityReviewHead": "207db99c32aab71ef72895e72c07d1ce4fcad0c1",
+      "finalCodeSecurityReviewCiRun": 166,
+      "tests": {"count": 160, "pass": 160, "fail": 0, "suites": 26},
       "d1SchemaTests": {"count": 5, "pass": 5, "fail": 0},
       "wranglerLocalD1": "pass with Wrangler 4.129.0",
-      "browserQa": {"checks": 28, "pass": 28, "fail": 0, "consoleOrPageErrors": 0},
-      "newCoverage": ["watched-service set/clear", "canonical title and known service validation", "movie watched/unwatched override", "episode watched/unwatched override", "unknown episode conflict", "unknown season conflict", "HTTP and repository movie/series override scope enforcement", "season-zero specials", "bounded server-side season bulk materialization", "service selection", "custom service creation", "route-safe custom service key normalization", "hostile custom-service Settings rendering remains literal text", "expanded BackendClient requests"],
+      "browserQa": {"checks": 31, "pass": 31, "fail": 0, "consoleOrPageErrors": 0},
+      "newCoverage": ["watched-service set/clear", "canonical title and known service validation", "movie watched/unwatched override", "episode watched/unwatched override", "unknown episode conflict", "unknown season conflict", "HTTP and repository movie/series override scope enforcement", "season-zero specials", "bounded server-side season bulk materialization", "service selection", "custom service creation", "local and Worker route-safe custom-service normalization parity", "80-character custom-service route bounds", "same-name service reselect", "normalized-key collision rejection", "hostile service rendering remains literal text in Settings, Detail, History and Library filtering", "expanded BackendClient requests"],
       "productionWorkerAccessedByTests": false,
       "personalDataUsed": false,
       "liveProvidersUsed": false,
       "bandmarkrAccessed": false,
-      "finalExactHeadValidation": "complete CI/browser QA must pass again on the unchanged documentation-inclusive final PR head before merge readiness"
+      "documentationInclusiveExactHeadGate": "complete CI/browser QA must pass on the unchanged continuity-synchronized PR head before merge readiness"
     },
     "responsive": ["344x792 folded", "873x1000 unfolded"],
     "physicalPixel9ProFold": "not yet run"
@@ -190,8 +190,9 @@
     "D1 watched-service writes require both canonical title and known service",
     "D1 episode override writes require an existing episode",
     "movie/series override scope is enforced both before D1 access and again at the repository boundary",
-    "custom service keys normalize punctuation and whitespace to route-safe lowercase hyphenated keys",
-    "custom service display text and attribute values are HTML-escaped before Settings innerHTML insertion",
+    "local and Worker custom-service paths use the same route-safe normalization and length bounds",
+    "same-name custom-service additions reselect while different-name normalized-key collisions are rejected",
+    "service display text and attribute values are HTML-escaped before Settings, Detail, History and Library filter innerHTML insertion",
     "D1 canonical IDs are structurally tied to media type and TMDB ID",
     "D1 provider upserts preserve known optional stable crosswalk IDs across later partial payloads",
     "D1 and IndexedDB availability can retain multiple option types for one title/service",
@@ -213,7 +214,7 @@
     "normal main merges cannot be the production deployment trigger"
   ],
   "pendingIntegrations": [
-    "Complete PR #9 final documentation-inclusive exact-head validation and merge only after explicit user authorization",
+    "Complete PR #9 continuity-synchronized exact-head CI/final inspection and merge only after explicit user authorization",
     "Design secure browser authentication/bootstrap without embedding DEVICE_ACCESS_TOKEN in public source",
     "Migrate or explicitly reconcile existing local user-owned state into D1 before first browser backend activation",
     "Establish real PWA hosting origin and configure APP_ORIGIN",
