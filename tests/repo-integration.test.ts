@@ -123,25 +123,29 @@ describe('repo + db integration (fake IndexedDB)', () => {
   });
 
   it('watched-service writes require a selected service but historical values survive later deselection', async () => {
-  await repo.resetToFixtures();
-  const id = F.TITLES[0].id;
-  await repo.setServiceSelected('netflix', false);
-  let threw = false;
-  try {
+    await repo.resetToFixtures();
+    const id = F.TITLES[1].id;
+    expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(false);
+
+    await repo.setServiceSelected('netflix', false);
+    let threw = false;
+    try {
+      await repo.setWatchedService(id, 'netflix');
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(true);
+    expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(false);
+
+    await repo.setServiceSelected('netflix', true);
     await repo.setWatchedService(id, 'netflix');
-  } catch {
-    threw = true;
-  }
-  expect(threw).toBe(true);
-  expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(false);
+    await repo.setServiceSelected('netflix', false);
+    expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(true);
+  });
 
-  await repo.setServiceSelected('netflix', true);
-  await repo.setWatchedService(id, 'netflix');
-  await repo.setServiceSelected('netflix', false);
-  expect((await repo.allWatchedService()).some((row) => row.titleId === id && row.serviceKey === 'netflix')).toBe(true);
-});
-
-it('buildExportPayload (Correction 14) includes every user-owned data category', async () => {
+  it('buildExportPayload (Correction 14) includes every user-owned data category', async () => {
+    await repo.resetToFixtures();
+    await repo.setServiceSelected('netflix', true);
     const id = F.TITLES[0].id;
     await repo.addToLibrary(id);
     await repo.setRating(id, 5);
