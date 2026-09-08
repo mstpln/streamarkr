@@ -301,13 +301,24 @@ export async function setServiceSelected(serviceKey: string, selected: boolean):
   await db.put('services', { ...svc, userSelected: selected });
 }
 
+function normalizeCustomServiceKey(displayName: string): string {
+  return displayName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 export async function addCustomService(displayName: string): Promise<void> {
   await assertLocalMutationAllowed();
-  const key = displayName.trim().toLowerCase().replace(/\s+/g, '-');
+  const trimmed = displayName.trim();
+  const key = normalizeCustomServiceKey(trimmed);
   if (!key) return;
   const existing = await db.get<ServiceDef>('services', key);
-  if (existing) return;
-  await db.put('services', { serviceKey: key, displayName: displayName.trim(), logoGlyph: displayName.trim()[0]?.toUpperCase() ?? '?', userSelected: true, availabilitySource: 'unsupported' } satisfies ServiceDef);
+  if (existing) {
+    if (existing.displayName.trim().toLocaleLowerCase() !== trimmed.toLocaleLowerCase()) {
+      throw new Error(`A different streaming service already uses the normalized key: ${key}`);
+    }
+    if (!existing.userSelected) await db.put('services', { ...existing, userSelected: true });
+    return;
+  }
+  await db.put('services', { serviceKey: key, displayName: trimmed, logoGlyph: trimmed[0]?.toUpperCase() ?? '?', userSelected: true, availabilitySource: 'unsupported' } satisfies ServiceDef);
 }
 
 // --- Alerts ---------------------------------------------------------------------------------
