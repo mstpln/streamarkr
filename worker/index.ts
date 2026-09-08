@@ -1,4 +1,10 @@
-import { isAuthorized } from './auth.js';
+import {
+  authorizationKind,
+  browserSessionCookie,
+  clearBrowserSessionCookie,
+  createBrowserSession,
+  isDeviceTokenAuthorized
+} from './auth.js';
 import {
   addCustomService,
   addLibraryItem,
@@ -37,10 +43,18 @@ function corsHeaders(request: Request, env: Env): Record<string, string> {
   if (!origin || !env.APP_ORIGIN || origin !== env.APP_ORIGIN) return {};
   return {
     'access-control-allow-origin': origin,
+    'access-control-allow-credentials': 'true',
     'access-control-allow-headers': 'authorization, content-type',
     'access-control-allow-methods': 'GET, PUT, DELETE, POST, OPTIONS',
     vary: 'Origin'
   };
+}
+
+function matchesAppOrigin(request: Request, url: URL, env: Env): boolean {
+  if (!env.APP_ORIGIN) return false;
+  const origin = request.headers.get('origin');
+  if (origin) return origin === env.APP_ORIGIN;
+  return url.origin === env.APP_ORIGIN;
 }
 
 function routeTitleId(pathname: string, prefix: string): string | null {
@@ -112,10 +126,44 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     return json({ ok: true, service: 'streamarkr-worker', schemaVersion: version, authConfigured: Boolean(env.DEVICE_ACCESS_TOKEN) }, 200, responseHeaders);
   }
 
+  if (request.method === 'DELETE' && url.pathname === '/api/auth/session') {
+    if (!matchesAppOrigin(request, url, env)) return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
+    return new Response(null, {
+      status: 204,
+      headers: { ...responseHeaders, 'set-cookie': clearBrowserSessionCookie(), 'cache-control': 'no-store' }
+    });
+  }
+
   if (!env.DEVICE_ACCESS_TOKEN) return json({ error: 'server_not_configured' }, 503, responseHeaders);
-  if (!(await isAuthorized(request, env.DEVICE_ACCESS_TOKEN))) return json({ error: 'unauthorized' }, 401, responseHeaders);
+
+  if (request.method === 'POST' && url.pathname === '/api/auth/session') {
+    if (!env.APP_ORIGIN) return json({ error: 'browser_auth_not_configured' }, 503, responseHeaders);
+    if (!matchesAppOrigin(request, url, env)) return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
+    if (!(await isDeviceTokenAuthorized(request, env.DEVICE_ACCESS_TOKEN))) return json({ error: 'unauthorized' }, 401, responseHeaders);
+    const session = await createBrowserSession(env.DEVICE_ACCESS_TOKEN);
+    return json(
+      { ok: true, expiresAt: session.expiresAt },
+      200,
+      { ...responseHeaders, 'set-cookie': browserSessionCookie(session.token) }
+    );
+  }
+
+  const auth = await authorizationKind(request, env.DEVICE_ACCESS_TOKEN);
+  if (!auth) return json({ error: 'unauthorized' }, 401, responseHeaders);
+
+  const suppliedOrigin = request.headers.get('origin');
+  if (suppliedOrigin && (!env.APP_ORIGIN || suppliedOrigin !== env.APP_ORIGIN)) {
+    return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
+  }
+  if (auth === 'browser-session' && !matchesAppOrigin(request, url, env)) {
+    return json({ error: 'origin_not_allowed' }, 403, responseHeaders);
+  }
 
   try {
+    if (request.method === 'GET' && url.pathname === '/api/auth/session') {
+      return json({ authenticated: true, method: auth }, 200, responseHeaders);
+    }
+
     if (request.method === 'GET' && url.pathname === '/api/snapshot') return json(await loadSnapshot(env.DB), 200, responseHeaders);
 
     const libraryTitleId = routeTitleId(url.pathname, '/api/library/');
