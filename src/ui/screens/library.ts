@@ -55,14 +55,14 @@ export async function render(el: HTMLElement) {
           .sort((a, b) => (selectedKeys.has(a.serviceKey) ? 0 : 1) - (selectedKeys.has(b.serviceKey) ? 0 : 1))
           .slice(0, 3);
         return `
-        <div class="poster-card" data-open="${r.title.id}" role="link" tabindex="0" aria-label="Open ${r.title.title}">
+        <div class="poster-card" data-open="${r.title.id}" role="link" tabindex="0" aria-label="Open ${escapeHtml(r.title.title)}">
           <div class="poster" style="${posterStyle(r.title.id)}">
             <button class="heart-btn active" data-heart="${r.title.id}" aria-label="Remove from My Library" aria-pressed="true">♥</button>
             ${subs.length ? `<div class="poster-availability">${subs.map((a) => serviceLogoHtml(a.serviceKey, snap.services.find((service) => service.serviceKey === a.serviceKey)?.displayName ?? a.serviceKey, 20)).join('')}</div>` : ''}
           </div>
-          <div class="card-title">${r.title.title}</div>
+          <div class="card-title">${escapeHtml(r.title.title)}</div>
           <div class="card-sub">
-            <span class="status-tag status-${r.status.replace(' ', '-')}">${r.status}</span>
+            <span class="status-tag status-${r.status.replace(' ', '-')}">${escapeHtml(r.status)}</span>
             ${r.rating ? ` · ${'★'.repeat(r.rating)}` : ''}
           </div>
         </div>
