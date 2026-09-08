@@ -112,6 +112,37 @@ async function main() {
       record('History escapes custom streaming-service text', false, 'no synthetic series history target');
     }
 
+    const hostileLibraryServiceName = '</option><img src=x onerror="window.__streamarkrLibraryXss=1"><option>Injected';
+    const librarySecurityTarget = await page.evaluate(async (name) => {
+      const repo = await import('/dist/lib/repo.js');
+      const db = await import('/dist/lib/db.js');
+      const [titles, library, availability, services] = await Promise.all([
+        repo.allTitles(), repo.allLibrary(), repo.allAvailability(), repo.allServices()
+      ]);
+      const seriesIds = new Set(library
+        .filter((item) => titles.find((title) => title.id === item.titleId)?.mediaType === 'series')
+        .map((item) => item.titleId));
+      const available = availability.find((entry) => seriesIds.has(entry.titleId));
+      const service = available ? services.find((item) => item.serviceKey === available.serviceKey) : undefined;
+      if (!service) return null;
+      await db.put('services', { ...service, displayName: name });
+      return service.serviceKey;
+    }, hostileLibraryServiceName);
+
+    if (librarySecurityTarget) {
+      await page.goto(BASE + '/#/library');
+      await page.waitForTimeout(200);
+      const libraryServiceSafe = await page.evaluate((name) => {
+        const filter = document.querySelector('[data-filter="service"]');
+        return (filter?.textContent ?? '').includes(name) &&
+          !document.querySelector('#filter-row img[src="x"]') &&
+          !window.__streamarkrLibraryXss;
+      }, hostileLibraryServiceName);
+      record('Library escapes streaming-service filter text', libraryServiceSafe);
+    } else {
+      record('Library escapes streaming-service filter text', false, 'no availability-backed synthetic series service');
+    }
+
     await page.evaluate(async () => {
       const mod = await import('/dist/lib/repo.js');
       await mod.resetToFixtures();
