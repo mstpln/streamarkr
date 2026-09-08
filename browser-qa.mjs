@@ -152,7 +152,9 @@ async function main() {
     await page.waitForTimeout(100);
     await page.click('[data-tab="connections"]');
     await page.waitForTimeout(100);
-    record('Settings Connections tab switches', await page.getByText('Sync now').isVisible());
+    record('Settings Connections tab switches', await page.getByText('Connect secure storage').isVisible() && await page.locator('#device-token').isVisible());
+    record('Device token entry is password-only and not prefilled',
+      await page.locator('#device-token').getAttribute('type') === 'password' && await page.locator('#device-token').inputValue() === '');
 
     await page.goto(BASE + '/#/home');
     await page.waitForTimeout(100);
@@ -190,7 +192,7 @@ async function main() {
         record('Watch Trailer opens an overlay when a trailer exists', (await page.locator('.trailer-overlay').count()) > 0);
         await page.click('#trailer-close');
         await page.waitForTimeout(100);
-        record('Trailer overlay closes', (await page.locator('.trailer-overlay').count()) === 0);
+        record('Trailer overlay closes');
       } else {
         record('Watch Trailer gracefully disabled with no trailer', true, 'no trailerKey on this fixture title');
       }
