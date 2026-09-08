@@ -12,6 +12,7 @@ import {
   MissingServiceError,
   removeLibraryItem,
   schemaVersion,
+  ServiceKeyConflictError,
   setEpisodeOverride,
   setMovieOverride,
   setRating,
@@ -224,6 +225,9 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
     if (error instanceof InvalidOverrideScopeError) {
       return json({ error: 'invalid_override_scope', message: error.message }, 409, responseHeaders);
+    }
+    if (error instanceof ServiceKeyConflictError) {
+      return json({ error: 'service_key_conflict', message: error.message }, 409, responseHeaders);
     }
     console.error(JSON.stringify({
       level: 'error',
