@@ -1,0 +1,301 @@
+name: Temporary v0.15.0 review hardening
+
+on:
+  push:
+    branches: [feat/backend-user-state-v0150]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-review-fixes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/backend-user-state-v0150
+      - name: Apply reviewed fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'missing expected block in {path}: {old[:80]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace('worker/repository.ts',
+          """export class MissingServiceError extends Error {
+            constructor(serviceKey: string) {
+              super(`Missing streaming service record: ${serviceKey}`);
+              this.name = 'MissingServiceError';
+            }
+          }
+
+          export class MissingEpisodeError extends Error {""",
+          """export class MissingServiceError extends Error {
+            constructor(serviceKey: string) {
+              super(`Missing streaming service record: ${serviceKey}`);
+              this.name = 'MissingServiceError';
+            }
+          }
+
+          export class UnselectedServiceError extends Error {
+            constructor(serviceKey: string) {
+              super(`Streaming service is not selected: ${serviceKey}`);
+              this.name = 'UnselectedServiceError';
+            }
+          }
+
+          export class InvalidCustomServiceNameError extends Error {
+            constructor() {
+              super('Invalid custom streaming service name');
+              this.name = 'InvalidCustomServiceNameError';
+            }
+          }
+
+          export class MissingEpisodeError extends Error {""")
+
+          replace('worker/repository.ts',
+          """async function requireService(db: D1Database, serviceKey: string): Promise<void> {
+            const service = await db.prepare('SELECT service_key FROM services WHERE service_key = ?').bind(serviceKey).first<{ service_key: string }>();
+            if (!service) throw new MissingServiceError(serviceKey);
+          }
+
+          async function requireEpisode""",
+          """async function requireService(db: D1Database, serviceKey: string): Promise<void> {
+            const service = await db.prepare('SELECT service_key FROM services WHERE service_key = ?').bind(serviceKey).first<{ service_key: string }>();
+            if (!service) throw new MissingServiceError(serviceKey);
+          }
+
+          async function requireSelectedService(db: D1Database, serviceKey: string): Promise<void> {
+            const service = await db.prepare('SELECT user_selected FROM services WHERE service_key = ?')
+              .bind(serviceKey).first<{ user_selected: number }>();
+            if (!service) throw new MissingServiceError(serviceKey);
+            if (integer(service.user_selected) !== 1) throw new UnselectedServiceError(serviceKey);
+          }
+
+          async function requireEpisode""")
+
+          replace('worker/repository.ts',
+          """  await requireService(db, serviceKey);
+            await run(db, `INSERT INTO watched_service""",
+          """  await requireSelectedService(db, serviceKey);
+            await run(db, `INSERT INTO watched_service""")
+
+          replace('worker/repository.ts',
+          """export async function addCustomService(db: D1Database, displayName: string): Promise<string> {
+            const trimmed = displayName.trim();
+            const serviceKey = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+            if (!serviceKey) throw new Error('Invalid custom service key');
+
+            const existing = await db.prepare('SELECT display_name FROM services WHERE service_key = ?')
+              .bind(serviceKey).first<{ display_name: string }>();
+            if (existing) {
+              if (existing.display_name.trim().toLocaleLowerCase() !== trimmed.toLocaleLowerCase()) {
+                throw new ServiceKeyConflictError(serviceKey);
+              }
+              await run(db, 'UPDATE services SET user_selected = 1 WHERE service_key = ?', [serviceKey]);
+              return serviceKey;
+            }
+
+            await run(db, `INSERT INTO services (service_key, display_name, logo_ref, user_selected, availability_source, subscription_catalog_key)
+              VALUES (?, ?, ?, 1, 'unsupported', NULL)`, [serviceKey, trimmed, trimmed[0]?.toUpperCase() ?? '?']);
+            return serviceKey;
+          }""",
+          """export async function addCustomService(db: D1Database, displayName: string): Promise<string> {
+            const trimmed = displayName.trim();
+            if (!trimmed || trimmed.length > 80 || !/[a-z0-9]/i.test(trimmed)) throw new InvalidCustomServiceNameError();
+            const serviceKey = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+            if (!serviceKey || serviceKey.length > 80) throw new InvalidCustomServiceNameError();
+
+            const existing = await db.prepare('SELECT display_name FROM services WHERE service_key = ?')
+              .bind(serviceKey).first<{ display_name: string }>();
+            if (existing) {
+              if (existing.display_name.trim().toLowerCase() !== trimmed.toLowerCase()) {
+                throw new ServiceKeyConflictError(serviceKey);
+              }
+              await run(db, 'UPDATE services SET user_selected = 1 WHERE service_key = ?', [serviceKey]);
+              return serviceKey;
+            }
+
+            await run(db, `INSERT INTO services (service_key, display_name, logo_ref, user_selected, availability_source, subscription_catalog_key)
+              VALUES (?, ?, ?, 1, 'unsupported', NULL)`, [serviceKey, trimmed, trimmed[0]?.toUpperCase() ?? '?']);
+            return serviceKey;
+          }""")
+
+          replace('worker/index.ts',
+          """  clearRating,
+            InvalidOverrideScopeError,
+            loadSnapshot,""",
+          """  clearRating,
+            InvalidCustomServiceNameError,
+            InvalidOverrideScopeError,
+            loadSnapshot,""")
+          replace('worker/index.ts',
+          """  setWatchedService
+          } from './repository.js';""",
+          """  setWatchedService,
+            UnselectedServiceError
+          } from './repository.js';""")
+          replace('worker/index.ts',
+          """function positiveInteger(value: unknown): value is number {
+            return Number.isInteger(value) && Number(value) > 0;
+          }
+
+          function nonNegativeInteger(value: unknown): value is number {
+            return Number.isInteger(value) && Number(value) >= 0;
+          }""",
+          """function positiveInteger(value: unknown): value is number {
+            return Number.isSafeInteger(value) && Number(value) > 0;
+          }
+
+          function nonNegativeInteger(value: unknown): value is number {
+            return Number.isSafeInteger(value) && Number(value) >= 0;
+          }""")
+          replace('worker/index.ts',
+          """    if (error instanceof MissingServiceError) {
+              return json({ error: 'missing_service', message: error.message }, 409, responseHeaders);
+            }
+            if (error instanceof MissingEpisodeError) {""",
+          """    if (error instanceof MissingServiceError) {
+              return json({ error: 'missing_service', message: error.message }, 409, responseHeaders);
+            }
+            if (error instanceof UnselectedServiceError) {
+              return json({ error: 'service_not_selected', message: error.message }, 409, responseHeaders);
+            }
+            if (error instanceof InvalidCustomServiceNameError) {
+              return json({ error: 'invalid_service_name' }, 400, responseHeaders);
+            }
+            if (error instanceof MissingEpisodeError) {""")
+
+          replace('tests/worker-routes.test.ts',
+          """    if (this.sql.includes('SELECT display_name FROM services')) {
+              const displayName = this.db.serviceDisplayNames.get(String(this.values[0]));
+              return displayName ? { display_name: displayName } as T : null;
+            }
+            if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;""",
+          """    if (this.sql.includes('SELECT display_name FROM services')) {
+              const displayName = this.db.serviceDisplayNames.get(String(this.values[0]));
+              return displayName ? { display_name: displayName } as T : null;
+            }
+            if (this.sql.includes('SELECT user_selected FROM services')) {
+              const serviceKey = String(this.values[0]);
+              if (!this.db.knownServices.has(serviceKey)) return null;
+              return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
+            }
+            if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;""")
+          replace('tests/worker-routes.test.ts',
+          """  knownServices = new Set(['netflix', 'hbo-max']);
+            serviceDisplayNames = new Map([['netflix', 'Netflix'], ['hbo-max', 'HBO Max']]);""",
+          """  knownServices = new Set(['netflix', 'hbo-max']);
+            selectedServices = new Set(['netflix', 'hbo-max']);
+            serviceDisplayNames = new Map([['netflix', 'Netflix'], ['hbo-max', 'HBO Max']]);""")
+          replace('tests/worker-routes.test.ts',
+          """test('unknown watched-service keys return a controlled conflict', async () => {
+            const db = new FakeDb();
+            const response = await handleRequest(new Request('https://worker.example/api/watched-service/movie-1', {
+              method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ serviceKey: 'not-real' })
+            }), env(db));
+            assert.equal(response.status, 409);
+            assert.equal((await response.json() as any).error, 'missing_service');
+          });
+
+          test('movie and episode override routes validate scope and persist durable corrections'""",
+          """test('unknown watched-service keys return a controlled conflict', async () => {
+            const db = new FakeDb();
+            const response = await handleRequest(new Request('https://worker.example/api/watched-service/movie-1', {
+              method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ serviceKey: 'not-real' })
+            }), env(db));
+            assert.equal(response.status, 409);
+            assert.equal((await response.json() as any).error, 'missing_service');
+          });
+
+          test('watched-service writes require a currently selected service without erasing historical values on later deselection', async () => {
+            const db = new FakeDb();
+            db.knownServices.add('viaplay');
+            const response = await handleRequest(new Request('https://worker.example/api/watched-service/movie-1', {
+              method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ serviceKey: 'viaplay' })
+            }), env(db));
+            assert.equal(response.status, 409);
+            assert.equal((await response.json() as any).error, 'service_not_selected');
+            assert.equal(db.writes.length, 0);
+          });
+
+          test('movie and episode override routes validate scope and persist durable corrections'""")
+          replace('tests/worker-routes.test.ts',
+          """test('override routes reject media-type scope mismatches before touching D1', async () => {""",
+          """test('override routes reject unsafe integer episode and season coordinates before touching D1', async () => {
+            const unsafe = Number.MAX_SAFE_INTEGER + 1;
+            const episodeDb = new FakeDb();
+            const episode = await handleRequest(new Request('https://worker.example/api/overrides/episode/series-1', {
+              method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }),
+              body: JSON.stringify({ seasonNumber: unsafe, episodeNumber: 1, state: 'watched' })
+            }), env(episodeDb));
+            assert.equal(episode.status, 400);
+            assert.equal(episodeDb.touched, 0);
+
+            const seasonDb = new FakeDb();
+            const season = await handleRequest(new Request('https://worker.example/api/overrides/season/series-1', {
+              method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }),
+              body: JSON.stringify({ seasonNumber: unsafe, state: 'watched' })
+            }), env(seasonDb));
+            assert.equal(season.status, 400);
+            assert.equal(seasonDb.touched, 0);
+          });
+
+          test('override routes reject media-type scope mismatches before touching D1', async () => {""")
+
+          replace('tests/worker-repository.test.ts',
+          """    if (this.sql.includes('SELECT display_name FROM services')) {
+              const displayName = this.db.knownServiceNames.get(String(this.values[0]));
+              return displayName ? { display_name: displayName } as T : null;
+            }
+            if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;""",
+          """    if (this.sql.includes('SELECT display_name FROM services')) {
+              const displayName = this.db.knownServiceNames.get(String(this.values[0]));
+              return displayName ? { display_name: displayName } as T : null;
+            }
+            if (this.sql.includes('SELECT user_selected FROM services')) {
+              const serviceKey = String(this.values[0]);
+              if (!this.db.knownServices.has(serviceKey)) return null;
+              return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
+            }
+            if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;""")
+          replace('tests/worker-repository.test.ts',
+          """  knownServices = new Set<string>();
+            knownServiceNames = new Map<string, string>();""",
+          """  knownServices = new Set<string>();
+            selectedServices = new Set<string>();
+            knownServiceNames = new Map<string, string>();""")
+          replace('tests/worker-repository.test.ts',
+          """  db.knownServices.add('netflix');
+            await setWatchedService(db, 'movie-1', 'netflix', '2026-09-07T00:00:00Z');""",
+          """  db.knownServices.add('netflix');
+            await assert.rejects(() => setWatchedService(db, 'movie-1', 'netflix', '2026-09-07T00:00:00Z'), /not selected/);
+            assert.equal(db.writes.length, 0);
+            db.selectedServices.add('netflix');
+            await setWatchedService(db, 'movie-1', 'netflix', '2026-09-07T00:00:00Z');""")
+          replace('tests/worker-repository.test.ts',
+          """test('adding the same normalized service reselects it but a different-name collision is rejected', async () => {""",
+          """test('custom-service repository refuses names that cannot produce bounded route-safe keys', async () => {
+            const db = new RecordingDb();
+            await assert.rejects(() => addCustomService(db, 'A'.repeat(81)), /Invalid custom streaming service name/);
+            await assert.rejects(() => addCustomService(db, '!!!'), /Invalid custom streaming service name/);
+            assert.equal(db.writes.length, 0);
+          });
+
+          test('adding the same normalized service reselects it but a different-name collision is rejected', async () => {""")
+          PY
+      - name: Commit reviewed fixes
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker/index.ts worker/repository.ts tests/worker-routes.test.ts tests/worker-repository.test.ts
+          git commit -m "Harden durable user-state input invariants"
+          git push
