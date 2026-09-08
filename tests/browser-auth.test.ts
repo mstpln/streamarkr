@@ -74,7 +74,12 @@ test('the signed browser cookie authenticates only from the configured app origi
 test('tampering with a browser session cookie invalidates it', async () => {
   const bootstrap = await handleRequest(bootstrapRequest(), env());
   const cookie = (bootstrap.headers.get('set-cookie') ?? '').split(';')[0];
-  const tampered = `${cookie.slice(0, -1)}${cookie.endsWith('A') ? 'B' : 'A'}`;
+  const [name, value] = cookie.split('=');
+  const parts = value.split('.');
+  assert.equal(parts.length, 3);
+  const signature = parts[2];
+  parts[2] = `${signature[0] === 'A' ? 'B' : 'A'}${signature.slice(1)}`;
+  const tampered = `${name}=${parts.join('.')}`;
   const response = await handleRequest(new Request('https://worker.example/api/auth/session', {
     headers: { origin: 'https://app.example', cookie: tampered }
   }), env());
