@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { WorkerBackendClient } from '../src/lib/backend-client.js';
+import { BackendRequestError, WorkerBackendClient } from '../src/lib/backend-client.js';
 
 function jsonResponse(value: unknown, status = 200) {
   return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
@@ -26,6 +26,16 @@ test('cookie-mode backend client includes credentials without persisting a beare
     credentials: 'include',
     method: 'GET'
   }]);
+});
+
+test('backend request failures expose only status and sanitized error code', async () => {
+  const client = new WorkerBackendClient('https://worker.example', null, async () =>
+    jsonResponse({ error: 'unauthorized' }, 401));
+
+  await assert.rejects(
+    () => client.getSessionStatus(),
+    (error: unknown) => error instanceof BackendRequestError && error.status === 401 && error.code === 'unauthorized'
+  );
 });
 
 test('bootstrap sends the device token only on the one exchange request and logout uses cookies', async () => {
