@@ -37,8 +37,34 @@ export interface MigrationBackendClient extends BackendClient {
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+const KNOWN_BACKEND_ERROR_CODES = new Set([
+  'database_unavailable',
+  'origin_not_allowed',
+  'server_not_configured',
+  'unauthorized',
+  'invalid_migration_payload',
+  'migration_conflict',
+  'invalid_rating',
+  'invalid_service_key',
+  'invalid_override_scope',
+  'invalid_override_state',
+  'invalid_episode_override',
+  'invalid_season_override',
+  'invalid_service_selection',
+  'invalid_service_name',
+  'invalid_alert_ids',
+  'missing_canonical_title',
+  'missing_service',
+  'service_not_selected',
+  'missing_episode',
+  'missing_season',
+  'service_key_conflict',
+  'request_failed',
+  'not_found'
+]);
+
 function safeBackendErrorCode(value: unknown): string | null {
-  return typeof value === 'string' && /^[a-z0-9_]{1,80}$/.test(value) ? value : null;
+  return typeof value === 'string' && KNOWN_BACKEND_ERROR_CODES.has(value) ? value : null;
 }
 
 export class WorkerBackendClient implements MigrationBackendClient {
