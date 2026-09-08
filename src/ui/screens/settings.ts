@@ -1,3 +1,4 @@
+import { backendActivationFailureMessage } from '../../lib/backend-activation-diagnostics.js';
 import { WorkerBackendClient } from '../../lib/backend-client.js';
 import { migrateLocalStateToBackend } from '../../lib/backend-migration.js';
 import * as repo from '../../lib/repo.js';
@@ -132,15 +133,30 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         }
         button.disabled = true;
         status.textContent = 'Securing browser session…';
+        const client = new WorkerBackendClient('');
         try {
-          await new WorkerBackendClient('').bootstrapSession(token);
+          await client.bootstrapSession(token);
+        } catch (error) {
           input.value = '';
+          button.disabled = false;
+          status.textContent = backendActivationFailureMessage('bootstrap', error);
+          return;
+        }
+        input.value = '';
+        status.textContent = 'Verifying secure browser session…';
+        try {
+          await client.getSessionStatus();
+        } catch (error) {
+          button.disabled = false;
+          status.textContent = backendActivationFailureMessage('verify-session', error);
+          return;
+        }
+        try {
           const result = await repo.refreshBackendCache();
           status.textContent = `Secure session renewed. Worker/D1 refreshed ${new Date(result.generatedAt).toLocaleString()}.`;
         } catch {
-          input.value = '';
           button.disabled = false;
-          status.textContent = 'Could not renew the secure session. The last verified offline cache is unchanged.';
+          status.textContent = 'Secure session works, but Worker/D1 could not be refreshed. The last verified offline cache is unchanged.';
         }
       });
     } else {
@@ -158,14 +174,28 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         const client = new WorkerBackendClient('');
         try {
           await client.bootstrapSession(token);
-          input.value = '';
-          status.textContent = 'Migrating and verifying local data…';
-          await migrateLocalStateToBackend(client);
-          await render(el, 'connections');
-        } catch {
+        } catch (error) {
           input.value = '';
           button.disabled = false;
-          status.textContent = 'Connection or migration failed. Local data is unchanged; you can safely retry.';
+          status.textContent = backendActivationFailureMessage('bootstrap', error);
+          return;
+        }
+        input.value = '';
+        status.textContent = 'Verifying secure browser session…';
+        try {
+          await client.getSessionStatus();
+        } catch (error) {
+          button.disabled = false;
+          status.textContent = backendActivationFailureMessage('verify-session', error);
+          return;
+        }
+        status.textContent = 'Secure session verified. Migrating and verifying local data…';
+        try {
+          await migrateLocalStateToBackend(client);
+          await render(el, 'connections');
+        } catch (error) {
+          button.disabled = false;
+          status.textContent = backendActivationFailureMessage('migration', error);
         }
       });
       body.querySelector('#sync-now')?.addEventListener('click', async () => {
@@ -182,7 +212,7 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         <div class="card-row"><span>History / import</span><span>${cache.active ? 'Worker/D1 durable state' : 'Synthetic fixtures'}</span></div>
         <div class="card-row"><span>Export personal data</span><button class="action-btn" id="export-btn">Export JSON</button></div>
         <div class="card-row"><span>Reset local data</span><button class="action-btn" id="reset-btn" style="border-color:var(--coral);color:var(--coral);" ${cache.active ? 'disabled aria-disabled="true"' : ''}>${cache.active ? 'Disabled while Worker/D1 is active' : 'Reset to fixtures…'}</button></div>
-        <div class="card-row"><span>App version</span><span>v0.18.0 (same-origin Worker hosting)</span></div>
+        <div class="card-row"><span>App version</span><span>v0.18.1 (activation diagnostics)</span></div>
       </div>
     `;
     body.querySelector('#export-btn')?.addEventListener('click', async () => {
