@@ -38,7 +38,7 @@ async function main() {
     vars: {
       APP_ENV: 'qa',
       APP_ORIGIN: 'https://deliberately-stale.example',
-      DEVICE_ACCESS_TOKEN: TOKEN
+      DEVICE_ACCESS_TOKEN: `  ${TOKEN}\n`
     },
     assets: {
       directory: '../site',
@@ -75,7 +75,7 @@ async function main() {
     if (bootstrap.status !== 200 || bootstrap.body?.ok !== true) {
       throw new Error(`Same-origin browser bootstrap failed with HTTP ${bootstrap.status}.`);
     }
-    console.log('PASS — actual Wrangler Worker accepts same-origin browser bootstrap with stale APP_ORIGIN present');
+    console.log('PASS — actual Wrangler Worker accepts same-origin browser bootstrap with stale APP_ORIGIN and padded runtime secret');
 
     const session = await page.evaluate(async () => {
       const response = await fetch('/api/auth/session', { credentials: 'include' });
