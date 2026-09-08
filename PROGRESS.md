@@ -1,6 +1,6 @@
 # Streamarkr — Build Progress
 
-Updated: 2026-09-07.
+Updated: 2026-09-08.
 
 ## Authoritative repository status
 - Repository: `mstpln/streamarkr` (public).
@@ -14,15 +14,9 @@ Updated: 2026-09-07.
 - PR #9 is the active v0.15.0 backend user-state build. It does not enable production browser backend mode and does not authorize deployment.
 
 ## Cloudflare account-level setup and activation completed
-Dedicated Streamarkr resources are active:
-- D1 database `streamarkr` with EU jurisdiction;
-- Worker `streamarkr-api`;
-- D1 binding `DB` -> `streamarkr`;
-- runtime secret `DEVICE_ACCESS_TOKEN` stored only in Cloudflare;
-- Workers Builds uses `deploy/production` as the only production branch; non-production builds are disabled;
-- `STREAMARKR_D1_DATABASE_ID` exists only as a masked build secret.
+Dedicated Streamarkr resources are active: D1 `streamarkr` in EU, Worker `streamarkr-api`, binding `DB`, runtime secret `DEVICE_ACCESS_TOKEN`, and guarded Workers Builds using only `deploy/production`. The real D1 identifier remains only in masked Cloudflare configuration.
 
-The first authorized deployment used deployment commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` for reviewed main commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed healthy Worker/D1 connectivity, schema version 1, eight seeded services and the expected tables. That deployment authorization is consumed; every future production deployment requires fresh explicit authorization.
+The first authorized deployment used deployment commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` for reviewed main commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed healthy Worker/D1 connectivity, schema version 1, eight seeded services and the expected tables. That authorization is consumed; every future production deployment requires fresh explicit authorization.
 
 ## v0.10.2 reviewed baseline
 The baseline remains the product-behavior safety net while infrastructure is migrated. It includes the full synthetic PWA experience and the hardened status, History, Library, Search, Detail, Discover, Alerts, export, offline and responsive behavior documented in `docs/STREAMARKR_STATE.md` and `docs/STREAMARKR_DECISIONS.md`.
@@ -31,8 +25,6 @@ Final baseline validation: build PASS, 101/101 logic/repository tests, Playwrigh
 
 ## v0.11.0 Worker + D1 foundation
 PR #2 added normalized D1 schema, ownership-safe foreign keys, canonical title IDs/crosswalk preservation, multi-option availability identity, Worker auth/CORS/error safety, D1 repository boundaries, initial mutations, provider interfaces, backend-client seams, service-worker API-cache safety and exact-head CI checkout.
-
-Final PR #2 validation: PWA build PASS, Worker type-check PASS, 120/120 tests, D1 semantics 5/5, browser QA 27/27, zero console/page errors.
 
 ## v0.12.0 Wrangler-local D1 validation
 PR #3 added repository-pinned Wrangler 4.129.0, local-only Wrangler config, isolated Wrangler local D1 migration validation, CI gating, version/cache synchronization and continuity updates.
@@ -54,12 +46,12 @@ PR #9 adds the remaining core durable Worker/client mutation surface needed befo
 - streaming-service selection;
 - custom streaming services with route-safe normalized keys.
 
-The Worker validates canonical title/service/episode preconditions, rejects movie/series override scope mismatches before touching D1, bounds request payloads, preserves controlled conflict errors, and keeps season bulk writes transactional in D1. `WorkerBackendClient` exposes matching methods so the UI can later move durable writes through one backend seam.
+Review hardening now enforces override media scope in both HTTP routing and the D1 repository, validates season existence before bulk mutation, preserves season-zero specials, keeps bulk writes bounded and transactional, and escapes user-controlled custom-service text before Settings inserts it into HTML. A hostile synthetic custom-service browser regression proves the stored text cannot become executable markup.
 
-Initial implementation CI #125 passed before review hardening. Subsequent review fixed custom-service key normalization, wrong media-type override scope acceptance and season-zero handling. Final exact-head validation is still required after all v0.15.0 code/documentation changes.
+Implementation/security-review head `a9cf1e0865f9b08af7931c3f10e02072ae90de98` passed CI #147: `npm ci` PASS, PWA build PASS, Worker type-check PASS, **155/155 tests across 26 suites**, D1 **5/5**, Wrangler-local validation PASS, browser/responsive QA **28/28**, folded/unfolded PASS and zero smoke-pass console/page errors. The final documentation-inclusive PR head must pass the same complete CI gate before merge readiness is declared.
 
 ## Next work
-1. Complete PR #9 exact-head tests, browser/responsive QA, diff/security review and continuity synchronization; merge only after explicit user authorization.
+1. Complete PR #9 final documentation-inclusive exact-head CI and final diff/security/review-thread inspection; merge only after explicit user authorization.
 2. Design the safe single-user browser authentication/bootstrap flow. `DEVICE_ACCESS_TOKEN` must never be embedded in public frontend source/generated assets.
 3. Migrate or explicitly reconcile existing local user-owned state into D1 before first backend browser activation.
 4. Establish the real PWA hosting origin and configure exact `APP_ORIGIN` only when that hosting decision is made.
@@ -72,7 +64,7 @@ Initial implementation CI #125 passed before review hardening. Subsequent review
 - `APP_ORIGIN` is intentionally unset because the final PWA hosting origin is not established.
 - Browser authentication/bootstrap is not yet designed/activated.
 - Existing local user-owned state has not yet been migrated/reconciled into D1.
-- The new v0.15.0 Worker mutation methods are not yet wired into the active UI/runtime.
+- The v0.15.0 Worker mutation methods are not yet wired into the active UI/runtime.
 - No live provider integration yet.
 - Streaming-service marks remain placeholders pending properly sourced/licensed assets.
 - Physical Pixel 9 Pro Fold QA remains required before V1 release.
