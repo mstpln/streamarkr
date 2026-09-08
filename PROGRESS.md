@@ -4,71 +4,57 @@ Updated: 2026-09-08.
 
 ## Authoritative repository status
 - Repository: `mstpln/streamarkr` (public).
+- `main` is the implementation source of truth.
 - PR #1 established v0.10.2 and merged at `438997dedc282366339e6507d826441d99a81adc`.
-- PR #2 established the v0.11.0 Worker + D1 foundation and merged at `65fba889597a22f7703b3337833fc1f0ca3c5cb1`.
+- PR #2 established v0.11.0 Worker + D1 and merged at `65fba889597a22f7703b3337833fc1f0ca3c5cb1`.
 - PR #3 established v0.12.0 Wrangler-local D1 validation and merged at `02238c00150b059e9f73cb768e87a62a0d8b25e9`.
-- PR #4 established the v0.13.0 guarded Cloudflare activation configuration and merged at `bb1b59427eaa906c5ae3e85a7daba9bdf2601770`.
-- PR #6 fixed the Wrangler 4.129.0 remote migration invocation and merged at `73359c56825ea7d9b6bfa1245f513d23c9e08e30`; exact final head `6020bb2c595d14328d3220226e997b3bbaf1471c` passed CI #83.
-- PR #7 synchronized verified Cloudflare activation state and merged at `d9dc0cda4cf57f2e9322739241ff65f4d09bbafb`.
-- PR #8 established the v0.14.0 backend snapshot cache bridge and merged at `f6e6d4a04aa011e91036a773655e9572e2c6ded6`; exact final head `469235cc3e7ffe0df614b612bc73480cf4fd6da1` passed CI #123.
-- PR #9 established the v0.15.0 durable backend user-state mutation surface and merged at `d6e8a9627dd1a1cab2e6d520753084b902589b9d`; exact final head `87dcbf9b3cf77fb8500529d7afbb936c68bf6059` passed CI #215.
-- PR #10 established v0.16.0 secure browser authentication/bootstrap and merged at `c26bc20b3579cc3736621e722d623ead12786564`; exact final head `4191f46ee1b1549d2c5079ec1781e302db395476` passed CI #232.
-- PR #11 is the active v0.17.0 safe backend-activation migration build. It does not authorize or perform a production deployment.
+- PR #4 established v0.13.0 guarded Cloudflare activation configuration and merged at `bb1b59427eaa906c5ae3e85a7daba9bdf2601770`.
+- PR #6 fixed remote migration invocation and merged at `73359c56825ea7d9b6bfa1245f513d23c9e08e30`.
+- PR #7 synchronized Cloudflare activation state and merged at `d9dc0cda4cf57f2e9322739241ff65f4d09bbafb`.
+- PR #8 established v0.14.0 backend snapshot/cache bridge and merged at `f6e6d4a04aa011e91036a773655e9572e2c6ded6`.
+- PR #9 established v0.15.0 durable Worker user-state mutations and merged at `d6e8a9627dd1a1cab2e6d520753084b902589b9d`.
+- PR #10 established v0.16.0 secure browser auth/bootstrap and merged at `c26bc20b3579cc3736621e722d623ead12786564`.
+- PR #11 established v0.17.0 safe backend-activation migration and merged at `1e411d1696d32269327b5ef30de5c5f158f302e0`; exact final PR head `6b81e0f3640465dcd1d2ae58ca9510eaffac1b6d` passed CI #271 with 198/198 tests, D1 5/5, Wrangler-local PASS, browser/responsive 32/32, provider/security 8/8 and zero console/page errors.
+- PR #12 is the active v0.18.0 same-origin Worker-hosting build on branch `feat/same-origin-worker-hosting-v0180`. It does not authorize or perform a production deployment.
 
-## Cloudflare account-level setup and activation completed
-Dedicated Streamarkr resources are active: D1 `streamarkr` in EU, Worker `streamarkr-api`, binding `DB`, runtime secret `DEVICE_ACCESS_TOKEN`, and guarded Workers Builds using only `deploy/production`. The real D1 identifier remains only in masked Cloudflare configuration.
+## Cloudflare account state
+Dedicated Streamarkr resources already exist: D1 `streamarkr` in EU, Worker `streamarkr-api`, binding `DB`, runtime secret `DEVICE_ACCESS_TOKEN`, and guarded Workers Builds using only `deploy/production`. The real D1 identifier remains outside the public repository.
 
-The first authorized deployment used deployment commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` for reviewed main commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed healthy Worker/D1 connectivity, schema version 1, eight seeded services and the expected tables. That authorization is consumed; every future production deployment requires fresh explicit authorization.
+The previous authorized production deployment used deployment commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` for reviewed main `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. That authorization is consumed. Every later production deployment requires fresh explicit user authorization.
 
-## Reviewed baseline through v0.16.0
-The existing PWA behavior remains the product safety net while infrastructure is migrated. v0.14.0 established guarded atomic Worker-snapshot hydration into IndexedDB, v0.15.0 added the durable user-state Worker/client mutation surface, and v0.16.0 added signed browser-session bootstrap without exposing or persisting the device token.
+## v0.17.0 safe backend activation migration — merged
+v0.17.0 added retry-safe IndexedDB-to-D1 migration, durable-user-state fingerprinting, guarded same-ID reconciliation after uncertain responses, authoritative round-trip verification before browser authority changes, Worker-routed user-owned mutations after takeover, cached-first startup, secure Settings connect/reconnect, backend fixture-reset protection and continued synthetic-sync blocking.
 
-PR #10 exact final head `4191f46ee1b1549d2c5079ec1781e302db395476` passed CI #232: 176/176 tests, D1 5/5, Wrangler-local PASS, browser/responsive 31/31, provider/security 8/8 and zero console/page errors.
+No production browser state was migrated and no v0.17 production deployment was authorized.
 
-## v0.17.0 safe backend activation migration — PR #11 active
-PR #11 combines the remaining closely coupled takeover work into one guarded milestone:
-- persisted browser migration UUID before the first network attempt, enabling retry-safe idempotence;
-- authenticated/origin-gated `POST /api/migration/local-state`;
-- fail-closed pristine-D1 guard rather than implicit merge semantics;
-- one-batch D1 import plus migration marker;
-- provider-owned sync timestamps/cursors deliberately excluded from durable import;
-- authoritative post-import snapshot fetch and durable user-state round-trip verification before browser authority changes;
-- atomic IndexedDB switch to verified backend cache only after successful verification;
-- repository facade that keeps local behavior before activation and routes user-owned mutations through Worker/D1 after activation;
-- authoritative snapshot refresh after backend mutations, while failed refreshes preserve the last verified offline cache;
-- cached-first startup for activated installs;
-- one-time secure token/session + migration flow in Settings and a reconnect flow for expired/cleared sessions;
-- backend-mode fixture reset protection and continued synthetic-sync blocking.
+## v0.18.0 same-origin Worker hosting — PR #12 active
+The goal is to remove the remaining hosting/origin blocker without introducing a separate frontend service or custom domain requirement.
 
-The implementation/review cycle caught and fixed strict Worker typing, stale cache-mode regression expectations, test typing, incomplete migration row validation, provider sync-state promotion, incomplete service-preference verification, expired-session recovery, an outdated browser-QA expectation, a corrupted lockfile integrity entry, and a lost-response retry trap. The retry trap occurred when D1 had committed the first import but the browser never received the response and local state changed before retry; the same migration ID previously returned `alreadyApplied` forever and could leave round-trip verification permanently mismatched. The fix persists a server-side durable-user-state fingerprint, keeps unchanged retries idempotent, safely reconciles changed same-ID retries only while the backend still matches the first imported fingerprint and provider-owned state is untouched, and otherwise fails closed. The lockfile was regenerated from `package.json`, and the normal read-only CI workflow was restored before validation.
+Implemented on the PR branch:
+- the existing `streamarkr-api` Worker can serve the PWA static assets and `/api/*` from one origin;
+- deployable PWA files are staged under ignored `.wrangler/site` rather than uploading repository source/docs/tests;
+- generated Wrangler configuration uses SPA fallback and routes `/api/*` Worker-first;
+- `npm run build:cloudflare` builds the PWA, type-checks the Worker and prepares the deployable static-asset bundle;
+- deployment fails before remote operations when required PWA assets are missing;
+- when `APP_ORIGIN` is unset, browser authentication safely uses the actual Worker serving origin as the exact allowed origin; an explicit `APP_ORIGIN` remains an exact override for a future alternate hosting topology;
+- cross-origin browser requests still fail closed;
+- app/cache version is v0.18.0;
+- regression coverage verifies same-origin session behavior and deployment/static-asset boundaries.
 
-Review-fix validation head `eeb744b33db19eb3f98945c2297c11b02258450f`, CI #268:
-- `npm ci --no-audit --no-fund`: PASS;
-- PWA build: PASS, v0.17.0;
-- Worker build/type-check: PASS;
-- **198/198 tests across 26 suites**;
-- machine-readable build-state JSON/version synchronization: PASS;
-- deterministic D1 semantics **5/5**;
-- pinned Wrangler **4.129.0** local-D1 validation PASS;
-- core browser/responsive QA **32/32**;
-- focused provider/security QA **8/8**;
-- folded 344×792 PASS and unfolded 873×1000 PASS;
-- zero browser console/page errors.
+Focused implementation validation passed with `npm ci`, `npm run build:cloudflare`, **200/200 tests across 26 suites**, D1 **5/5**, and Wrangler **4.129.0** local-D1 validation. Normal PR CI #273 is the current exact-head validation cycle; final continuity synchronization must be followed by another complete exact-head CI/browser run before merge readiness.
 
-No production Worker/D1, live provider, personal data, or BANDMARKR resource was used by this validation.
+No production deployment, real browser-state migration, live provider call, personal data, secret, or BANDMARKR resource is involved in PR #12.
 
 ## Next work
-1. Require the complete normal CI/browser suite to pass on the final unchanged continuity-synchronized PR #11 head.
-2. Perform final PR diff, review-thread, secrets/personal-data and security inspection; only then keep PR #11 merge-ready. Merge still requires explicit user authorization.
-3. After a reviewed merge, establish the real PWA hosting/API topology, configure exact `APP_ORIGIN`, and validate actual browser cookie behavior. Prefer same-origin/same-site routing.
-4. Any production deployment or migration of real browser state requires fresh explicit user authorization and must remain separate from merge authorization.
-5. Add real TMDB metadata/search, Trakt OAuth/history and streaming availability in focused reviewed builds.
-6. Replace placeholder service badges with properly sourced/licensed assets and complete physical Pixel 9 Pro Fold QA before V1.
+1. Finish PR #12 exact-head CI/browser QA, review the complete diff/security boundary, synchronize continuity files, and require the final unchanged head to pass again before merge readiness.
+2. Merge PR #12 only with explicit user authorization.
+3. After merge, a **separate fresh explicit authorization** is required before deploying v0.18.0 to the existing Streamarkr Worker. Production validation must confirm the PWA opens at the Worker address, `/api/*` remains API-routed, session cookies work in the real browser, and no personal state is migrated until that path is verified.
+4. Then move directly into the real-provider sequence from the master plan: TMDB metadata/search first, followed by Trakt OAuth/history, then streaming availability/alerts and Discover.
+5. Complete licensed service marks, performance/accessibility hardening and physical Pixel 9 Pro Fold QA before V1.
 
 ## Remaining V1 limitations
-- Production browser backend mode is not enabled and `APP_ORIGIN` remains intentionally unset.
-- The v0.17 migration/routing path is implemented and synthetically validated, but no real personal browser state has been migrated to production D1.
-- Final PWA hosting/API topology and actual cookie behavior are not yet established/validated.
-- No live provider integration yet.
+- Production still runs the older reviewed Worker source; v0.18.0 has not been deployed.
+- No real personal browser state has been migrated to production D1.
+- No live TMDB, Trakt or streaming-availability integration yet.
 - Streaming-service marks remain placeholders pending properly sourced/licensed assets.
 - Physical Pixel 9 Pro Fold QA remains required before V1 release.
