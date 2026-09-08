@@ -17,6 +17,23 @@ function record(name, ok) {
 
 try {
   await page.goto(BASE + '/#/home', { waitUntil: 'networkidle' });
+
+  await page.evaluate(async () => {
+    const repo = await import('/dist/lib/repo.js');
+    await repo.resetToFixtures();
+  });
+  await page.goto(BASE + '/#/settings');
+  await page.waitForTimeout(100);
+  await page.fill('#new-svc', 'constructor');
+  await page.click('#add-svc');
+  await page.waitForTimeout(100);
+  const prototypeKeySafe = await page.evaluate(() => {
+    const text = document.querySelector('#settings-body')?.textContent ?? '';
+    const logo = Array.from(document.querySelectorAll('#settings-body .svc-logo')).find((item) => item.getAttribute('aria-label') === 'constructor');
+    return text.includes('constructor') && !!logo;
+  });
+  record('Custom service prototype-like keys render with fallback branding', prototypeKeySafe);
+
   const target = await page.evaluate(async () => {
     const repo = await import('/dist/lib/repo.js');
     const db = await import('/dist/lib/db.js');
