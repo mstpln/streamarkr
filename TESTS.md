@@ -48,14 +48,24 @@ The first secure-storage activation attempt returned the pre-hotfix generic conn
 New deterministic coverage verifies:
 - failed Worker client requests produce a structured `BackendRequestError` carrying only status and sanitized backend code;
 - token bootstrap rejection and cookie/session verification failure are distinguishable;
-- migration conflict is distinguishable from authentication failure;
+- origin rejection, migration conflict and invalid migration payload each map to distinct safe diagnostics;
 - arbitrary exception text, including synthetic token-bearing text, is never surfaced in user-facing diagnostics;
 - backend requests still use `credentials: include` and bootstrap still sends the device token only on the one exchange request;
 - migration still uses the cookie-backed request path and never re-sends the device token.
 
-Settings now explicitly verifies the cookie-backed session after bootstrap and before migration/reconnect refresh. The token field remains password-only, not prefilled and cleared after use.
+Settings explicitly verifies the cookie-backed session after bootstrap and before migration/reconnect refresh. The token field remains password-only, not prefilled and cleared after use.
 
-Every code or continuity change after a passing CI run creates a new exact head; the complete normal verify + browser QA workflow must pass again on that final unchanged head before PR #13 can be called merge-ready.
+Implementation/review validation on head `37905f410a37c3e6f5cc51d3ec1b0cdd4f1cb9bc` passed CI #300 with:
+- Cloudflare bundle build PASS, 35 compiled modules;
+- **204/204 tests across 26 suites**, zero failures/skips/todos;
+- D1 **5/5**;
+- Wrangler **4.129.0** local-D1 validation PASS;
+- browser/responsive **32/32**;
+- provider/security **8/8**;
+- folded 344×792 and unfolded 873×1000 PASS;
+- zero console/page errors.
+
+The continuity update recording that validation creates a later head, so the complete normal verify + browser QA workflow must pass once more on the final unchanged PR head before PR #13 is merge-ready.
 
 ## Browser QA expectations
 The normal PR workflow validates:
