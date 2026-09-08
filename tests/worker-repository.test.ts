@@ -26,6 +26,10 @@ class Statement implements D1PreparedStatement {
       const mediaType = this.db.knownTitleTypes.get(titleId);
       return mediaType ? { media_type: mediaType } as T : null;
     }
+    if (this.sql.includes('SELECT display_name FROM services')) {
+      const displayName = this.db.knownServiceNames.get(String(this.values[0]));
+      return displayName ? { display_name: displayName } as T : null;
+    }
     if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
     if (this.sql.includes('SELECT season_number FROM seasons') && this.db.knownSeasons.has(`${this.values[0]}:${this.values[1]}`)) {
       return { season_number: Number(this.values[1]) } as T;
@@ -47,6 +51,7 @@ class Statement implements D1PreparedStatement {
 class RecordingDb implements D1Database {
   knownTitleTypes = new Map<string, Title['mediaType']>();
   knownServices = new Set<string>();
+  knownServiceNames = new Map<string, string>();
   knownSeasons = new Set<string>();
   knownEpisodes = new Set<string>();
   releasedEpisodeNumbers: number[] = [];
@@ -199,4 +204,19 @@ test('service preferences validate existence and custom services normalize durab
   assert.equal(key, 'mubi-more');
   assert.match(db.writes[1].sql, /availability_source/);
   assert.deepEqual(db.writes[1].values.slice(0, 2), ['mubi-more', 'MUBI + More']);
+});
+
+test('adding the same normalized service reselects it but a different-name collision is rejected', async () => {
+  const same = new RecordingDb();
+  same.knownServiceNames.set('netflix', 'Netflix');
+  const sameKey = await addCustomService(same, 'netflix');
+  assert.equal(sameKey, 'netflix');
+  assert.equal(same.writes.length, 1);
+  assert.match(same.writes[0].sql, /UPDATE services SET user_selected = 1/);
+  assert.deepEqual(same.writes[0].values, ['netflix']);
+
+  const collision = new RecordingDb();
+  collision.knownServiceNames.set('mubi-more', 'MUBI + More');
+  await assert.rejects(() => addCustomService(collision, 'MUBI More'), /different streaming service/);
+  assert.equal(collision.writes.length, 0);
 });
