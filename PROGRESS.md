@@ -7,22 +7,23 @@ Updated: 2026-09-08.
 - PR #12 / v0.18.0 same-origin Worker hosting merged at `77d8644e06be5a9e61c0938782616f02cdf8f179`.
 - PR #13 secure activation diagnostics merged at `3ddcbfcb515a31e1ed6ce2951ea741832d5adeda` and was separately deployed.
 - PR #14 browser-session bootstrap fix merged at `e487b0804f7462aadfcb2ef5264ace141d775d74` and was separately deployed.
-- PR #15 is the active compatibility hotfix on `fix/activation-session-v0181`.
+- PR #15 cached-client compatibility fix merged at `49c49b322eda3067d96420e147525c0335e44f55` and was separately deployed.
+- PR #16 is the active serving-origin activation fix on `fix/same-origin-activation-v0182`.
 
 ## Production finding now being fixed
-After PR #14 was deployed, production activation still failed at the initial secure-session bootstrap with `Could not create the secure browser session. Local data is unchanged.` No personal state was migrated and IndexedDB remained unchanged.
+After PR #15 was deployed, production activation still failed at the initial secure-session bootstrap with `Could not create the secure browser session. Local data is unchanged.` No personal state was migrated and IndexedDB remained unchanged.
 
-PR #15 removes the rollout dependency between the Worker and whichever v0.18 browser bundle is currently installed. `POST /api/auth/session` accepts both the current same-origin JSON-body token exchange and the previous one-time bearer bootstrap used by an older cached client. Both paths still require the exact allowed browser origin, compare the token using the existing constant-time digest logic, never persist or return the device token, and issue the same signed HttpOnly/Secure session cookie.
+The repeated token-transport changes did not address a separate structural risk in the same-origin topology: browser origin checks still allowed dashboard/runtime `APP_ORIGIN` configuration to override the actual Worker request origin. Because Streamarkr now serves both the PWA and `/api/*` from the same Worker origin, a stale or mismatched `APP_ORIGIN` can reject a genuinely same-origin browser before token exchange completes.
 
-The compatibility path is limited to the session-bootstrap route. Operational bearer authentication remains supported as before; later browser requests and migration remain cookie-backed.
+PR #16 removes that configuration dependency. Browser CORS, session bootstrap/logout, cookie-session verification and authenticated browser route checks now use the actual Worker request URL origin as the authority. `APP_ORIGIN` no longer controls browser origin acceptance. Cross-origin requests still fail closed, operational no-Origin bearer clients remain supported, both current JSON-body and cached-client bearer bootstrap forms remain supported, and session-cookie/token cryptography is unchanged.
 
 ## Review and validation
-The first PR #15 implementation head `c3aef8cfcfa068f87a9ee1d52be57d843f9f0132` passed CI #317 with **208/208 tests**, D1 **5/5**, Wrangler-local PASS, browser/responsive **32/32**, provider/security **8/8**, folded/unfolded PASS and zero console/page errors.
+The first PR #16 implementation head exposed three existing tests that still encoded the old configured-origin contract. Those tests were corrected to assert the intended serving-origin behavior rather than weakening the implementation.
 
-A follow-up review found a regression-coverage gap: the cached-client compatibility test proved the successful bearer path but did not explicitly prove rejection of a wrong bearer token and wrong browser origin on that same POST route. Those negative cases were added at head `7fd7d05796122d7712d95a1521245fed75cbcd78`; full exact-head CI is being rerun before merge readiness.
+Head `a50066847fc2f566d2c7ccd11327e6c2d0aaccdd` passed build, all logic/Worker/client tests, D1 schema tests and Wrangler-local D1 validation. Browser/responsive QA is completing before continuity synchronization and a final exact-head run.
 
 ## Next work
-1. Complete PR #15 exact-head CI/review cycle.
+1. Complete PR #16 exact-head CI/review cycle after continuity synchronization.
 2. Merge only with explicit user authorization.
 3. Deploy only with a separate fresh explicit production authorization.
 4. Retry secure-storage activation in the live PWA. Accept personal-state migration only after the session verifies and guarded round-trip migration succeeds.
