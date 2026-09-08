@@ -21,7 +21,12 @@ class Statement implements D1PreparedStatement {
       const displayName = this.db.serviceDisplayNames.get(String(this.values[0]));
       return displayName ? { display_name: displayName } as T : null;
     }
-    if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
+    if (this.sql.includes('SELECT user_selected FROM services')) {
+    const serviceKey = String(this.values[0]);
+    if (!this.db.knownServices.has(serviceKey)) return null;
+    return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
+  }
+  if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
     if (this.sql.includes('SELECT season_number FROM seasons') && this.db.knownSeasons.has(`${this.values[0]}:${this.values[1]}`)) {
       return { season_number: Number(this.values[1]) } as T;
     }
@@ -45,6 +50,7 @@ class FakeDb implements D1Database {
   failReads = false;
   knownTitleTypes = new Map<string, Title['mediaType']>([['movie-1', 'movie'], ['series-1', 'series']]);
   knownServices = new Set(['netflix', 'hbo-max']);
+  selectedServices = new Set(['netflix', 'hbo-max']);
   serviceDisplayNames = new Map([['netflix', 'Netflix'], ['hbo-max', 'HBO Max']]);
   knownSeasons = new Set(['series-1:0', 'series-1:2']);
   knownEpisodes = new Set(['series-1:2:3', 'series-1:0:1']);
@@ -144,6 +150,17 @@ test('unknown watched-service keys return a controlled conflict', async () => {
   assert.equal((await response.json() as any).error, 'missing_service');
 });
 
+test('watched-service writes require a currently selected service', async () => {
+  const db = new FakeDb();
+  db.knownServices.add('viaplay');
+  const response = await handleRequest(new Request('https://worker.example/api/watched-service/movie-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify({ serviceKey: 'viaplay' })
+  }), env(db));
+  assert.equal(response.status, 409);
+  assert.equal((await response.json() as any).error, 'service_not_selected');
+  assert.equal(db.writes.length, 0);
+});
+
 test('movie and episode override routes validate scope and persist durable corrections', async () => {
   const db = new FakeDb();
   const movie = await handleRequest(new Request('https://worker.example/api/overrides/movie/movie-1', {
@@ -158,6 +175,25 @@ test('movie and episode override routes validate scope and persist durable corre
   }), env(db));
   assert.equal(episode.status, 200);
   assert.deepEqual(db.writes.at(-1)?.values.slice(1, 6), ['episode', 'series-1', 2, 3, 'unwatched']);
+});
+
+test('override routes reject unsafe integer coordinates before touching D1', async () => {
+  const unsafe = Number.MAX_SAFE_INTEGER + 1;
+  const episodeDb = new FakeDb();
+  const episode = await handleRequest(new Request('https://worker.example/api/overrides/episode/series-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ seasonNumber: unsafe, episodeNumber: 1, state: 'watched' })
+  }), env(episodeDb));
+  assert.equal(episode.status, 400);
+  assert.equal(episodeDb.touched, 0);
+
+  const seasonDb = new FakeDb();
+  const season = await handleRequest(new Request('https://worker.example/api/overrides/season/series-1', {
+    method: 'PUT', headers: authHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ seasonNumber: unsafe, state: 'watched' })
+  }), env(seasonDb));
+  assert.equal(season.status, 400);
+  assert.equal(seasonDb.touched, 0);
 });
 
 test('override routes reject media-type scope mismatches before touching D1', async () => {

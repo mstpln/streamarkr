@@ -32,6 +32,20 @@ export class MissingServiceError extends Error {
   }
 }
 
+export class UnselectedServiceError extends Error {
+  constructor(serviceKey: string) {
+    super(`Streaming service is not selected: ${serviceKey}`);
+    this.name = 'UnselectedServiceError';
+  }
+}
+
+export class InvalidCustomServiceNameError extends Error {
+  constructor() {
+    super('Invalid custom streaming service name');
+    this.name = 'InvalidCustomServiceNameError';
+  }
+}
+
 export class MissingEpisodeError extends Error {
   constructor(titleId: string, seasonNumber: number, episodeNumber: number) {
     super(`Missing episode record: ${titleId} S${seasonNumber}E${episodeNumber}`);
@@ -202,6 +216,13 @@ async function requireService(db: D1Database, serviceKey: string): Promise<void>
   if (!service) throw new MissingServiceError(serviceKey);
 }
 
+async function requireSelectedService(db: D1Database, serviceKey: string): Promise<void> {
+  const service = await db.prepare('SELECT user_selected FROM services WHERE service_key = ?')
+    .bind(serviceKey).first<{ user_selected: number }>();
+  if (!service) throw new MissingServiceError(serviceKey);
+  if (integer(service.user_selected) !== 1) throw new UnselectedServiceError(serviceKey);
+}
+
 async function requireEpisode(db: D1Database, titleId: string, seasonNumber: number, episodeNumber: number): Promise<void> {
   const episode = await db.prepare('SELECT episode_number FROM episodes WHERE title_id = ? AND season_number = ? AND episode_number = ?')
     .bind(titleId, seasonNumber, episodeNumber).first<{ episode_number: number }>();
@@ -265,7 +286,7 @@ export async function setWatchedService(db: D1Database, titleId: string, service
     await run(db, 'DELETE FROM watched_service WHERE title_id = ?', [titleId]);
     return;
   }
-  await requireService(db, serviceKey);
+  await requireSelectedService(db, serviceKey);
   await run(db, `INSERT INTO watched_service (title_id, service_key, changed_at) VALUES (?, ?, ?)
     ON CONFLICT(title_id) DO UPDATE SET service_key=excluded.service_key, changed_at=excluded.changed_at`, [titleId, serviceKey, now]);
 }
@@ -341,13 +362,14 @@ export async function setServiceSelected(db: D1Database, serviceKey: string, sel
 
 export async function addCustomService(db: D1Database, displayName: string): Promise<string> {
   const trimmed = displayName.trim();
+  if (!trimmed || trimmed.length > 80 || !/[a-z0-9]/i.test(trimmed)) throw new InvalidCustomServiceNameError();
   const serviceKey = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  if (!serviceKey) throw new Error('Invalid custom service key');
+  if (!serviceKey || serviceKey.length > 80) throw new InvalidCustomServiceNameError();
 
   const existing = await db.prepare('SELECT display_name FROM services WHERE service_key = ?')
     .bind(serviceKey).first<{ display_name: string }>();
   if (existing) {
-    if (existing.display_name.trim().toLocaleLowerCase() !== trimmed.toLocaleLowerCase()) {
+    if (existing.display_name.trim().toLowerCase() !== trimmed.toLowerCase()) {
       throw new ServiceKeyConflictError(serviceKey);
     }
     await run(db, 'UPDATE services SET user_selected = 1 WHERE service_key = ?', [serviceKey]);

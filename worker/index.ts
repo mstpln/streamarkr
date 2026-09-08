@@ -3,6 +3,7 @@ import {
   addCustomService,
   addLibraryItem,
   clearRating,
+  InvalidCustomServiceNameError,
   InvalidOverrideScopeError,
   loadSnapshot,
   markAlertsSeen,
@@ -18,7 +19,8 @@ import {
   setRating,
   setSeasonOverride,
   setServiceSelected,
-  setWatchedService
+  setWatchedService,
+  UnselectedServiceError
 } from './repository.js';
 import type { Env } from './types.js';
 import type { WatchOverride } from '../src/lib/types.js';
@@ -80,11 +82,11 @@ function validOverrideState(value: unknown): value is WatchOverride['state'] {
 }
 
 function positiveInteger(value: unknown): value is number {
-  return Number.isInteger(value) && Number(value) > 0;
+  return Number.isSafeInteger(value) && Number(value) > 0;
 }
 
 function nonNegativeInteger(value: unknown): value is number {
-  return Number.isInteger(value) && Number(value) >= 0;
+  return Number.isSafeInteger(value) && Number(value) >= 0;
 }
 
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
@@ -217,7 +219,13 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     if (error instanceof MissingServiceError) {
       return json({ error: 'missing_service', message: error.message }, 409, responseHeaders);
     }
-    if (error instanceof MissingEpisodeError) {
+    if (error instanceof UnselectedServiceError) {
+    return json({ error: 'service_not_selected', message: error.message }, 409, responseHeaders);
+  }
+  if (error instanceof InvalidCustomServiceNameError) {
+    return json({ error: 'invalid_service_name' }, 400, responseHeaders);
+  }
+  if (error instanceof MissingEpisodeError) {
       return json({ error: 'missing_episode', message: error.message }, 409, responseHeaders);
     }
     if (error instanceof MissingSeasonError) {

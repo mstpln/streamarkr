@@ -30,7 +30,12 @@ class Statement implements D1PreparedStatement {
       const displayName = this.db.knownServiceNames.get(String(this.values[0]));
       return displayName ? { display_name: displayName } as T : null;
     }
-    if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
+    if (this.sql.includes('SELECT user_selected FROM services')) {
+    const serviceKey = String(this.values[0]);
+    if (!this.db.knownServices.has(serviceKey)) return null;
+    return { user_selected: this.db.selectedServices.has(serviceKey) ? 1 : 0 } as T;
+  }
+  if (this.sql.includes('SELECT service_key FROM services') && this.db.knownServices.has(String(this.values[0]))) return { service_key: String(this.values[0]) } as T;
     if (this.sql.includes('SELECT season_number FROM seasons') && this.db.knownSeasons.has(`${this.values[0]}:${this.values[1]}`)) {
       return { season_number: Number(this.values[1]) } as T;
     }
@@ -51,6 +56,7 @@ class Statement implements D1PreparedStatement {
 class RecordingDb implements D1Database {
   knownTitleTypes = new Map<string, Title['mediaType']>();
   knownServices = new Set<string>();
+  selectedServices = new Set<string>();
   knownServiceNames = new Map<string, string>();
   knownSeasons = new Set<string>();
   knownEpisodes = new Set<string>();
@@ -124,6 +130,9 @@ test('watched-service mutation requires both canonical title and known service',
   assert.equal(db.writes.length, 0);
 
   db.knownServices.add('netflix');
+  await assert.rejects(() => setWatchedService(db, 'movie-1', 'netflix', '2026-09-07T00:00:00Z'), /not selected/);
+  assert.equal(db.writes.length, 0);
+  db.selectedServices.add('netflix');
   await setWatchedService(db, 'movie-1', 'netflix', '2026-09-07T00:00:00Z');
   assert.match(db.writes[0].sql, /INSERT INTO watched_service/);
   assert.deepEqual(db.writes[0].values.slice(0, 2), ['movie-1', 'netflix']);
@@ -204,6 +213,13 @@ test('service preferences validate existence and custom services normalize durab
   assert.equal(key, 'mubi-more');
   assert.match(db.writes[1].sql, /availability_source/);
   assert.deepEqual(db.writes[1].values.slice(0, 2), ['mubi-more', 'MUBI + More']);
+});
+
+test('custom-service repository refuses unaddressable or oversized names', async () => {
+  const db = new RecordingDb();
+  await assert.rejects(() => addCustomService(db, 'A'.repeat(81)), /Invalid custom streaming service name/);
+  await assert.rejects(() => addCustomService(db, '!!!'), /Invalid custom streaming service name/);
+  assert.equal(db.writes.length, 0);
 });
 
 test('adding the same normalized service reselects it but a different-name collision is rejected', async () => {
