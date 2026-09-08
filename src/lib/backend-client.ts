@@ -1,4 +1,4 @@
-import type { BackendSnapshot } from './backend-contract.js';
+import type { BackendMigrationBundle, BackendSnapshot } from './backend-contract.js';
 import type { Rating, WatchOverride } from './types.js';
 
 export interface BackendSessionStatus {
@@ -21,9 +21,13 @@ export interface BackendClient {
   markAlertsSeen(ids: string[]): Promise<void>;
 }
 
+export interface MigrationBackendClient extends BackendClient {
+  importLocalState(bundle: BackendMigrationBundle): Promise<{ alreadyApplied: boolean }>;
+}
+
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-export class WorkerBackendClient implements BackendClient {
+export class WorkerBackendClient implements MigrationBackendClient {
   private readonly baseUrl: string;
   private readonly token: string | null;
   private readonly fetchImpl: FetchLike;
@@ -64,6 +68,10 @@ export class WorkerBackendClient implements BackendClient {
 
   async clearSession(): Promise<void> {
     await this.request('/api/auth/session', { method: 'DELETE' }, null);
+  }
+
+  importLocalState(bundle: BackendMigrationBundle): Promise<{ alreadyApplied: boolean }> {
+    return this.request('/api/migration/local-state', { method: 'POST', body: JSON.stringify(bundle) });
   }
 
   getSnapshot(): Promise<BackendSnapshot> {
