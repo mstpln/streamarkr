@@ -15,6 +15,14 @@ import {
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SYNTHETIC_D1_ID = '12345678-1234-4234-8234-123456789abc';
 
+test('package manifest and lockfile versions stay synchronized', async () => {
+  const packageJson = JSON.parse(await readFile(path.join(PROJECT_ROOT, 'package.json'), 'utf8'));
+  const packageLock = JSON.parse(await readFile(path.join(PROJECT_ROOT, 'package-lock.json'), 'utf8'));
+
+  assert.equal(packageLock.version, packageJson.version);
+  assert.equal(packageLock.packages?.['']?.version, packageJson.version);
+});
+
 test('rejects missing, malformed, and placeholder D1 identifiers', () => {
   assert.throws(() => validateD1DatabaseId(undefined), /STREAMARKR_D1_DATABASE_ID/);
   assert.throws(() => validateD1DatabaseId('not-a-uuid'), /STREAMARKR_D1_DATABASE_ID/);
