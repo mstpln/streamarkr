@@ -1,134 +1,118 @@
 # Streamarkr durable decisions
 
+Updated: 2026-09-08.
+
 ## Product/data boundaries
 - History is provider ingestion and may contain shared-family viewing; My Library is the user's intentional collection.
-- Heart means My Library membership, not liking. Removing from Library preserves History, ratings, and manual corrections.
+- Heart means My Library membership, not liking. Removing from Library preserves History, ratings and manual corrections.
 - One 1-5 star rating per whole movie/series; no season or episode ratings.
 - Manual watched/unwatched corrections are user-owned and authoritative over provider watch state until changed by the user.
-- A manual correction timestamp is provenance, not a viewing timestamp and must not affect Watching Now recency or the 14-day On Hold timer.
+- A manual correction timestamp is provenance, not viewing activity, and must not affect Watching Now recency or the 14-day On Hold timer.
 - Provider refreshes may reconcile provider-owned metadata/availability but must never overwrite user-owned state.
-- Stable provider IDs/crosswalks must be preserved so provider data can change without replacing local identity; user export includes those stable crosswalk IDs so exported personal data can be reconnected safely.
+- Stable provider IDs/crosswalks are preserved so provider data can change without replacing local identity; user export includes those stable crosswalk IDs.
 
 ## Series status semantics
 - To Watch: in Library, not started.
 - Watching: actual viewing has engaged a season and released unwatched episodes remain.
 - On Hold: engaged/Watching, released unwatched episodes remain, and no real watch activity for 14 days.
 - Caught Up: all released episodes through the highest engaged season are watched. An entirely untouched newer season does not move a Caught Up series back to Watching/On Hold.
-- Finished: all episodes watched and provider series status is **exactly `Ended`**. `Canceled` does not silently mean Finished.
-- `src/lib/season-select.ts` is the single source of truth for engaged/relevant season selection.
-- Season bulk watched/unwatched actions are bounded snapshots over currently known released episodes. They must not create wildcard state affecting future episodes.
-- The durable Worker implementation follows the same rule: the server requires the requested season to exist, selects episodes released as of the action date and stores episode-level overrides only. Season 0 is valid for specials.
+- Finished: all episodes watched and provider series status is exactly `Ended`. `Canceled` does not silently mean Finished.
+- `src/lib/season-select.ts` remains the source of truth for engaged/relevant season selection.
+- Season bulk watched/unwatched actions are bounded to currently known released episodes. They never create wildcard state for future episodes. Season 0 remains valid for specials.
 
 ## Alerts
 - Alerts are in-app only; no push notifications in V1.
 - Keep newest 30 alerts; no Clear All.
-- NEW indicators remain visible throughout the user's first visit to Alerts. That visit's unseen alerts are persisted as seen when the user leaves Alerts, so the next visit and header badge are updated.
+- NEW indicators remain visible throughout the first Alerts visit and are persisted as seen when leaving.
 - Alert generation is based on persisted before/after transitions, not repeated assertion of current truth.
 - New-episode alerts apply only to series currently Watching.
-- Availability alert identities are cycle-aware so a title can legitimately leave and later return on the same service.
+- Availability alert identities are cycle-aware so a title may legitimately leave and later return on the same service.
 
-## Streaming, service filters, and Discover
-- Preferences initial service choices: Netflix, HBO Max, Disney+, Prime Video, SkyShowtime, Apple TV, Viaplay, TV4 Play.
+## Streaming, filters and Discover
+- Initial selectable services: Netflix, HBO Max, Disney+, Prime Video, SkyShowtime, Apple TV, Viaplay, TV4 Play.
 - Current availability is provider-owned; historical "where I watched it" is optional user-owned state per title.
-- Deselecting a service in Preferences must not erase or hide an already-recorded historical watched-service value in History. History filter/display uses services represented by historical rows, regardless of current selection.
-- Library's Streaming Service filter reflects services represented by current availability, not only selected Preferences services. Preference selection affects prioritisation and Discover eligibility, not whether a real current service can be filtered.
-- The Detail page's single primary streaming action prefers an actionable subscription link on a selected service, but if none exists it falls back to another actionable subscription service. Rent/buy-only offers are not promoted as the primary action.
-- Discover only includes subscription-included titles on one of the user's selected services. No rent/buy-only recommendations.
-- Discover excludes titles already in History or My Library.
-- Top Picks uses 5-star titles; Similar To can use any Library title and remains same media type; By Genre uses rating/preference weighting.
-- Custom service names are normalized identically in local IndexedDB mode and Worker/D1 mode: trim, lowercase, collapse each non-ASCII-alphanumeric run to one hyphen, then trim edge hyphens. Names are bounded to 80 characters so resulting keys remain addressable by Worker routes.
-- Re-adding the same custom/built-in service name case-insensitively reselects the existing row. A different display name that normalizes to an already-used key is a conflict and must not silently alias or overwrite the existing service.
-- Any user/service-controlled text inserted through `innerHTML` must be escaped first; service names/keys must remain text/attribute data and never become executable markup.
+- Deselecting a service must not erase or hide historical watched-service values.
+- Library's service filter reflects services represented by current availability, not only selected Preferences services.
+- Detail's primary streaming action prefers an actionable subscription link on a selected service, then another actionable subscription service. Rent/buy-only offers are not the primary action.
+- Discover only includes subscription-included titles on selected services and excludes History and Library titles.
+- Top Picks uses 5-star titles; Similar To can use any Library title and stays the same media type; By Genre uses rating/preference weighting.
+- Custom service names normalize identically in IndexedDB and Worker/D1 mode, remain bounded to 80 characters, and collision handling must never silently alias different display names.
+- Any user/provider/service-controlled text inserted through `innerHTML` is escaped. Provider deep links are restricted to HTTP/HTTPS.
 
 ## Architecture
-- Target: Vite + TypeScript PWA, separate Cloudflare Worker, separate D1, optional separate R2 only if needed, real provider adapters, GitHub CI.
-- PR #1 established the reviewed v0.10.2 synthetic/local baseline.
-- PR #2 / v0.11.0 established the source-level Worker + D1 backend foundation while leaving the working UI on IndexedDB/fake providers.
-- PR #3 / v0.12.0 established pinned Wrangler-local D1 runtime validation before remote activation.
-- PR #8 / v0.14.0 established the guarded browser cache bridge while keeping the production browser backend disabled.
-- PR #9 / v0.15.0 established Worker/client routes for the remaining core user-owned mutation types without activating them in the production browser runtime.
-- PR #10 / v0.16.0 established the browser session/bootstrap security foundation without configuring production origin, migrating local state, or activating the backend browser runtime.
-- PR #11 / v0.17.0 establishes the **safe activation transition**: retry-safe local-state migration/reconciliation plus a repository facade that routes user-owned mutations through the Worker after a verified takeover. It still does not authorize or perform production activation.
-- `worker/repository.ts` is the server-side persistence boundary. Worker routes should not contain ad-hoc D1 mutation logic when the operation belongs in the repository layer.
-- `src/lib/backend-contract.ts` defines shared browser/Worker snapshot and migration payload shapes; `src/lib/backend-client.ts` is the browser transport seam. UI modules must use this seam rather than calling personal Worker routes directly.
-- Real provider code implements the interfaces in `worker/provider-contracts.ts`; provider credentials remain Worker-only and provider-specific concerns must not leak into UI/domain logic.
-- D1 is the durable source of truth **only after** the guarded local-state migration has been durably imported, round-trip verified, and the browser cache has atomically switched its `data_source` marker to `backend`. Before that point, the existing IndexedDB source remains authoritative.
-- IndexedDB remains the browser cache/offline read layer after activation rather than a second independent authority.
-- Backend snapshots hydrate IndexedDB atomically across related stores so the UI never observes a mixed old/new snapshot after a successful refresh.
-- A failed Worker snapshot fetch or failed post-mutation refresh must leave the previously verified IndexedDB cache untouched so offline use remains possible.
-- The D1 and IndexedDB availability key is `(title_id, service_key, option_type)` / `(titleId, serviceKey, optionType)`, allowing subscription/rent/buy options to coexist for one title/service.
-- The IndexedDB v1 -> v2 migration may discard the provider-owned availability cache to change its key, but must preserve all user-owned local stores.
-- D1 foreign keys use restrictive deletion for durable relationships. Provider refresh code reconciles provider-owned rows; it does not cascade-delete user-owned Library/rating/override/history preference state.
-- User-state reference/scope invariants are enforced at the repository boundary, not only trusted to HTTP routing. Movie overrides require canonical movies; episode/season overrides require canonical series; watched-service requires a known service; episode overrides require a known episode; season bulk overrides require a known season.
-- `wrangler.local.jsonc` is strictly local-only and may contain only non-production placeholder identifiers.
-- Wrangler is pinned to **4.129.0** and local migration validation always runs with `--local` against isolated ignored state.
+- Target: Vite + TypeScript PWA, Cloudflare Worker, Cloudflare D1, optional R2 only if needed, real provider adapters and GitHub CI.
+- PR #11 / v0.17.0 merged at `1e411d1696d32269327b5ef30de5c5f158f302e0` and established the safe activation transition: retry-safe local-state migration/reconciliation plus Worker-routed user-owned mutations after verified takeover.
+- PR #12 / v0.18.0 establishes the **same-origin production topology**: the existing Streamarkr Worker serves the PWA static assets and `/api/*` from one Worker origin. This avoids adding a separate frontend hosting service or requiring a custom domain for V1.
+- `worker/repository.ts` is the server-side persistence boundary. Worker routes do not contain ad-hoc D1 mutation logic when the operation belongs in the repository layer.
+- `src/lib/backend-contract.ts` defines shared browser/Worker shapes; `src/lib/backend-client.ts` is the browser transport seam. UI modules do not call personal Worker routes directly.
+- Real provider code implements `worker/provider-contracts.ts`; provider credentials remain Worker-only.
+- D1 becomes durable authority only after guarded local-state import, authoritative round-trip verification and atomic browser `data_source=backend` takeover.
+- IndexedDB remains the browser cache/offline read layer after activation, not an independent second authority.
+- Backend snapshots hydrate IndexedDB atomically; failed Worker fetches or post-mutation refreshes preserve the last verified cache.
+- D1/IndexedDB availability identity remains title + service + option type so subscription/rent/buy may coexist.
+- Provider refreshes may reconcile provider-owned rows but must not cascade-delete user-owned state.
+- User-state identity/scope invariants are enforced at the repository boundary, not only HTTP routing.
+- Wrangler is pinned to **4.129.0**; local migration validation uses `--local` and isolated ignored state.
 
 ## Local-state migration and backend takeover
-- Existing non-empty local/fixture state must never be silently overwritten by a first Worker snapshot. Activation requires the explicit v0.17 migration path.
-- The browser creates and persists a migration UUID in IndexedDB **before** the first import request. Retries reuse that same identity so a lost HTTP response cannot create a second independent import.
-- `POST /api/migration/local-state` requires the normal authenticated browser session and origin protections.
-- The Worker accepts a first import only when durable D1 application state is pristine apart from the seeded built-in service registry. It must fail closed rather than invent merge semantics for unexpected durable state.
-- The first import writes the accepted cache/user-state rows, a fingerprint of the durable user-state categories, and the migration marker atomically. An unchanged retry with the same migration ID is idempotent. If D1 committed but the browser lost the response and local state changed before retry, the same migration ID may reconcile that changed snapshot only when current D1 durable user state still matches the stored original fingerprint and provider-owned backend state remains untouched. Any independent durable backend change, missing fingerprint, or different migration ID fails closed.
-- Provider-owned sync timestamps/cursors are **not** promoted from local/synthetic browser state into D1. Real backend provider integrations must establish their own sync state later.
-- After import, the browser must fetch the authoritative D1 snapshot and compare durable user-state categories before switching authority. Library, ratings, watched-service, watch events, watch overrides, service definitions/preferences and alerts are part of that round-trip verification.
-- Any import failure, network failure, invalid snapshot or verification mismatch leaves the existing local source untouched and preserves the pending migration UUID for a safe retry.
-- Successful verification atomically replaces the browser cache and marks `data_source=backend`.
-- Once `data_source=backend`, user-owned mutations are Worker-routed and followed by an authoritative snapshot refresh. Local mutation fallbacks are not allowed in backend mode.
-- Reset-to-fixtures remains prohibited in backend mode. Synthetic provider sync remains prohibited in backend mode.
-- Startup is cached-first after activation: failure to reach the Worker is non-fatal and the last verified IndexedDB snapshot remains available.
+- Existing non-empty local/fixture state is never silently overwritten by a first Worker snapshot.
+- The browser persists a migration UUID before the first import request; retries reuse it.
+- `POST /api/migration/local-state` requires normal authentication and origin protections.
+- First import requires pristine durable application state apart from the built-in service registry.
+- First import writes accepted state, its durable-user-state fingerprint and migration marker atomically.
+- Same-ID unchanged retry is idempotent. If the first response was lost and local state changed, same-ID reconciliation is allowed only while D1 still matches the stored original durable-user-state fingerprint and provider-owned backend state remains untouched. Independent backend change, missing fingerprint or a different migration ID fails closed.
+- Provider-owned sync timestamps/cursors are not promoted from local/synthetic state.
+- After import, the browser fetches the authoritative snapshot and compares durable user-state categories before switching authority.
+- Any import/network/snapshot/verification failure leaves the existing local source intact for recovery.
+- Once backend-active, user mutations are Worker-routed and followed by authoritative refresh. No local mutation fallback is allowed.
+- Reset-to-fixtures and synthetic provider sync remain prohibited in backend mode.
+- Startup is cached-first after activation; Worker outage is non-fatal to the last verified cache.
+
+## Same-origin Worker hosting and browser authentication
+- The dedicated production resource remains Worker `streamarkr-api` with D1 `streamarkr` bound as `DB`. It is always separate from BANDMARKR.
+- v0.18 stages only deployable PWA assets under ignored `.wrangler/site`; package files, documentation, tests and private/runtime data are not part of the static asset bundle.
+- Generated Wrangler config uses static-asset SPA fallback and `run_worker_first: ['/api/*']` so normal PWA files and API routes share the Worker origin while API routes still execute Worker code.
+- `npm run build:cloudflare` builds the PWA, type-checks the Worker and stages the static asset bundle. Deployment preflight refuses remote work when required staged assets are absent.
+- `DEVICE_ACCESS_TOKEN` remains the single-user operational secret and is never embedded/persisted in frontend source, generated assets, localStorage, IndexedDB, cookies, logs or repository configuration.
+- Browser bootstrap sends a user-entered device token only to `POST /api/auth/session`; success returns no token and sets a signed HttpOnly browser-session cookie.
+- Cookie remains `__Host-streamarkr_session`, `HttpOnly`, `Secure`, `Path=/`, no `Domain`, with current 30-day TTL. Secret rotation invalidates existing sessions.
+- **v0.18 supersedes the earlier requirement that `APP_ORIGIN` must always be configured.** When `APP_ORIGIN` is unset, the effective allowed browser origin is the actual request URL/Worker serving origin. This is safe because the PWA and API are intentionally same-origin.
+- If `APP_ORIGIN` is explicitly configured later, it remains an exact-origin override and mismatching Origin requests fail closed.
+- No-Origin cookie requests are accepted only when the request URL origin equals the effective app origin. Operational bearer clients without browser Origin remain supported.
+- `DELETE /api/auth/session` remains origin-gated and clears the session cookie without requiring the device token.
+- Browser session state is not stored in D1; signed expiry plus device-secret rotation is the V1 global revocation mechanism.
 
 ## Cloudflare activation and deployment
-- The dedicated Cloudflare resources are named exactly Worker `streamarkr-api` and D1 `streamarkr`; the Worker binding is `DB`.
-- The user explicitly created those resources on 2026-09-07. They must never be replaced with, bound to, or confused with BANDMARKR resources.
-- The real D1 UUID remains account/build configuration and must not be committed to the public repository.
-- The committed `wrangler.jsonc` remains account-neutral. `scripts/prepare-cloudflare-deploy.mjs` generates the account-specific D1 binding under ignored `.wrangler/deploy/` state from the build-only `STREAMARKR_D1_DATABASE_ID` value.
-- Remote deploy preparation must validate the D1 ID as a non-placeholder UUID and must not print it.
-- Remote migration/deployment commands explicitly disable Wrangler automatic provisioning and draft-resource auto-creation.
-- `DEVICE_ACCESS_TOKEN` is declared as a required Worker secret. Production deployment must fail if it is not configured.
-- Wrangler must preserve dashboard-managed runtime variables (`keep_vars: true`) and never remove encrypted Worker secrets as a side-effect of deployment.
-- The real `APP_ORIGIN` is not invented before the PWA hosting origin exists. Until configured, cross-origin browser API access and browser-session bootstrap remain denied by design.
-- **Normal merges to `main` must not automatically deploy production.** Cloudflare Workers Builds uses dedicated branch `deploy/production`, advanced only after fresh explicit user authorization. Non-production branch builds remain disabled for this single-user production Worker.
-- A production deployment may apply pending committed D1 migrations immediately before deploying the Worker, but only from an explicitly authorized deployment-branch update after the exact source head has already passed the normal PR review/test cycle.
-- A previous deployment authorization is consumed by the deployment it authorized and must never be reused for a later source head.
-- v0.17 source readiness does not itself authorize deployment, `APP_ORIGIN` configuration, or migration of real personal browser data.
-
-## Single-user Worker and browser authentication
-- The operational/manual API authentication primitive remains a strong bearer device token supplied only as Worker secret `DEVICE_ACCESS_TOKEN`.
-- The Worker fails closed with 503 when `DEVICE_ACCESS_TOKEN` has not been configured; it never silently exposes personal routes in a local/open mode.
-- `/api/health` may remain public because it returns only service/schema health and whether auth is configured, never user data or credentials.
-- The production PWA must never embed or persist `DEVICE_ACCESS_TOKEN` in public source, generated assets, localStorage, IndexedDB, cookies, logs, or repository configuration.
-- Browser bootstrap is an explicit one-time exchange: a user-entered `DEVICE_ACCESS_TOKEN` may be sent only to `POST /api/auth/session`; a successful exchange returns no token value and instead sets a signed HttpOnly browser-session cookie.
-- Browser session tokens are stateless HMAC-SHA256 values bound to a Streamarkr-specific signing context, expiry and random nonce. The current TTL is 30 days.
-- Session cookie name is `__Host-streamarkr_session` and it must remain `HttpOnly`, `Secure`, `Path=/`, without `Domain`. `SameSite=None` is used at the foundation stage so a separately hosted Worker can be exercised without weakening origin checks.
-- Credentialed browser CORS remains exact-origin only. A browser-session request must also originate from exact configured `APP_ORIGIN`; a supplied mismatching Origin is rejected before personal route logic.
-- A browser request without an Origin is accepted for cookie auth only when the request URL itself is on `APP_ORIGIN`, supporting an eventual same-origin API topology. Operational bearer clients without browser Origin remain supported.
-- Cookie tampering and expiry fail closed. Rotating `DEVICE_ACCESS_TOKEN` also rotates the effective HMAC signing key and invalidates all existing browser sessions.
-- `DELETE /api/auth/session` is origin-gated and idempotently clears the browser cookie without requiring the device token.
-- Browser session state is deliberately not stored in D1. This single-user V1 foundation uses signed expiry plus secret rotation as the global revocation mechanism.
-- The preferred eventual deployment is same-origin or at minimum same-site PWA/API routing. If the Worker remains cross-site, third-party-cookie restrictions must be validated against the actual target browsers before activation; do not weaken HttpOnly/session security merely to bypass browser cookie policy.
-- Worker responses carry request IDs. Unexpected errors may be logged structurally by request ID/route/error class, but raw database/provider error messages, Authorization headers, secrets, OAuth payloads and tokens must not be returned to the browser or written to logs.
+- The committed `wrangler.jsonc` remains account-neutral. Account-specific D1 binding data is generated under ignored `.wrangler/deploy/` state from build-only configuration.
+- The real D1 UUID stays outside the public repository and must never be printed by deployment helpers.
+- Remote migration/deployment disables automatic provisioning and draft-resource creation.
+- `DEVICE_ACCESS_TOKEN` is a required Worker secret; production deployment fails if it is absent.
+- Wrangler preserves dashboard-managed runtime variables/secrets rather than removing them as a side effect.
+- **Normal merges to `main` never automatically deploy production.** Guarded production deployment remains a separate action after fresh explicit user authorization.
+- A deployment authorization is consumed by the exact deployment it authorizes and cannot be reused for later source heads.
+- Neither v0.17 merge nor v0.18 source readiness authorizes a production deployment or real personal-data migration.
+- After v0.18 is merged and separately authorized for deployment, first production validation must verify the PWA at the actual Worker address, static routing, `/api/*` routing, browser-session cookie behavior and health/D1 connectivity before migrating real personal browser state.
 
 ## Repository/security
 - Repository is public: `mstpln/streamarkr`.
-- Only source, documentation, and synthetic fixtures may be committed.
-- Never commit API keys, OAuth secrets/tokens, Cloudflare credentials, `.env`/`.dev.vars`, real D1 identifiers that should remain account configuration, or personal History/Library/ratings/runtime data.
-- `.dev.vars.example`, `wrangler.example.jsonc`, `wrangler.local.jsonc`, and account-neutral `wrangler.jsonc` may contain no usable credentials or private account identifiers.
-- Real secrets belong in GitHub/Cloudflare secret stores/environment bindings.
-- Automated QA remains synthetic and never calls live providers or production data.
-- Streamarkr Cloudflare resources are always separate from BANDMARKR. Never bind, inspect, reuse, migrate or modify BANDMARKR Worker/D1/R2/secrets/data for Streamarkr.
+- Only source, documentation and synthetic fixtures may be committed.
+- Never commit API keys, OAuth secrets/tokens, Cloudflare credentials, usable private D1 identifiers, `.env`/`.dev.vars`, or personal History/Library/ratings/runtime data.
+- Real secrets belong in appropriate GitHub/Cloudflare secret stores/environment bindings.
+- Automated QA is synthetic-only and never calls live providers or production data.
+- Streamarkr resources remain completely separate from BANDMARKR; never inspect, bind, reuse, migrate or modify BANDMARKR Worker/D1/R2/secrets/data.
 
 ## UI/QA
-- Primary visual mode is dark, contemporary, premium, poster-led, with violet/electric-blue and pink/coral accents.
-- Pixel 9 Pro Fold is the primary device target; test both folded and unfolded widths without merely stretching mobile layouts.
-- Important controls target ~44x44 CSS px effective touch areas; icon-only actions need accessible labels/focus behavior.
-- Streaming-service badges in `src/ui/logos.ts` are placeholders; final app should use properly sourced/licensed recognizable logos.
-- App/runtime version and service-worker cache version must stay synchronized; one user-visible/architectural build = one bump, focused corrections to the same unreleased build keep the version.
-- Settings may expose the one-time device-token entry needed for browser bootstrap/migration, but it must be password-only, not prefilled, and cleared after use; no frontend persistence is allowed.
+- Primary visual mode is dark, premium and poster-led with violet/electric-blue and pink/coral accents.
+- Pixel 9 Pro Fold is the primary device target; both folded and unfolded widths must be validated.
+- Important controls target ~44x44 CSS px effective touch areas and icon-only actions require accessible labels/focus behavior.
+- Streaming-service badges remain placeholders until properly sourced/licensed assets are added.
+- App/runtime version and service-worker cache version stay synchronized; one user-visible/architectural build gets one version bump.
+- Settings token entry remains password-only, not prefilled and cleared after use.
 
-## Current test/tooling decision
-- Application/domain/Worker tests compile with TypeScript then use Node's built-in `node:test`; browser QA uses Playwright.
-- `typescript`, `playwright`, and Wrangler **4.129.0** are pinned devDependencies and `package-lock.json` is committed.
-- GitHub CI uses Node 22 and `npm ci` so repository dependency installation is reproducible.
-- `migrations/0001_initial.sql` is exercised against Node 22 SQLite and pinned Wrangler local D1.
-- Remote-deployment configuration tests use only synthetic D1 UUIDs and must never contact Cloudflare.
-- Browser QA remains deterministic and synthetic-only; physical device QA is separate and still required before V1 release.
+## Test/tooling decision
+- Domain/Worker tests compile with TypeScript then use Node `node:test`; browser QA uses Playwright.
+- TypeScript, Playwright and Wrangler **4.129.0** are pinned and `package-lock.json` is committed.
+- GitHub CI uses Node 22 and `npm ci`.
+- D1 migration is exercised against Node 22 SQLite and pinned Wrangler local D1.
+- Deployment-config tests use only synthetic D1 UUIDs and never contact Cloudflare.
+- Physical Pixel 9 Pro Fold QA remains a separate pre-V1 requirement.
