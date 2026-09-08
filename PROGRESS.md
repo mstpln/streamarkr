@@ -30,15 +30,15 @@ The hotfix makes the next production retry diagnostic without exposing credentia
 - arbitrary underlying error text is never rendered to the user;
 - token input remains password-only, is cleared after use, and is never persisted.
 
-The service-worker script is changed so an installed v0.18.0 client detects the hotfix and refreshes its precached module graph. App/cache identifiers remain v0.18.0 because this is a same-build production diagnostic hotfix rather than a new product build; no schema or contract version changes are introduced.
+The service-worker script differs from deployed v0.18.0 only by diagnostic-hotfix comments, which is enough for installed clients to detect a new worker and rerun the unchanged install-time precache path. App/cache identifiers remain v0.18.0 because this is a same-build production diagnostic hotfix; no schema or backend contract version changes are introduced.
 
 ## Validation
 PR #12 final validation: Cloudflare bundle PASS, 200/200 tests, D1 5/5, Wrangler-local PASS, browser/responsive 32/32, provider/security 8/8, folded/unfolded PASS, zero console/page errors.
 
-PR #13 adds deterministic regression coverage for structured backend errors, staged activation diagnostics, and non-disclosure of arbitrary/token-bearing error text. Every final PR head must pass the complete normal verify + browser QA workflow before merge readiness.
+PR #13 implementation/review validation on head `37905f410a37c3e6f5cc51d3ec1b0cdd4f1cb9bc` passed CI #300: Cloudflare bundle PASS, 204/204 tests across 26 suites, D1 5/5, Wrangler-local PASS, browser/responsive 32/32, provider/security 8/8, folded/unfolded PASS and zero console/page errors. The final continuity-only head must pass that same complete workflow again before merge readiness.
 
 ## Next work
-1. Finish the PR #13 exact-head review/test/fix cycle and merge only with explicit user authorization.
+1. Finish the PR #13 final exact-head CI/review cycle and merge only with explicit user authorization.
 2. A separate fresh explicit production-deployment authorization is required before deploying PR #13 after merge.
 3. Retry secure storage activation in the live browser and use the staged message to identify the actual blocker. Do not migrate real personal state unless session verification and migration complete cleanly.
 4. Once backend activation is verified, move directly into real TMDB metadata/search, followed by Trakt OAuth/history and then Swedish streaming availability/alerts/Discover.
