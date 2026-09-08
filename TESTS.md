@@ -87,15 +87,16 @@ PR #10 remains synthetic-only and does not contact or deploy the production Work
 - legacy bearer authentication remains available for controlled operational/manual clients;
 - cookie-mode `WorkerBackendClient` requests include browser credentials without adding a bearer token;
 - `bootstrapSession()` sends the device token only on the exchange request and `clearSession()` relies only on the cookie;
-- the shared cache-layer `BackendClient` interface remains focused on data operations so existing cache mocks and architecture boundaries are not forced to implement auth lifecycle behavior.
+- the shared cache-layer `BackendClient` interface remains focused on data operations so existing cache mocks and architecture boundaries are not forced to implement auth lifecycle behavior;
+- `package.json`, the lockfile root version, and the lockfile root package version remain synchronized.
 
-An initial PR #10 CI pass exposed that auth lifecycle methods had been added too broadly to the shared `BackendClient` interface. That regression was fixed on the same branch by retaining the methods only on concrete `WorkerBackendClient`, after which the full suite passed. Additional expiry and secret-rotation coverage was then added.
+An initial PR #10 CI pass exposed that auth lifecycle methods had been added too broadly to the shared `BackendClient` interface. That regression was fixed on the same branch by retaining the methods only on concrete `WorkerBackendClient`, after which the full suite passed. Additional expiry/secret-rotation coverage was then added. Later review found and fixed a package-lock version mismatch, added a regression test so it cannot silently recur, and restored historical machine-readable validation detail that had been unintentionally compressed from the build-state continuity file.
 
-Last validated implementation head before continuity synchronization: `8dbdcd3d7199768f890dc67f427bb7bffde964ad`, CI #219:
+Latest validated implementation/continuity head before final documentation synchronization: `796c2e1c1a058a2a505016f4be2c3ce33ba90b70`, CI #227:
 - `npm ci --no-audit --no-fund`: PASS;
 - PWA build: PASS;
 - Worker build/type-check: PASS;
-- **175/175 tests across 26 suites**;
+- **176/176 tests across 26 suites**;
 - deterministic D1 semantics **5/5**;
 - pinned Wrangler **4.129.0** local-D1 validation PASS;
 - core browser/responsive QA **31/31**;
@@ -104,7 +105,7 @@ Last validated implementation head before continuity synchronization: `8dbdcd3d7
 - unfolded 873×1000 PASS;
 - zero browser console/page errors.
 
-The PR #10 merge gate is the same as prior builds: after continuity synchronization, the resulting unchanged exact PR head must pass the complete normal CI/browser suite and final diff/security/review-thread inspection before it can be considered merge-ready.
+The PR #10 merge gate is the same as prior builds: after final continuity synchronization, the resulting unchanged exact PR head must pass the complete normal CI/browser suite and final diff/security/review-thread inspection before it can be considered merge-ready.
 
 ## Manual Cloudflare production validation — completed for v0.13.0
 With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed reviewed main commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed successful build/deploy, healthy `/api/health`, D1 schema version 1, eight services and all expected application tables plus `d1_migrations`.
