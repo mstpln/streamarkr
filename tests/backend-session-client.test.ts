@@ -28,7 +28,7 @@ test('cookie-mode backend client includes credentials without persisting a beare
   }]);
 });
 
-test('backend request failures expose only status and sanitized error code', async () => {
+test('backend request failures expose only status and known backend error codes', async () => {
   const client = new WorkerBackendClient('https://worker.example', null, async () =>
     jsonResponse({ error: 'unauthorized' }, 401));
 
@@ -45,6 +45,16 @@ test('backend request failures discard arbitrary response text instead of treati
   await assert.rejects(
     () => client.getSessionStatus(),
     (error: unknown) => error instanceof BackendRequestError && error.status === 500 && error.code === null && !error.message.includes('secret')
+  );
+});
+
+test('backend request failures discard unknown code-shaped response values', async () => {
+  const client = new WorkerBackendClient('https://worker.example', null, async () =>
+    jsonResponse({ error: 'private_runtime_detail' }, 500));
+
+  await assert.rejects(
+    () => client.getSessionStatus(),
+    (error: unknown) => error instanceof BackendRequestError && error.status === 500 && error.code === null && !error.message.includes('private_runtime_detail')
   );
 });
 
