@@ -42,6 +42,7 @@ const KNOWN_BACKEND_ERROR_CODES = new Set([
   'origin_not_allowed',
   'server_not_configured',
   'unauthorized',
+  'session_creation_failed',
   'invalid_migration_payload',
   'migration_conflict',
   'invalid_rating',
@@ -102,7 +103,11 @@ export class WorkerBackendClient implements MigrationBackendClient {
   }
 
   async bootstrapSession(deviceAccessToken: string): Promise<{ expiresAt: string }> {
-    const result = await this.request<{ ok: true; expiresAt: string }>('/api/auth/session', { method: 'POST' }, deviceAccessToken);
+    const result = await this.request<{ ok: true; expiresAt: string }>(
+      '/api/auth/session',
+      { method: 'POST', body: JSON.stringify({ deviceAccessToken }) },
+      null
+    );
     return { expiresAt: result.expiresAt };
   }
 
