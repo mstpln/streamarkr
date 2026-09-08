@@ -56,21 +56,22 @@ With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06
 
 ## v0.15.0 durable user-state mutation surface — PR #9 active
 - `WorkerBackendClient` now exposes watched-service set/clear, movie/episode/season watched-state corrections, service selection and custom-service creation in addition to snapshot/Library/rating/alert operations.
-- Watched-service mutations require both a canonical title and a known service.
+- Watched-service mutations require a canonical title and a known currently selected service.
 - Movie overrides require canonical movies; episode/season overrides require canonical series. The HTTP layer rejects obvious media-scope mismatches before D1, and the repository independently enforces the same invariant.
 - Episode overrides require an existing episode. Season bulk overrides require an existing season; season number 0 remains valid for specials.
 - Season bulk corrections are computed server-side from episodes already known and released at action time, remove any legacy season wildcard, and materialize only episode-level overrides in one D1 batch. Future episodes cannot inherit an old bulk action.
 - Streaming-service preference changes require an existing service. Custom services are durable selected `unsupported` rows with punctuation/whitespace normalized to route-safe lowercase hyphenated keys.
 - Local IndexedDB custom-service behavior matches the Worker/D1 normalization and 80-character route bounds. Re-adding the same service selects the existing row; a distinct display name that collides on the normalized key is rejected rather than silently merged.
-- User/service-controlled display text used in Settings, Detail, History and Library filter options is escaped before HTML insertion. Hostile synthetic rendering regressions verify it remains literal text and does not execute markup.
+- Custom service logo lookup is hardened against prototype-like keys such as `constructor`, which safely use fallback branding rather than inherited object properties.
+- User/provider/service-controlled display text inserted through `innerHTML` is escaped across Settings, Detail, Home, Library, History, Search, Discover and Alerts. Provider deep links are restricted to HTTP/HTTPS before rendering. Deterministic hostile-markup browser QA covers these boundaries.
 - Settings bounds custom-service input and reports invalid/colliding names through an inline status instead of producing an unhandled page error.
 - Request payloads remain bounded and unexpected backend errors remain sanitized.
 - The browser UI is **not yet switched to these Worker mutation methods**. Production browser mode remains disabled until safe authentication, local-state migration/reconciliation, real PWA origin and UI write routing are complete.
 - No Worker URL or credential is embedded in frontend source. `APP_ORIGIN` remains unset. No v0.15.0 deployment is authorized.
-- The final code/security-review head before continuity-only updates is `207db99c32aab71ef72895e72c07d1ce4fcad0c1`. CI #166 passed: PWA build PASS, Worker type-check PASS, **160/160 tests across 26 suites**, D1 **5/5**, Wrangler-local PASS, browser/responsive QA **31/31**, folded/unfolded PASS and zero smoke-pass console/page errors.
+- Last validated implementation head before this continuity synchronization: `d683104382bc7337bf0457ab0bb179e64ca3a64c`, CI #211. PWA build PASS, Worker type-check PASS, **164/164 tests across 26 suites**, D1 **5/5**, Wrangler-local PASS, core browser/responsive QA **31/31**, focused provider/security browser QA **8/8**, folded/unfolded PASS and zero console/page errors.
 
 ## Still pending
-- Complete continuity-only synchronization, then require a full clean CI/browser pass on the unchanged documentation-inclusive PR #9 head and perform final diff/security/review-thread inspection; merge only after explicit user authorization.
+- Require the full normal CI/browser suite to pass on the final unchanged continuity-synchronized PR #9 head, then perform final diff/security/review-thread inspection; merge only after explicit user authorization.
 - Design safe single-user browser authentication/bootstrap without exposing `DEVICE_ACCESS_TOKEN` in public source/generated assets.
 - Migrate/reconcile existing local user-owned state into D1, or deliberately reset it, before first browser backend activation.
 - Establish the real PWA hosting origin and configure exact `APP_ORIGIN`.
