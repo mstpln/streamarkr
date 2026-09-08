@@ -50,6 +50,19 @@ test('browser bootstrap remains compatible with an older cached client using Aut
   }), env());
   assert.equal(response.status, 200);
   assert.match(response.headers.get('set-cookie') ?? '', /^__Host-streamarkr_session=/);
+
+  const badToken = await handleRequest(new Request('https://worker.example/api/auth/session', {
+    method: 'POST',
+    headers: { origin: 'https://app.example', authorization: 'Bearer wrong-token' }
+  }), env());
+  assert.equal(badToken.status, 401);
+
+  const wrongOrigin = await handleRequest(new Request('https://worker.example/api/auth/session', {
+    method: 'POST',
+    headers: { origin: 'https://evil.example', authorization: 'Bearer synthetic-device-token' }
+  }), env());
+  assert.equal(wrongOrigin.status, 403);
+  assert.equal((await wrongOrigin.json() as { error: string }).error, 'origin_not_allowed');
 });
 
 test('browser bootstrap tolerates copied surrounding whitespace without changing the configured secret', async () => {
