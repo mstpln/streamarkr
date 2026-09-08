@@ -85,6 +85,33 @@ describe('repo + db integration (fake IndexedDB)', () => {
     expect(resolvedFuture.watched).toBe(false);
   });
 
+  it('local custom service keys match the Worker route-safe normalization and reject collisions', async () => {
+    await repo.resetToFixtures();
+    await repo.addCustomService('MUBI + More');
+    let services = await repo.allServices();
+    expect(services.some((service) => service.serviceKey === 'mubi-more' && service.displayName === 'MUBI + More')).toBe(true);
+
+    let collisionThrew = false;
+    try {
+      await repo.addCustomService('MUBI More');
+    } catch {
+      collisionThrew = true;
+    }
+    expect(collisionThrew).toBe(true);
+    services = await repo.allServices();
+    expect(services.filter((service) => service.serviceKey === 'mubi-more').length).toBe(1);
+  });
+
+  it('adding an existing same-name service reselects it instead of creating a duplicate', async () => {
+    await repo.resetToFixtures();
+    await repo.setServiceSelected('netflix', false);
+    await repo.addCustomService('netflix');
+    const services = await repo.allServices();
+    const netflix = services.find((service) => service.serviceKey === 'netflix');
+    expect(netflix?.userSelected).toBe(true);
+    expect(services.filter((service) => service.serviceKey === 'netflix').length).toBe(1);
+  });
+
   it('buildExportPayload (Correction 14) includes every user-owned data category', async () => {
     const id = F.TITLES[0].id;
     await repo.addToLibrary(id);
