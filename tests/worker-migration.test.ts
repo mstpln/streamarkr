@@ -4,12 +4,15 @@ import { importLocalState, InvalidMigrationPayloadError, MigrationConflictError 
 import type { BackendMigrationBundle, BackendSnapshot } from '../src/lib/backend-contract.js';
 import type { D1Database, D1PreparedStatement, D1Primitive, D1Result } from '../worker/types.js';
 
+type DbRow = Record<string, D1Primitive>;
+
 class Statement implements D1PreparedStatement {
   values: D1Primitive[] = [];
   constructor(readonly sql: string, private db: RecordingDb) {}
   bind(...values: D1Primitive[]): D1PreparedStatement { const next = new Statement(this.sql, this.db); next.values = values; return next; }
   async first<T>(): Promise<T | null> {
     this.db.reads.push({ sql: this.sql, values: this.values });
+    if (this.sql.includes("key = 'schema_version'")) return { value: '1' } as T;
     if (this.sql.includes('app_meta') && this.sql.includes('WHERE key = ?')) {
       const key = String(this.values[0] ?? '');
       const value = key === 'local_state_migration_id' ? this.db.migrationId
@@ -23,13 +26,50 @@ class Statement implements D1PreparedStatement {
     }
     return null;
   }
-  async all<T>(): Promise<D1Result<T>> { return { success: true, results: [] }; }
+  async all<T>(): Promise<D1Result<T>> {
+    const snapshot = this.db.currentSnapshot;
+    if (!snapshot) return { success: true, results: [] };
+    let results: DbRow[] = [];
+    if (/FROM\s+library_items/i.test(this.sql)) {
+      results = snapshot.library.map((row) => ({
+        title_id: row.titleId, added_at: row.addedAt, derived_status: row.derivedStatus, status_computed_at: row.statusComputedAt
+      }));
+    } else if (/FROM\s+ratings/i.test(this.sql)) {
+      results = snapshot.ratings.map((row) => ({ title_id: row.titleId, stars: row.stars, rated_at: row.ratedAt }));
+    } else if (/FROM\s+watched_service/i.test(this.sql)) {
+      results = snapshot.watchedService.map((row) => ({ title_id: row.titleId, service_key: row.serviceKey, changed_at: row.changedAt }));
+    } else if (/FROM\s+watch_events/i.test(this.sql)) {
+      results = snapshot.watchEvents.map((row) => ({
+        provider_event_id: row.providerEventId, id: row.id, title_id: row.titleId,
+        season_number: row.seasonNumber ?? null, episode_number: row.episodeNumber ?? null,
+        watched_at: row.watchedAt, source: 'trakt'
+      }));
+    } else if (/FROM\s+watch_overrides/i.test(this.sql)) {
+      results = snapshot.watchOverrides.map((row) => ({
+        id: row.id, scope_type: row.scopeType, title_id: row.titleId,
+        season_number: row.seasonNumber ?? null, episode_number: row.episodeNumber ?? null,
+        state: row.state, changed_at: row.changedAt
+      }));
+    } else if (/FROM\s+services/i.test(this.sql)) {
+      results = snapshot.services.map((row) => ({
+        service_key: row.serviceKey, display_name: row.displayName, logo_ref: row.logoGlyph,
+        user_selected: row.userSelected ? 1 : 0, availability_source: row.availabilitySource
+      }));
+    } else if (/FROM\s+alerts/i.test(this.sql)) {
+      results = snapshot.alerts.map((row) => ({
+        id: row.id, title_id: row.titleId, alert_type: row.alertType, message: row.message,
+        event_date: row.eventDate, created_at: row.createdAt, seen_at: row.seenAt, dedupe_key: row.dedupeKey
+      }));
+    }
+    return { success: true, results: results as T[] };
+  }
   async run<T>(): Promise<D1Result<T>> { return { success: true, results: [] }; }
 }
 
 class RecordingDb implements D1Database {
   migrationId: string | null = null;
   migrationHash: string | null = null;
+  currentSnapshot: BackendSnapshot | null = null;
   nonEmptyTables = new Set<string>();
   reads: { sql: string; values: D1Primitive[] }[] = [];
   batches: { sql: string; values: D1Primitive[] }[][] = [];
@@ -100,6 +140,7 @@ test('same migration id and unchanged durable state is retry-idempotent without 
   const db = new RecordingDb();
   const payload = bundle();
   await importLocalState(db, payload);
+  db.currentSnapshot = structuredClone(payload.snapshot);
   const result = await importLocalState(db, payload);
   assert.deepEqual(result, { alreadyApplied: true });
   assert.equal(db.batches.length, 1);
@@ -109,6 +150,7 @@ test('same migration id safely reconciles local changes made after an uncertain 
   const db = new RecordingDb();
   const first = bundle();
   await importLocalState(db, first);
+  db.currentSnapshot = structuredClone(first.snapshot);
 
   const changed = bundle();
   changed.snapshot.ratings = [{ ...changed.snapshot.ratings[0], stars: 5, ratedAt: '2026-09-08T09:20:00.000Z' }];
@@ -124,7 +166,8 @@ test('changed same-id retry fails closed if backend durable user state changed i
   const db = new RecordingDb();
   const first = bundle();
   await importLocalState(db, first);
-  db.migrationHash = '0'.repeat(64);
+  db.currentSnapshot = structuredClone(first.snapshot);
+  db.currentSnapshot.ratings = [{ ...db.currentSnapshot.ratings[0], stars: 2, ratedAt: '2026-09-08T09:15:00.000Z' }];
 
   const changed = bundle();
   changed.snapshot.ratings = [{ ...changed.snapshot.ratings[0], stars: 5 }];
