@@ -9,6 +9,15 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function secureTokenInput(id: string, buttonId: string, buttonLabel: string): string {
+  return `
+    <div class="card-row">
+      <label class="sr-only" for="${id}">Device access token</label>
+      <input id="${id}" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Device access token" style="background:transparent;border:none;color:var(--text);flex:1;outline:none;min-width:0;" />
+      <button class="action-btn primary" id="${buttonId}">${buttonLabel}</button>
+    </div>`;
+}
+
 /** Settings always lands on Preferences when entered from navigation. Internal tab changes pass
  * the desired tab explicitly so rerenders do not bounce the user back unexpectedly. */
 export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferences') {
@@ -83,16 +92,17 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
       </div>
       ${cache.active ? `
         <button class="action-btn primary" id="backend-refresh" style="width:100%;justify-content:center;">Refresh Worker/D1 data</button>
+        <div class="card" style="margin-top:10px;">
+          <div style="font-weight:700;margin-bottom:6px;">Secure browser session</div>
+          <div class="section-empty-hint" style="margin-bottom:10px;">If the session has expired or was cleared, enter the device access token again. The token is exchanged for a new secure session and is never stored.</div>
+          ${secureTokenInput('reconnect-token', 'reconnect-session', 'Reconnect')}
+        </div>
         <div id="backend-status" class="section-empty-hint" style="margin-top:8px;" aria-live="polite"></div>
       ` : `
         <div class="card">
           <div style="font-weight:700;margin-bottom:6px;">Connect secure storage</div>
           <div class="section-empty-hint" style="margin-bottom:10px;">Enter the Streamarkr device access token once. It is exchanged for a secure browser session and is never stored in this app.</div>
-          <div class="card-row">
-            <label class="sr-only" for="device-token">Device access token</label>
-            <input id="device-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Device access token" style="background:transparent;border:none;color:var(--text);flex:1;outline:none;min-width:0;" />
-            <button class="action-btn primary" id="activate-backend">Connect</button>
-          </div>
+          ${secureTokenInput('device-token', 'activate-backend', 'Connect')}
           <div id="backend-status" class="section-empty-hint" aria-live="polite"></div>
         </div>
         <button class="action-btn" id="sync-now" style="width:100%;justify-content:center;">Sync synthetic data</button>
@@ -108,7 +118,29 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
           const result = await repo.refreshBackendCache();
           status.textContent = `Worker/D1 refreshed ${new Date(result.generatedAt).toLocaleString()}.`;
         } catch {
-          status.textContent = 'Could not reach Worker/D1. The last verified offline cache is unchanged.';
+          status.textContent = 'Could not refresh Worker/D1. The last verified offline cache is unchanged. Reconnect the secure session if it has expired.';
+        }
+      });
+      body.querySelector('#reconnect-session')?.addEventListener('click', async () => {
+        const input = body.querySelector('#reconnect-token') as HTMLInputElement;
+        const button = body.querySelector('#reconnect-session') as HTMLButtonElement;
+        const status = body.querySelector('#backend-status')!;
+        const token = input.value;
+        if (!token) {
+          status.textContent = 'Enter the device access token first.';
+          return;
+        }
+        button.disabled = true;
+        status.textContent = 'Securing browser session…';
+        try {
+          await new WorkerBackendClient('').bootstrapSession(token);
+          input.value = '';
+          const result = await repo.refreshBackendCache();
+          status.textContent = `Secure session renewed. Worker/D1 refreshed ${new Date(result.generatedAt).toLocaleString()}.`;
+        } catch {
+          input.value = '';
+          button.disabled = false;
+          status.textContent = 'Could not renew the secure session. The last verified offline cache is unchanged.';
         }
       });
     } else {
