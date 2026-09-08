@@ -12,6 +12,7 @@ npm run build:cloudflare
 npm test
 npm run test:d1
 npm run test:d1:wrangler
+npm run qa:worker-auth
 npm run qa:browser
 ```
 
@@ -36,12 +37,41 @@ PR #16 changes browser-origin authorization to use the actual Worker request URL
 - CORS/preflight is emitted only for the actual serving origin;
 - authenticated migration succeeds from the serving origin and rejects a foreign Origin before D1 access;
 - malformed migration payloads still produce controlled 400 responses;
+- surrounding whitespace is normalized consistently on both the browser-supplied token and configured runtime secret while interior token content remains exact;
 - no browser-auth test touches production D1.
 
-The first PR #16 CI correctly failed three existing tests that still asserted the old configured-origin contract. Those expectations were updated to the new serving-origin contract. Head `a50066847fc2f566d2c7ccd11327e6c2d0aaccdd` then passed the build, all logic/Worker/client tests, D1 5/5 and Wrangler-local D1. The final continuity-synchronized head must pass the full verify and browser QA workflow before merge readiness.
+## Same-origin Worker topology QA
+`npm run qa:worker-auth` is a production-topology regression test using pinned Wrangler local mode plus real Chromium. It builds/stages the same Worker static-asset topology used for production and then launches the actual Worker entrypoint, not the synthetic `server.mjs` path.
+
+The test deliberately supplies:
+- a stale `APP_ORIGIN` value;
+- a synthetic `DEVICE_ACCESS_TOKEN` with surrounding whitespace;
+- a browser running on the actual local Worker serving origin.
+
+It then proves **4/4**:
+1. same-origin JSON bootstrap succeeds through the actual Worker-first `/api/*` route;
+2. Chromium retains and reuses the Worker-issued signed HttpOnly/Secure session cookie;
+3. a wrong token fails closed with controlled 401 `unauthorized`;
+4. a foreign Origin fails closed with controlled 403 `origin_not_allowed`.
+
+This closes the previous coverage gap where unit tests validated route logic but browser QA never exercised Worker static hosting, Worker-first API routing, cookie issuance and browser cookie reuse together.
+
+## PR #16 hardening validation
+Head `c575fabe4e750896af0025c2f9fb45c25b267aae` passed CI #340 / run `34255403504` with:
+- Cloudflare bundle PASS, 35 compiled modules;
+- **208/208 tests across 26 suites**, zero failures/skips/todos;
+- D1 **5/5**;
+- Wrangler **4.129.0** local-D1 PASS;
+- same-origin Worker authentication topology **4/4**;
+- browser/responsive **32/32**;
+- provider/security **8/8**;
+- folded 344×792 and unfolded 873×1000 PASS;
+- zero console/page errors.
+
+The final continuity-synchronized exact PR head must pass the same complete workflow again before merge readiness.
 
 ## Browser QA expectations
-The normal PR workflow validates folded/unfolded layouts, no horizontal overflow, Home/Discover/Library/History/Search/Alerts/Settings/Detail journeys, password-only token entry, hostile-markup/deep-link protections and zero unexpected console/page errors.
+The normal PR workflow validates folded/unfolded layouts, no horizontal overflow, Home/Discover/Library/History/Search/Alerts/Settings/Detail journeys, password-only token entry, hostile-markup/deep-link protections and zero unexpected console/page errors. The browser job now also runs the real same-origin Worker authentication topology QA before the synthetic UI pass.
 
 ## Production validation policy
 Automated QA never touches production. A production deployment after PR #16 merges requires a fresh explicit authorization. Before real personal-state migration is accepted, the live browser must verify the secure session and complete guarded migration/round-trip verification cleanly.
