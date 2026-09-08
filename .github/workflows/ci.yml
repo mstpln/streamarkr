@@ -21,10 +21,8 @@ jobs:
           cache: npm
       - name: Install development tools
         run: npm ci --no-audit --no-fund
-      - name: Build PWA
-        run: npm run build
-      - name: Type-check Worker
-        run: npm run build:worker
+      - name: Build same-origin Cloudflare bundle
+        run: npm run build:cloudflare
       - name: Logic, repository, Worker and client tests
         run: npm test
       - name: Validate D1 migration semantics
