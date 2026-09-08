@@ -56,27 +56,8 @@ PR #8 merged at `f6e6d4a04aa011e91036a773655e9572e2c6ded6`. Exact final reviewed
 
 v0.14.0 regression coverage includes atomic backend snapshot hydration, multi-option IndexedDB availability, legacy-cache provenance protection, failed-fetch offline preservation, malformed-snapshot rejection before mutation, v1→v2 user-state preservation, backend-cache fixture protection and local-only mutation/synthetic-sync blocking.
 
-## v0.15.0 backend user-state routes — PR #9 active
-PR #9 remains synthetic-only and does not activate or contact the production Worker. New deterministic coverage verifies:
-- `WorkerBackendClient` request methods, JSON bodies, bearer-header behavior and route encoding for the expanded user-state surface;
-- watched-service set/clear requires canonical titles, known services and selected watched services;
-- movie and episode watched/unwatched overrides persist through D1 repository methods;
-- both HTTP routing and the D1 repository enforce movie/series override scope;
-- episode overrides reject unknown episodes and season bulk corrections reject unknown seasons;
-- season number 0 remains valid for series specials;
-- season bulk corrections query only server-known released episodes at action date and materialize episode-level overrides in one D1 batch;
-- future episodes therefore cannot inherit an old season bulk action;
-- service-selection mutations require an existing service;
-- local IndexedDB and Worker/D1 custom-service creation use the same route-safe punctuation/whitespace normalization and 80-character bounds;
-- adding the same normalized service reselects it, while a different-name normalized-key collision is rejected instead of silently aliasing two services;
-- prototype-like custom service keys such as `constructor` render with fallback branding and cannot resolve inherited object properties;
-- provider/user/service-controlled text inserted through `innerHTML` is escaped across Settings, Detail, Home, Library, History, Search, Discover and Alerts;
-- provider title/overview/genre/season/episode/alert hostile markup remains literal text and does not execute;
-- unsafe provider deep links such as `javascript:` are not rendered as actionable links;
-- Settings bounds custom-service input and reports invalid/conflicting names without an unhandled page error;
-- existing auth fail-closed, exact-origin CORS, sanitized backend errors, canonical Library/rating preconditions and alert payload bounds remain covered.
-
-Last validated implementation head before continuity synchronization: `d683104382bc7337bf0457ab0bb179e64ca3a64c`, CI #211:
+## v0.15.0 backend user-state routes — merged
+PR #9 merged at `d6e8a9627dd1a1cab2e6d520753084b902589b9d`. Exact final continuity-synchronized head `87dcbf9b3cf77fb8500529d7afbb936c68bf6059` passed CI #215 before merge. The implementation-validation head `d683104382bc7337bf0457ab0bb179e64ca3a64c` passed CI #211 with:
 - `npm ci --no-audit --no-fund`: PASS;
 - PWA build: PASS;
 - Worker build/type-check: PASS;
@@ -89,12 +70,46 @@ Last validated implementation head before continuity synchronization: `d68310438
 - unfolded 873×1000 PASS;
 - zero browser console/page errors.
 
-The merge gate remains unchanged: after continuity synchronization, the resulting unchanged PR head must pass the complete normal CI/browser suite before PR #9 is considered merge-ready.
+v0.15.0 deterministic coverage includes the full durable user-state mutation surface, canonical/media-scope/existence checks, season-zero and bounded season bulk corrections, custom-service normalization/collision behavior, prototype-like service keys, hostile provider/service markup escaping, safe provider links, fail-closed auth, exact-origin CORS and sanitized backend errors.
+
+## v0.16.0 secure browser authentication/bootstrap — PR #10 active
+PR #10 remains synthetic-only and does not contact or deploy the production Worker. New deterministic coverage verifies:
+- a correct user-entered device token can be exchanged only through `POST /api/auth/session` for a signed browser session;
+- the session cookie is `__Host-streamarkr_session`, `HttpOnly`, `Secure`, `Path=/` and `SameSite=None`, and never contains the device token;
+- browser-session integrity is HMAC-protected and tampered cookies are rejected;
+- sessions expire exactly at the configured 30-day boundary;
+- rotating `DEVICE_ACCESS_TOKEN` invalidates previously signed sessions;
+- browser bootstrap fails closed when `APP_ORIGIN` is absent, when Origin mismatches, or when the device token is invalid;
+- browser-session requests require the configured application origin, while same-origin no-Origin cookie requests remain structurally possible for a future same-origin topology;
+- credentialed CORS and preflight are emitted only for exact `APP_ORIGIN`;
+- `GET /api/auth/session` reports the active authentication method;
+- `DELETE /api/auth/session` clears the browser cookie without requiring or exposing the device token;
+- legacy bearer authentication remains available for controlled operational/manual clients;
+- cookie-mode `WorkerBackendClient` requests include browser credentials without adding a bearer token;
+- `bootstrapSession()` sends the device token only on the exchange request and `clearSession()` relies only on the cookie;
+- the shared cache-layer `BackendClient` interface remains focused on data operations so existing cache mocks and architecture boundaries are not forced to implement auth lifecycle behavior.
+
+An initial PR #10 CI pass exposed that auth lifecycle methods had been added too broadly to the shared `BackendClient` interface. That regression was fixed on the same branch by retaining the methods only on concrete `WorkerBackendClient`, after which the full suite passed. Additional expiry and secret-rotation coverage was then added.
+
+Last validated implementation head before continuity synchronization: `8dbdcd3d7199768f890dc67f427bb7bffde964ad`, CI #219:
+- `npm ci --no-audit --no-fund`: PASS;
+- PWA build: PASS;
+- Worker build/type-check: PASS;
+- **175/175 tests across 26 suites**;
+- deterministic D1 semantics **5/5**;
+- pinned Wrangler **4.129.0** local-D1 validation PASS;
+- core browser/responsive QA **31/31**;
+- focused provider/security browser QA **8/8**;
+- folded 344×792 PASS;
+- unfolded 873×1000 PASS;
+- zero browser console/page errors.
+
+The PR #10 merge gate is the same as prior builds: after continuity synchronization, the resulting unchanged exact PR head must pass the complete normal CI/browser suite and final diff/security/review-thread inspection before it can be considered merge-ready.
 
 ## Manual Cloudflare production validation — completed for v0.13.0
 With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed reviewed main commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed successful build/deploy, healthy `/api/health`, D1 schema version 1, eight services and all expected application tables plus `d1_migrations`.
 
-No v0.14.0 or v0.15.0 production deployment has been authorized. A future production deployment requires a fresh explicit user instruction after the relevant reviewed PR is merged.
+No v0.14.0, v0.15.0 or v0.16.0 production deployment has been authorized. A future production deployment requires a fresh explicit user instruction after the relevant reviewed PR is merged.
 
 ## Manual limitation
 A physical **Pixel 9 Pro Fold** has not yet been tested. Browser viewport QA covers representative folded/unfolded dimensions, but physical-device validation remains required before V1 release.
