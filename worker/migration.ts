@@ -5,6 +5,12 @@ const MIGRATION_META_KEY = 'local_state_migration_id';
 const BUILT_IN_SERVICES = [
   'netflix', 'hbo-max', 'disney-plus', 'prime-video', 'skyshowtime', 'apple-tv', 'viaplay', 'tv4-play'
 ] as const;
+const TITLE_STATUSES = ['Returning Series', 'Ended', 'Canceled', 'Released', 'Upcoming', 'In Production'] as const;
+const LIBRARY_STATUSES = ['To Watch', 'Watching', 'On Hold', 'Caught Up', 'Finished'] as const;
+const ALERT_TYPES = [
+  'new_season_announced', 'new_season_available', 'new_episode_available', 'now_available', 'leaving_soon',
+  'movie_release_announced', 'movie_release_changed'
+] as const;
 
 export class MigrationConflictError extends Error {
   constructor(message = 'Backend already contains state from another activation') {
@@ -29,6 +35,9 @@ function text(value: unknown, max = 10000): value is string {
 function iso(value: unknown): value is string {
   return text(value, 100) && !Number.isNaN(Date.parse(value));
 }
+function nullableIso(value: unknown): value is string | null {
+  return value === null || iso(value);
+}
 function optionalText(value: unknown, max = 10000): value is string | null | undefined {
   return value == null || text(value, max);
 }
@@ -37,6 +46,9 @@ function object(value: unknown): value is Record<string, unknown> {
 }
 function rows(value: unknown, limit: number): value is Record<string, unknown>[] {
   return Array.isArray(value) && value.length <= limit && value.every(object);
+}
+function canonicalTitleId(value: unknown): value is string {
+  return text(value, 100) && /^(movie|series)-\d+$/.test(value);
 }
 
 function assertSnapshot(snapshot: unknown): asserts snapshot is BackendSnapshot {
@@ -55,13 +67,36 @@ function assertSnapshot(snapshot: unknown): asserts snapshot is BackendSnapshot 
   const typed = snapshot as unknown as BackendSnapshot;
 
   for (const title of typed.titles) {
-    if (!text(title.id, 100) || !/^(movie|series)-\d+$/.test(title.id) ||
+    if (!canonicalTitleId(title.id) ||
         (title.mediaType !== 'movie' && title.mediaType !== 'series') || !finiteInteger(title.tmdbId) || title.tmdbId <= 0 ||
-        !text(title.title, 1000) || !finiteInteger(title.year) ||
-        (title.id !== `${title.mediaType}-${title.tmdbId}`) ||
+        !text(title.title, 1000) || !finiteInteger(title.year) || title.year < 1800 || title.year > 3000 ||
+        title.id !== `${title.mediaType}-${title.tmdbId}` ||
         (title.traktId !== undefined && (!finiteInteger(title.traktId) || title.traktId <= 0)) ||
         !optionalText(title.imdbId, 100) || !optionalText(title.availabilityId, 200)) {
       throw new InvalidMigrationPayloadError('Invalid canonical title row');
+    }
+  }
+  for (const row of typed.metadata) {
+    if (!canonicalTitleId(row.titleId) || !TITLE_STATUSES.includes(row.status) || !text(row.overview, 20000) ||
+        !Array.isArray(row.genres) || row.genres.length > 100 || !row.genres.every((genre) => text(genre, 100)) ||
+        !text(row.posterPath, 1000) || !text(row.backdropPath, 1000) || !optionalText(row.trailerKey, 500) ||
+        !iso(row.metadataUpdatedAt) || (row.releaseDate !== undefined && !nullableIso(row.releaseDate))) {
+      throw new InvalidMigrationPayloadError('Invalid title metadata row');
+    }
+  }
+  for (const row of typed.seasons) {
+    if (!canonicalTitleId(row.titleId) || !finiteInteger(row.seasonNumber) || row.seasonNumber < 0 ||
+        !finiteInteger(row.tmdbSeasonId) || row.tmdbSeasonId <= 0 || !text(row.name, 1000) ||
+        !finiteInteger(row.episodeCount) || row.episodeCount < 0 || !nullableIso(row.airDate)) {
+      throw new InvalidMigrationPayloadError('Invalid season row');
+    }
+  }
+  for (const row of typed.episodes) {
+    if (!canonicalTitleId(row.titleId) || !finiteInteger(row.seasonNumber) || row.seasonNumber < 0 ||
+        !finiteInteger(row.episodeNumber) || row.episodeNumber <= 0 || !finiteInteger(row.tmdbEpisodeId) || row.tmdbEpisodeId <= 0 ||
+        !text(row.name, 1000) || (row.runtime !== null && (!finiteInteger(row.runtime) || row.runtime < 0)) ||
+        !nullableIso(row.airDate) || !text(row.overview, 20000)) {
+      throw new InvalidMigrationPayloadError('Invalid episode row');
     }
   }
   for (const service of typed.services) {
@@ -72,17 +107,22 @@ function assertSnapshot(snapshot: unknown): asserts snapshot is BackendSnapshot 
     }
   }
   for (const row of typed.library) {
-    if (!text(row.titleId, 100) || !iso(row.addedAt) || !text(row.derivedStatus, 30) || !iso(row.statusComputedAt)) {
+    if (!canonicalTitleId(row.titleId) || !iso(row.addedAt) || !LIBRARY_STATUSES.includes(row.derivedStatus) || !iso(row.statusComputedAt)) {
       throw new InvalidMigrationPayloadError('Invalid Library row');
     }
   }
   for (const row of typed.ratings) {
-    if (!text(row.titleId, 100) || !finiteInteger(row.stars) || row.stars < 1 || row.stars > 5 || !iso(row.ratedAt)) {
+    if (!canonicalTitleId(row.titleId) || !finiteInteger(row.stars) || row.stars < 1 || row.stars > 5 || !iso(row.ratedAt)) {
       throw new InvalidMigrationPayloadError('Invalid rating row');
     }
   }
+  for (const row of typed.watchedService) {
+    if (!canonicalTitleId(row.titleId) || !text(row.serviceKey, 80) || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(row.serviceKey) || !iso(row.changedAt)) {
+      throw new InvalidMigrationPayloadError('Invalid watched service row');
+    }
+  }
   for (const row of typed.watchOverrides) {
-    if (!text(row.id, 200) || !['movie', 'episode', 'season'].includes(String(row.scopeType)) || !text(row.titleId, 100) ||
+    if (!text(row.id, 200) || !['movie', 'episode', 'season'].includes(String(row.scopeType)) || !canonicalTitleId(row.titleId) ||
         !['watched', 'unwatched'].includes(String(row.state)) || !iso(row.changedAt) ||
         (row.seasonNumber !== undefined && (!finiteInteger(row.seasonNumber) || row.seasonNumber < 0)) ||
         (row.episodeNumber !== undefined && (!finiteInteger(row.episodeNumber) || row.episodeNumber <= 0))) {
@@ -90,10 +130,28 @@ function assertSnapshot(snapshot: unknown): asserts snapshot is BackendSnapshot 
     }
   }
   for (const row of typed.watchEvents) {
-    if (!text(row.id, 200) || !text(row.providerEventId, 200) || !text(row.titleId, 100) || row.source !== 'trakt' || !iso(row.watchedAt) ||
+    if (!text(row.id, 200) || !text(row.providerEventId, 200) || !canonicalTitleId(row.titleId) || row.source !== 'trakt' || !iso(row.watchedAt) ||
         (row.seasonNumber !== undefined && (!finiteInteger(row.seasonNumber) || row.seasonNumber < 0)) ||
         (row.episodeNumber !== undefined && (!finiteInteger(row.episodeNumber) || row.episodeNumber <= 0))) {
       throw new InvalidMigrationPayloadError('Invalid watch event row');
+    }
+  }
+  for (const row of typed.availability) {
+    if (!canonicalTitleId(row.titleId) || !text(row.serviceKey, 80) || !['subscription', 'rent', 'buy'].includes(row.optionType) ||
+        !optionalText(row.deepLink, 4000) || !nullableIso(row.startsAt) || !nullableIso(row.endsAt) || !iso(row.checkedAt) ||
+        !['streaming-availability', 'tmdb-fallback'].includes(row.source)) {
+      throw new InvalidMigrationPayloadError('Invalid availability row');
+    }
+  }
+  for (const row of typed.alerts) {
+    if (!text(row.id, 200) || !canonicalTitleId(row.titleId) || !ALERT_TYPES.includes(row.alertType) || !text(row.message, 4000) ||
+        !nullableIso(row.eventDate) || !iso(row.createdAt) || !nullableIso(row.seenAt) || !text(row.dedupeKey, 1000)) {
+      throw new InvalidMigrationPayloadError('Invalid alert row');
+    }
+  }
+  for (const row of typed.syncState) {
+    if (!['trakt', 'metadata', 'availability'].includes(row.syncType) || !nullableIso(row.lastAttemptAt) || !nullableIso(row.lastSuccessAt)) {
+      throw new InvalidMigrationPayloadError('Invalid sync state row');
     }
   }
 }
@@ -227,12 +285,9 @@ export async function importLocalState(db: D1Database, bundle: BackendMigrationB
         event_date=excluded.event_date, created_at=excluded.created_at, seen_at=excluded.seen_at, dedupe_key=excluded.dedupe_key`,
     [row.id, row.titleId, row.alertType, row.message, row.eventDate, row.createdAt, row.seenAt, row.dedupeKey]));
   }
-  for (const row of s.syncState) {
-    statements.push(statement(db, `INSERT INTO sync_state (sync_type, cursor, last_attempt_at, last_success_at, metadata_json)
-      VALUES (?, NULL, ?, ?, '{}') ON CONFLICT(sync_type) DO UPDATE SET
-        last_attempt_at=excluded.last_attempt_at, last_success_at=excluded.last_success_at`,
-    [row.syncType, row.lastAttemptAt, row.lastSuccessAt]));
-  }
+  // Provider sync cursors/timestamps are intentionally not migrated. They are provider-owned state
+  // and must be recreated by the real backend integrations rather than promoted from a local or
+  // synthetic browser cache during user-state takeover.
   statements.push(statement(db, 'INSERT INTO app_meta (key, value) VALUES (?, ?)', [MIGRATION_META_KEY, bundle.migrationId]));
 
   const results = await db.batch(statements);
