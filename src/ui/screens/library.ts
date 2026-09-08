@@ -12,6 +12,10 @@ let genreFilter = '';
 let serviceFilter = '';
 let statusFilter = '';
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 export async function render(el: HTMLElement) {
   el.innerHTML = `<div class="skeleton" style="height:300px;border-radius:16px;"></div>`;
   const snap = await loadSnapshot();
@@ -103,8 +107,8 @@ function selectPill(name: string, label: string, current: string, options: Servi
   const activeLabel = options.find((option) => option.key === current)?.label ?? current;
   return `
     <select class="pill" data-filter="${name}" aria-label="Filter My Library by ${label.toLowerCase()}" style="appearance:none;">
-      <option value="">${label}${current ? ` · ${activeLabel}` : ''}</option>
-      ${options.map((option) => `<option value="${option.key}" ${option.key === current ? 'selected' : ''}>${option.label}</option>`).join('')}
+      <option value="">${label}${current ? ` · ${escapeHtml(activeLabel)}` : ''}</option>
+      ${options.map((option) => `<option value="${escapeHtml(option.key)}" ${option.key === current ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
     </select>
   `;
 }
