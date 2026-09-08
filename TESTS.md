@@ -67,24 +67,26 @@ PR #9 remains synthetic-only and does not activate or contact the production Wor
 - season bulk corrections query only server-known released episodes at action date and materialize episode-level overrides in one D1 batch;
 - future episodes therefore cannot inherit an old season bulk action;
 - service-selection mutations require an existing service;
-- custom services are stored as selected `unsupported` services and normalize punctuation/whitespace to route-safe keys;
-- Settings escapes custom service names/keys before inserting them into HTML/attributes, with a hostile synthetic custom-service browser regression;
+- local IndexedDB and Worker/D1 custom-service creation use the same route-safe punctuation/whitespace normalization and 80-character bounds;
+- adding the same normalized service reselects it, while a different-name normalized-key collision is rejected instead of silently aliasing two services;
+- Settings, Detail, History and Library service-filter rendering resist stored-markup injection from hostile synthetic service names;
+- Settings bounds custom-service input and reports invalid/conflicting names without an unhandled page error;
 - existing auth fail-closed, exact-origin CORS, sanitized backend errors, canonical Library/rating preconditions and alert payload bounds remain covered.
 
-The latest implementation/security-review head `a9cf1e0865f9b08af7931c3f10e02072ae90de98` passed CI #147:
+The final code/security-review head before continuity-only updates is `207db99c32aab71ef72895e72c07d1ce4fcad0c1`. It passed CI #166:
 - `npm ci --no-audit --no-fund`: PASS;
 - PWA build: PASS;
 - Worker build/type-check: PASS;
-- **155/155 tests across 26 suites**;
+- **160/160 tests across 26 suites**;
 - deterministic D1 semantics **5/5**;
 - pinned Wrangler **4.129.0** local-D1 validation PASS (`schema_version=1`, eight services, `titles`, migration history);
-- browser/responsive QA **28/28**;
+- browser/responsive QA **31/31**;
 - folded 344×792 PASS;
 - unfolded 873×1000 PASS;
-- hostile custom-service rendering regression PASS;
+- stored service-name rendering regressions PASS across Settings, Detail, History and Library filtering;
 - zero smoke-pass console/page errors.
 
-The merge gate remains unchanged: the final documentation-inclusive PR head must pass the complete normal CI/browser suite without further code changes before PR #9 is considered merge-ready.
+The merge gate remains unchanged: after continuity-only documentation synchronization, the resulting unchanged PR head must pass the complete normal CI/browser suite before PR #9 is considered merge-ready.
 
 ## Manual Cloudflare production validation — completed for v0.13.0
 With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed reviewed main commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed successful build/deploy, healthy `/api/health`, D1 schema version 1, eight services and all expected application tables plus `d1_migrations`.
