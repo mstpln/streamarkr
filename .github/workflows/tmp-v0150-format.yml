@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   fix:
-    if: "${{ github.actor != 'github-actions[bot]' }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -18,6 +17,9 @@ jobs:
           ref: feat/backend-user-state-v0150
       - name: Apply cleanup
         run: |
+          if [ "$GITHUB_ACTOR" = "github-actions[bot]" ]; then
+            exit 0
+          fi
           python - <<'PY'
           from pathlib import Path
 
@@ -83,6 +85,9 @@ jobs:
           PY
       - name: Commit cleanup
         run: |
+          if [ "$GITHUB_ACTOR" = "github-actions[bot]" ]; then
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add tests/worker-routes.test.ts tests/worker-repository.test.ts tests/repo-integration.test.ts
