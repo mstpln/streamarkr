@@ -3,10 +3,14 @@ import { test } from 'node:test';
 import { backendActivationFailureMessage } from '../src/lib/backend-activation-diagnostics.js';
 import { BackendRequestError } from '../src/lib/backend-client.js';
 
-test('activation diagnostics distinguish token rejection, cookie retention, origin rejection and migration failures', () => {
+test('activation diagnostics distinguish token rejection, session creation, cookie retention, origin rejection and migration failures', () => {
   assert.equal(
     backendActivationFailureMessage('bootstrap', new BackendRequestError(401, 'unauthorized')),
     'Device access token was rejected. Check the token and try again.'
+  );
+  assert.equal(
+    backendActivationFailureMessage('bootstrap', new BackendRequestError(500, 'session_creation_failed')),
+    'The token was accepted, but the Worker could not create the secure session. Local data is unchanged.'
   );
   assert.equal(
     backendActivationFailureMessage('verify-session', new BackendRequestError(401, 'unauthorized')),

@@ -1,7 +1,7 @@
 // Minimal hand-written service worker: app-shell cache-first strategy with a versioned cache
 // name tied to the app version, so a rebuild invalidates stale assets automatically.
-// The production-activation diagnostics hotfix changes only these comments so installed v0.18.0
-// clients detect a new worker and rerun install-time precaching without altering cache behavior.
+// The production bootstrap hotfix changes these comments so installed v0.18.0 clients detect a
+// new worker and rerun install-time precaching without changing cache behavior or stored data.
 //
 // The install-time manifest pre-caches the complete compiled module graph so first-load offline
 // behavior does not depend on fetch-time caching having already visited every route.

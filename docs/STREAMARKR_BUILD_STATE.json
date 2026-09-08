@@ -1,17 +1,17 @@
 {
-  "_readMeFirst": "v0.18.0 same-origin Worker hosting is merged and deployed. Live PWA/API/D1 health passed, but secure browser-session activation is not yet verified end-to-end. PR #13 adds safe staged diagnostics before any real personal-state migration is accepted.",
+  "_readMeFirst": "v0.18.0 same-origin Worker hosting and PR #13 staged activation diagnostics are merged and deployed. Live diagnostics now isolate the remaining failure to initial browser-session bootstrap before cookie verification or migration. PR #14 fixes that bootstrap path without touching personal data.",
   "appVersion": "0.18.0",
   "cacheVersion": "streamarkr-v0.18.0",
   "schemaVersion": 1,
   "indexedDbVersion": 2,
-  "generatedAt": "2026-09-08T14:15:00.000Z",
+  "generatedAt": "2026-09-08T15:05:00.000Z",
   "repository": {
     "fullName": "mstpln/streamarkr",
     "public": true,
     "sourceOfTruth": "main",
-    "currentMainCommit": "77d8644e06be5a9e61c0938782616f02cdf8f179",
-    "activePr": 13,
-    "activeBranch": "fix/backend-activation-diagnostics-v0181"
+    "currentMainCommit": "3ddcbfcb515a31e1ed6ce2951ea741832d5adeda",
+    "activePr": 14,
+    "activeBranch": "fix/browser-session-bootstrap-v0182"
   },
   "targetArchitecture": {
     "build": "Vite + TypeScript target; current PWA remains plain TypeScript ES modules",
@@ -20,7 +20,7 @@
     "browserCache": "IndexedDB",
     "optionalStorage": "Cloudflare R2",
     "providers": "real Trakt/TMDB/Streaming Availability adapters",
-    "status": "Same-origin Worker/D1 production topology is live; secure browser activation remains the current blocker before real provider work and personal-state takeover"
+    "status": "Same-origin Worker/D1 production topology is live; secure browser bootstrap is the current blocker before personal-state takeover and real provider work"
   },
   "currentToolchain": {
     "node": 22,
@@ -57,7 +57,7 @@
     "dedicatedD1Jurisdiction": "EU",
     "dedicatedD1Binding": "DB",
     "runtimeSecret": "DEVICE_ACCESS_TOKEN",
-    "browserAuth": "user-entered DEVICE_ACCESS_TOKEN is exchanged only at POST /api/auth/session for a signed 30-day HttpOnly Secure __Host-streamarkr_session cookie; token is never embedded or persisted",
+    "browserAuth": "browser POST /api/auth/session sends the user-entered device token once in an HTTPS JSON body, never persists it, and exchanges it for a signed 30-day HttpOnly Secure __Host-streamarkr_session cookie; operational bearer auth remains supported",
     "cors": "same-origin browser requests default to the Worker request origin when APP_ORIGIN is unset; explicit APP_ORIGIN remains an exact override",
     "localStateMigrationRoute": "POST /api/migration/local-state",
     "cloudflareResourcesCreated": true,
@@ -72,9 +72,8 @@
   "production": {
     "productionBranch": "deploy/production",
     "normalMainMergeDeploysProduction": false,
-    "deployedReviewedMainCommit": "77d8644e06be5a9e61c0938782616f02cdf8f179",
-    "v0180DeploymentAuthorized": true,
-    "v0180DeploymentAuthorizationConsumed": true,
+    "deployedReviewedMainCommit": "3ddcbfcb515a31e1ed6ce2951ea741832d5adeda",
+    "latestDeploymentAuthorizationConsumed": true,
     "pwaRootVerified": true,
     "apiHealthVerified": true,
     "apiHealth": {
@@ -85,23 +84,21 @@
     },
     "apiRoutingVerified": true,
     "browserSessionVerified": false,
-    "firstSecureStorageAttempt": "generic connection_or_migration_failed followed by same-browser /api/auth/session unauthorized",
+    "latestSecureStorageAttempt": "staged bootstrap failure: Could not create the secure browser session. Local data is unchanged.",
+    "failureStage": "bootstrap",
+    "cookieVerificationReached": false,
+    "migrationReached": false,
     "realPersonalStateMigrated": false,
     "futureProductionDeploymentsRequireFreshExplicitAuthorization": true
   },
-  "activationDiagnostics": {
-    "pr": 13,
-    "status": "final exact-head validation pending after continuity synchronization",
-    "stages": ["bootstrap", "verify-session", "migration"],
-    "safeErrorSurface": "HTTP status plus sanitized backend error code only; arbitrary exception/response text is not rendered",
-    "postBootstrapVerification": "GET /api/auth/session must verify cookie-backed authentication before migration",
-    "knownMessages": [
-      "device token rejected",
-      "origin rejected",
-      "secure session cookie not retained",
-      "migration conflict",
-      "invalid migration payload"
-    ],
+  "activationBootstrapFix": {
+    "pr": 14,
+    "status": "implementation CI passed; final exact-head validation pending after continuity synchronization",
+    "browserExchange": "same-origin HTTPS JSON body; no browser Authorization header",
+    "tokenComparison": "constant-time digest comparison; surrounding supplied whitespace trimmed",
+    "sessionCookie": "signed HttpOnly Secure __Host-streamarkr_session",
+    "controlledSessionFailure": "session_creation_failed",
+    "legacyOperationalBearerAuth": true,
     "tokenPersistence": false,
     "personalDataTouched": false
   },
@@ -116,17 +113,10 @@
     {"pr": 9, "version": "0.15.0", "mergeCommit": "d6e8a9627dd1a1cab2e6d520753084b902589b9d"},
     {"pr": 10, "version": "0.16.0", "mergeCommit": "c26bc20b3579cc3736621e722d623ead12786564"},
     {"pr": 11, "version": "0.17.0", "mergeCommit": "1e411d1696d32269327b5ef30de5c5f158f302e0"},
-    {"pr": 12, "version": "0.18.0", "mergeCommit": "77d8644e06be5a9e61c0938782616f02cdf8f179", "finalReviewedHead": "c24795f93e9887620d3bdfacb438422c6e86c56a"}
+    {"pr": 12, "version": "0.18.0", "mergeCommit": "77d8644e06be5a9e61c0938782616f02cdf8f179", "finalReviewedHead": "c24795f93e9887620d3bdfacb438422c6e86c56a"},
+    {"pr": 13, "version": "0.18.0-activation-diagnostics", "mergeCommit": "3ddcbfcb515a31e1ed6ce2951ea741832d5adeda", "finalReviewedHead": "086a013ac7e9da913f1940b26d839a7a753d6d09"}
   ],
   "validation": {
-    "v0170": {
-      "tests": "198/198",
-      "d1": "5/5",
-      "wranglerLocal": "pass",
-      "browser": "32/32",
-      "providerSecurity": "8/8",
-      "consolePageErrors": 0
-    },
     "v0180": {
       "finalReviewedHead": "c24795f93e9887620d3bdfacb438422c6e86c56a",
       "ciRun": 280,
@@ -139,11 +129,23 @@
       "responsive": "folded/unfolded pass",
       "consolePageErrors": 0
     },
-    "pr13PreFinalContinuity": {
-      "reviewedHead": "37905f410a37c3e6f5cc51d3ec1b0cdd4f1cb9bc",
-      "ciRun": 300,
+    "pr13Final": {
+      "finalReviewedHead": "086a013ac7e9da913f1940b26d839a7a753d6d09",
+      "ciRun": 307,
       "cloudflareBundle": "pass",
-      "tests": "204/204",
+      "tests": "205/205",
+      "d1": "5/5",
+      "wranglerLocal": "pass",
+      "browser": "32/32",
+      "providerSecurity": "8/8",
+      "responsive": "folded/unfolded pass",
+      "consolePageErrors": 0
+    },
+    "pr14PreFinalContinuity": {
+      "reviewedHead": "c029d7891add50df815c54036214b078ece1403b",
+      "ciRun": 309,
+      "cloudflareBundle": "pass",
+      "tests": "207/207",
       "d1": "5/5",
       "wranglerLocal": "pass",
       "browser": "32/32",
@@ -160,10 +162,10 @@
     "liveProviderProductionCredentialsInTestsAllowed": false
   },
   "nextSequence": [
-    "finish PR #13 exact-head review/test/fix cycle",
-    "merge PR #13 only with explicit authorization",
-    "deploy merged hotfix only with separate fresh explicit authorization",
-    "retry and verify live secure browser activation",
+    "finish PR #14 exact-head review/test/fix cycle",
+    "merge PR #14 only with explicit authorization",
+    "deploy merged PR #14 only with separate fresh explicit authorization",
+    "retry and verify live secure browser activation and guarded migration",
     "build real TMDB metadata/search",
     "build Trakt OAuth/history ingestion",
     "build Swedish streaming availability/alerts/Discover",

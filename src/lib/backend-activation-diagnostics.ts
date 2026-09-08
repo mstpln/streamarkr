@@ -12,6 +12,9 @@ export function backendActivationFailureMessage(stage: BackendActivationStage, e
     if (error.status === 403 && error.code === 'origin_not_allowed') {
       return 'This browser origin was rejected by the Worker. The production origin configuration needs attention.';
     }
+    if (stage === 'bootstrap' && error.status === 500 && error.code === 'session_creation_failed') {
+      return 'The token was accepted, but the Worker could not create the secure session. Local data is unchanged.';
+    }
     if (stage === 'verify-session' && error.status === 401 && error.code === 'unauthorized') {
       return 'The token was accepted, but Chrome did not retain the secure session cookie. Local data is unchanged.';
     }

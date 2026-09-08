@@ -22,7 +22,8 @@ function env(overrides: Partial<Env> = {}): Env {
 function bootstrapRequest(origin = 'https://app.example', token = 'synthetic-device-token'): Request {
   return new Request('https://worker.example/api/auth/session', {
     method: 'POST',
-    headers: { origin, authorization: `Bearer ${token}` }
+    headers: { origin, 'content-type': 'application/json' },
+    body: JSON.stringify({ deviceAccessToken: token })
   });
 }
 
@@ -40,6 +41,12 @@ test('browser bootstrap exchanges the device token for an HttpOnly signed sessio
   const payload = await response.json() as { ok: boolean; expiresAt: string };
   assert.equal(payload.ok, true);
   assert.match(payload.expiresAt, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test('browser bootstrap tolerates copied surrounding whitespace without changing the configured secret', async () => {
+  const response = await handleRequest(bootstrapRequest('https://app.example', '  synthetic-device-token\n'), env());
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('set-cookie') ?? '', /^__Host-streamarkr_session=/);
 });
 
 test('the signed browser cookie authenticates only from the configured app origin', async () => {
@@ -67,7 +74,12 @@ test('the signed browser cookie authenticates only from the configured app origi
 test('tampering with a browser session cookie invalidates it', async () => {
   const bootstrap = await handleRequest(bootstrapRequest(), env());
   const cookie = (bootstrap.headers.get('set-cookie') ?? '').split(';')[0];
-  const tampered = `${cookie.slice(0, -1)}${cookie.endsWith('A') ? 'B' : 'A'}`;
+  const [name, value] = cookie.split('=');
+  const parts = value.split('.');
+  assert.equal(parts.length, 3);
+  const signature = parts[2];
+  parts[2] = `${signature[0] === 'A' ? 'B' : 'A'}${signature.slice(1)}`;
+  const tampered = `${name}=${parts.join('.')}`;
   const response = await handleRequest(new Request('https://worker.example/api/auth/session', {
     headers: { origin: 'https://app.example', cookie: tampered }
   }), env());
@@ -99,6 +111,18 @@ test('browser bootstrap fails closed for an explicitly configured mismatched ori
 
   const badToken = await handleRequest(bootstrapRequest('https://app.example', 'wrong'), env());
   assert.equal(badToken.status, 401);
+});
+
+test('browser bootstrap rejects missing or malformed token bodies without touching D1', async () => {
+  const missing = await handleRequest(new Request('https://worker.example/api/auth/session', {
+    method: 'POST', headers: { origin: 'https://app.example', 'content-type': 'application/json' }, body: '{}'
+  }), env());
+  assert.equal(missing.status, 401);
+
+  const malformed = await handleRequest(new Request('https://worker.example/api/auth/session', {
+    method: 'POST', headers: { origin: 'https://app.example', 'content-type': 'application/json' }, body: '{'
+  }), env());
+  assert.equal(malformed.status, 401);
 });
 
 test('logout clears the browser session cookie without exposing or requiring the device token', async () => {

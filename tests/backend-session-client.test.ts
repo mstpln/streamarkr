@@ -58,13 +58,15 @@ test('backend request failures discard unknown code-shaped response values', asy
   );
 });
 
-test('bootstrap sends the device token only on the one exchange request and logout uses cookies', async () => {
-  const seen: Array<{ auth: string | null; credentials: RequestCredentials | undefined; method: string }> = [];
+test('bootstrap sends the device token only in the one JSON exchange body and never as Authorization', async () => {
+  const seen: Array<{ auth: string | null; contentType: string | null; credentials: RequestCredentials | undefined; method: string; body: string | null }> = [];
   const client = new WorkerBackendClient('https://worker.example', null, async (_input, init) => {
     seen.push({
       auth: new Headers(init?.headers).get('authorization'),
+      contentType: new Headers(init?.headers).get('content-type'),
       credentials: init?.credentials,
-      method: init?.method ?? 'GET'
+      method: init?.method ?? 'GET',
+      body: typeof init?.body === 'string' ? init.body : null
     });
     if (init?.method === 'POST') return jsonResponse({ ok: true, expiresAt: '2026-10-08T00:00:00.000Z' });
     return new Response(null, { status: 204 });
@@ -75,8 +77,14 @@ test('bootstrap sends the device token only on the one exchange request and logo
 
   assert.deepEqual(session, { expiresAt: '2026-10-08T00:00:00.000Z' });
   assert.deepEqual(seen, [
-    { auth: 'Bearer one-time-browser-entry', credentials: 'include', method: 'POST' },
-    { auth: null, credentials: 'include', method: 'DELETE' }
+    {
+      auth: null,
+      contentType: 'application/json',
+      credentials: 'include',
+      method: 'POST',
+      body: JSON.stringify({ deviceAccessToken: 'one-time-browser-entry' })
+    },
+    { auth: null, contentType: null, credentials: 'include', method: 'DELETE', body: null }
   ]);
 });
 
