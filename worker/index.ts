@@ -3,10 +3,12 @@ import {
   addCustomService,
   addLibraryItem,
   clearRating,
+  InvalidOverrideScopeError,
   loadSnapshot,
   markAlertsSeen,
   MissingCanonicalTitleError,
   MissingEpisodeError,
+  MissingSeasonError,
   MissingServiceError,
   removeLibraryItem,
   schemaVersion,
@@ -216,6 +218,12 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
     }
     if (error instanceof MissingEpisodeError) {
       return json({ error: 'missing_episode', message: error.message }, 409, responseHeaders);
+    }
+    if (error instanceof MissingSeasonError) {
+      return json({ error: 'missing_season', message: error.message }, 409, responseHeaders);
+    }
+    if (error instanceof InvalidOverrideScopeError) {
+      return json({ error: 'invalid_override_scope', message: error.message }, 409, responseHeaders);
     }
     console.error(JSON.stringify({
       level: 'error',
