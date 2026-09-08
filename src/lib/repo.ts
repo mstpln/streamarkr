@@ -308,8 +308,9 @@ function normalizeCustomServiceKey(displayName: string): string {
 export async function addCustomService(displayName: string): Promise<void> {
   await assertLocalMutationAllowed();
   const trimmed = displayName.trim();
+  if (!trimmed || trimmed.length > 80 || !/[a-z0-9]/i.test(trimmed)) return;
   const key = normalizeCustomServiceKey(trimmed);
-  if (!key) return;
+  if (!key || key.length > 80) return;
   const existing = await db.get<ServiceDef>('services', key);
   if (existing) {
     if (existing.displayName.trim().toLocaleLowerCase() !== trimmed.toLocaleLowerCase()) {
