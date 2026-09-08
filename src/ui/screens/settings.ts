@@ -212,7 +212,7 @@ export async function render(el: HTMLElement, activeTab: SettingsTab = 'preferen
         <div class="card-row"><span>History / import</span><span>${cache.active ? 'Worker/D1 durable state' : 'Synthetic fixtures'}</span></div>
         <div class="card-row"><span>Export personal data</span><button class="action-btn" id="export-btn">Export JSON</button></div>
         <div class="card-row"><span>Reset local data</span><button class="action-btn" id="reset-btn" style="border-color:var(--coral);color:var(--coral);" ${cache.active ? 'disabled aria-disabled="true"' : ''}>${cache.active ? 'Disabled while Worker/D1 is active' : 'Reset to fixtures…'}</button></div>
-        <div class="card-row"><span>App version</span><span>v0.18.1 (activation diagnostics)</span></div>
+        <div class="card-row"><span>App version</span><span>v0.18.0 (same-origin Worker hosting + activation diagnostics)</span></div>
       </div>
     `;
     body.querySelector('#export-btn')?.addEventListener('click', async () => {
