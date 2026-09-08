@@ -305,9 +305,13 @@ test('custom-service route reselects an existing same-name service and rejects n
   assert.equal(collision.writes.length, 0);
 });
 
-test('CORS is emitted only for the configured exact app origin', async () => {
-  const allowed = await handleRequest(new Request('https://worker.example/api/health', { headers: { origin: 'https://app.example' } }), env());
-  assert.equal(allowed.headers.get('access-control-allow-origin'), 'https://app.example');
+test('CORS is emitted only for the actual serving origin', async () => {
+  const allowed = await handleRequest(new Request('https://worker.example/api/health', { headers: { origin: 'https://worker.example' } }), env());
+  assert.equal(allowed.headers.get('access-control-allow-origin'), 'https://worker.example');
+
+  const staleConfigured = await handleRequest(new Request('https://worker.example/api/health', { headers: { origin: 'https://app.example' } }), env());
+  assert.equal(staleConfigured.headers.get('access-control-allow-origin'), null);
+
   const denied = await handleRequest(new Request('https://worker.example/api/health', { headers: { origin: 'https://evil.example' } }), env());
   assert.equal(denied.headers.get('access-control-allow-origin'), null);
 });
