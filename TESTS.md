@@ -109,14 +109,15 @@ New deterministic coverage verifies:
 - backend cache cannot be reset to demo fixtures and synthetic provider sync cannot mutate it;
 - local-state import uses the browser session cookie and never re-sends the device token;
 - Settings Connections renders the secure migration entry point, and the device-token field is password-only and not prefilled;
-- package manifest/lockfile install reproducibility after the v0.17 version bump.
+- package manifest/lockfile install reproducibility after the v0.17 version bump;
+- machine-readable `STREAMARKR_BUILD_STATE.json` remains valid JSON and synchronized with package/cache/schema/repository metadata.
 
-### Implementation-validation run
-Head `bcaa21ece16c7684972acca84bacaa3789343732`, CI #254:
+### Continuity-validation run
+Head `62306809828321cf930c04a3938f3161b32a0010`, CI #260:
 - `npm ci --no-audit --no-fund`: PASS, 43 packages;
 - PWA build: PASS, `streamarkr@0.17.0`, 34 compiled modules in service-worker manifest;
 - Worker build/type-check: PASS;
-- **195/195 tests across 26 suites**, 0 failures;
+- **196/196 tests across 26 suites**, 0 failures;
 - deterministic D1 semantics **5/5**;
 - pinned Wrangler **4.129.0** local-D1 validation PASS (`schema_version=1`, services=8, titles and migration history present);
 - core browser/responsive QA **32/32**;
@@ -125,7 +126,7 @@ Head `bcaa21ece16c7684972acca84bacaa3789343732`, CI #254:
 - unfolded 873×1000 PASS;
 - zero smoke-pass and provider/security console/page errors.
 
-The v0.17 PR merge gate remains: after continuity synchronization, the resulting unchanged exact PR head must pass the complete normal CI/browser suite and final diff/security/review-thread inspection before it can be considered merge-ready.
+The v0.17 PR merge gate remains: after recording this validation in continuity files, the resulting unchanged exact PR head must pass the complete normal CI/browser suite and final diff/security/review-thread inspection before it can be considered merge-ready.
 
 ## Manual Cloudflare production validation — completed for v0.13.0
 With explicit user authorization, deployment branch commit `0c62c574a2680a01ae06dde2c1362e2ec1b5369a` deployed reviewed main commit `73359c56825ea7d9b6bfa1245f513d23c9e08e30`. Manual verification confirmed successful build/deploy, healthy `/api/health`, D1 schema version 1, eight services and all expected application tables plus `d1_migrations`.
