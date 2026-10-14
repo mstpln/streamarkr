@@ -1,0 +1,6 @@
+.cache/ms-playwright/
+test-dist/
+test-results/
+playwright-report/
+worker-dist/
+.wrangler/
