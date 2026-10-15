@@ -143,6 +143,46 @@ export function newSeason(s: Snapshot): NewSeasonCard[] {
   return out;
 }
 
+export interface NewMovieReleaseCard {
+  title: Title;
+  releaseDate: string;
+  releaseState: 'upcoming' | 'released';
+}
+
+const NEW_MOVIE_RELEASE_GRACE_DAYS = 30;
+
+/** Upcoming or recently released, unwatched movies already in My Library.
+ * Movie release dates are general release dates, not streaming-availability dates. */
+export function newMovieReleases(s: Snapshot, now: Date = new Date()): NewMovieReleaseCard[] {
+  const libraryIds = new Set(s.library.map((item) => item.titleId));
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const earliestIncluded = today - NEW_MOVIE_RELEASE_GRACE_DAYS * 86400000;
+  const cards: (NewMovieReleaseCard & { releaseTimestamp: number })[] = [];
+
+  for (const title of s.titles) {
+    if (title.mediaType !== 'movie' || !libraryIds.has(title.id) || titleStatus(s, title.id) !== 'To Watch') continue;
+    const releaseDate = s.metadata.find((item) => item.titleId === title.id)?.releaseDate?.slice(0, 10);
+    if (!releaseDate) continue;
+    const releaseTimestamp = Date.parse(`${releaseDate}T00:00:00Z`);
+    if (!Number.isFinite(releaseTimestamp) || releaseTimestamp < earliestIncluded) continue;
+    cards.push({
+      title,
+      releaseDate,
+      releaseState: releaseTimestamp > today ? 'upcoming' : 'released',
+      releaseTimestamp
+    });
+  }
+
+  return cards
+    .sort((a, b) => {
+      const aUpcoming = a.releaseState === 'upcoming';
+      const bUpcoming = b.releaseState === 'upcoming';
+      if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
+      return aUpcoming ? a.releaseTimestamp - b.releaseTimestamp : b.releaseTimestamp - a.releaseTimestamp;
+    })
+    .map(({ title, releaseDate, releaseState }) => ({ title, releaseDate, releaseState }));
+}
+
 // --- History -------------------------------------------------------------------------------
 export interface HistoryEntry extends HistoryRow {
   title: Title;

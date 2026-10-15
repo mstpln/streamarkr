@@ -1,9 +1,14 @@
-import { loadSnapshot, watchingNow, onHold, rateNow, resolveRateNowMedia, newSeason } from '../../lib/views.js';
+import { loadSnapshot, watchingNow, onHold, rateNow, newSeason, newMovieReleases, titleStatus } from '../../lib/views.js';
 import { posterStyle } from '../art.js';
 import { navigate } from '../router.js';
+import type { MediaType, Title } from '../../lib/types.js';
 
-let watchTab: 'watching' | 'onhold' = 'watching';
-let rateTab: 'series' | 'movie' = 'series';
+type SeriesStatusTab = 'watching' | 'onhold';
+type MovieStatusTab = 'to-watch' | 'watched';
+
+let mediaTab: MediaType = 'series';
+let seriesStatusTab: SeriesStatusTab = 'watching';
+let movieStatusTab: MovieStatusTab = 'to-watch';
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -12,57 +17,107 @@ function escapeHtml(value: string): string {
 export async function render(el: HTMLElement) {
   el.innerHTML = `<div class="skeleton" style="height:220px;border-radius:16px;"></div>`;
   const snap = await loadSnapshot();
-  const wn = watchingNow(snap);
-  const oh = onHold(snap);
-  const rnSeries = rateNow(snap, 'series');
-  const rnMovies = rateNow(snap, 'movie');
-  rateTab = resolveRateNowMedia(rateTab, rnSeries.length, rnMovies.length);
-  const rn = rateTab === 'series' ? rnSeries : rnMovies;
-  const hasRateNow = rnSeries.length > 0 || rnMovies.length > 0;
-  const ns = newSeason(snap);
+  const libraryTitles = snap.library
+    .map((item) => snap.titles.find((title) => title.id === item.titleId))
+    .filter((title): title is Title => !!title);
+  const seriesLibrary = libraryTitles.filter((title) => title.mediaType === 'series');
+  const movieLibrary = libraryTitles.filter((title) => title.mediaType === 'movie');
+  const seriesWatching = watchingNow(snap);
+  const seriesOnHold = onHold(snap);
+  const moviesToWatch = movieLibrary.filter((title) => titleStatus(snap, title.id) === 'To Watch');
+  const moviesWatched = movieLibrary.filter((title) => titleStatus(snap, title.id) === 'Finished');
+  const rateItems = rateNow(snap, mediaTab);
+  const seasons = mediaTab === 'series' ? newSeason(snap) : [];
+  const releases = mediaTab === 'movie' ? newMovieReleases(snap) : [];
+  const statusOptions = mediaTab === 'series'
+    ? [
+        { key: 'watching', label: 'Watching Now', count: seriesWatching.length, active: seriesStatusTab === 'watching' },
+        { key: 'onhold', label: 'On Hold', count: seriesOnHold.length, active: seriesStatusTab === 'onhold' }
+      ]
+    : [
+        { key: 'to-watch', label: 'To Watch', count: moviesToWatch.length, active: movieStatusTab === 'to-watch' },
+        { key: 'watched', label: 'Watched', count: moviesWatched.length, active: movieStatusTab === 'watched' }
+      ];
+  const selectedStatusContent = mediaTab === 'series'
+    ? renderWatchingSection(seriesStatusTab === 'watching' ? seriesWatching : seriesOnHold)
+    : renderMovieSection(
+        movieStatusTab === 'to-watch' ? moviesToWatch : moviesWatched,
+        movieStatusTab === 'to-watch' ? 'To Watch' : 'Watched'
+      );
+  const updateSection = mediaTab === 'series'
+    ? seasons.length > 0 ? `
+      <div class="section">
+        <div class="section-title">New Seasons</div>
+        <div class="hscroll">
+          ${seasons.map((season) => posterCard(season.title.id, season.title.title, season.releaseState === 'upcoming'
+            ? `Season ${season.seasonNumber} upcoming${season.firstAirDate ? ' · ' + new Date(season.firstAirDate).toLocaleDateString() : ''}`
+            : `Season ${season.seasonNumber} available`)).join('')}
+        </div>
+      </div>` : ''
+    : releases.length > 0 ? `
+      <div class="section">
+        <div class="section-title">New Releases</div>
+        <div class="hscroll">
+          ${releases.map((release) => posterCard(
+            release.title.id,
+            release.title.title,
+            `${release.releaseState === 'upcoming' ? 'Releases' : 'Released'} ${formatReleaseDate(release.releaseDate)}`
+          )).join('')}
+        </div>
+      </div>` : '';
 
   el.innerHTML = `
-    <div class="section">
-      <div class="segmented" id="watch-seg">
-        <button data-tab="watching" class="${watchTab === 'watching' ? 'active' : ''}">Watching Now (${wn.length})</button>
-        <button data-tab="onhold" class="${watchTab === 'onhold' ? 'active' : ''}">On Hold (${oh.length})</button>
+    <div class="home-filter-stack">
+      <div class="segmented home-media-switch" role="group" aria-label="Choose media type">
+        <button type="button" data-media-tab="series" class="${mediaTab === 'series' ? 'active' : ''}" aria-pressed="${mediaTab === 'series'}">
+          Series <span class="home-filter-count">${seriesLibrary.length}</span>
+        </button>
+        <button type="button" data-media-tab="movie" class="${mediaTab === 'movie' ? 'active' : ''}" aria-pressed="${mediaTab === 'movie'}">
+          Movies <span class="home-filter-count">${movieLibrary.length}</span>
+        </button>
       </div>
-      ${renderWatchingSection(watchTab === 'watching' ? wn : oh)}
+      <div class="home-status-switch" role="group" aria-label="${mediaTab === 'series' ? 'Filter series by status' : 'Filter movies by status'}">
+        ${statusOptions.map((option) => `
+          <button type="button" data-home-status="${option.key}" class="${option.active ? 'active' : ''}" aria-pressed="${option.active}">
+            ${option.label} <span class="home-status-count">(${option.count})</span>
+          </button>
+        `).join('')}
+      </div>
     </div>
+    <div class="section home-current-section">${selectedStatusContent}</div>
 
-    ${hasRateNow ? `
+    ${rateItems.length > 0 ? `
     <div class="section" id="rate-now-section">
-      <div class="section-title">Rate Now
-        <span class="segmented" style="margin:0;padding:2px;width:auto;">
-          <button data-rate-tab="series" class="${rateTab === 'series' ? 'active' : ''}" style="padding:6px 10px;">Series (${rnSeries.length})</button>
-          <button data-rate-tab="movie" class="${rateTab === 'movie' ? 'active' : ''}" style="padding:6px 10px;">Movies (${rnMovies.length})</button>
-        </span>
-      </div>
+      <div class="section-title">Rate Now</div>
       <div class="hscroll">
-        ${rn.map((t) => posterCard(t.id, t.title, '')).join('')}
+        ${rateItems.map((title) => posterCard(title.id, title.title, '')).join('')}
       </div>
     </div>` : ''}
 
-    ${ns.length > 0 ? `
-    <div class="section">
-      <div class="section-title">New Season</div>
-      <div class="hscroll">
-        ${ns.map((c) => posterCard(c.title.id, c.title.title, c.releaseState === 'upcoming'
-          ? `Season ${c.seasonNumber} upcoming${c.firstAirDate ? ' · ' + new Date(c.firstAirDate).toLocaleDateString() : ''}`
-          : `Season ${c.seasonNumber} available`)).join('')}
-      </div>
-    </div>` : ''}
+    ${updateSection}
   `;
 
-  el.querySelectorAll('#watch-seg button').forEach((b) =>
-    b.addEventListener('click', () => { watchTab = (b as HTMLElement).dataset.tab as any; render(el); })
+  el.querySelectorAll('[data-media-tab]').forEach((button) =>
+    button.addEventListener('click', () => {
+      mediaTab = (button as HTMLElement).dataset.mediaTab as MediaType;
+      render(el);
+    })
   );
-  el.querySelectorAll('[data-rate-tab]').forEach((b) =>
-    b.addEventListener('click', () => { rateTab = (b as HTMLElement).dataset.rateTab as any; render(el); })
+  el.querySelectorAll('[data-home-status]').forEach((button) =>
+    button.addEventListener('click', () => {
+      const status = (button as HTMLElement).dataset.homeStatus;
+      if (mediaTab === 'series' && (status === 'watching' || status === 'onhold')) seriesStatusTab = status;
+      if (mediaTab === 'movie' && (status === 'to-watch' || status === 'watched')) movieStatusTab = status;
+      render(el);
+    })
   );
   el.querySelectorAll('[data-open]').forEach((c) =>
     c.addEventListener('click', () => navigate(`#/title/${(c as HTMLElement).dataset.open}`))
   );
+}
+
+function formatReleaseDate(releaseDate: string): string {
+  return new Date(`${releaseDate}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function renderWatchingSection(items: ReturnType<typeof import('../../lib/views').watchingNow>) {
@@ -80,6 +135,15 @@ function renderWatchingSection(items: ReturnType<typeof import('../../lib/views'
         <div class="card-sub"><span class="status-tag status-${c.status.replace(' ', '-')}">${escapeHtml(c.status)}</span></div>
       </button>
     `).join('')}
+  </div>`;
+}
+
+function renderMovieSection(items: Title[], status: 'To Watch' | 'Watched') {
+  if (items.length === 0) {
+    return `<div class="section-empty-hint">${status === 'To Watch' ? 'No movies to watch right now.' : 'No watched movies in My Library yet.'}</div>`;
+  }
+  return `<div class="hscroll">
+    ${items.map((title) => posterCard(title.id, title.title, status)).join('')}
   </div>`;
 }
 
