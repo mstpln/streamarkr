@@ -15,10 +15,14 @@ Removing a title from My Library must never delete History, ratings, or manual c
 ## Navigation and core screens
 Bottom navigation: **Home · Discover · My Library · History · Settings**. Icons and labels remain visible. Search and Alerts live in the top-right header.
 
-Home is compact and contains, in order:
-1. Watching Now / On Hold
-2. Rate Now (hidden when empty)
-3. New Season
+Home starts with a page-level Series / Movies selector in a neutral segmented control. The selected type applies across all Home sections; the secondary status selector is a compact, left-aligned text control (not a full-width bar), filters the first list, and adapts to the chosen type:
+- Series: Watching Now / On Hold.
+- Movies: To Watch / Watched.
+
+Home sections follow the selectors in this order:
+1. The selected status list.
+2. Rate Now for the selected media type (hidden when empty).
+3. New Seasons for series, or New Releases for movies. Movie release cards use known general release dates for unwatched titles in My Library, not streaming-availability dates.
 
 My Library uses separate Series/Movies views, A-Z by default, with Recently Added, Recently Watched, and Highest Rated sorting; filters are Genre, Streaming service, and Status.
 
